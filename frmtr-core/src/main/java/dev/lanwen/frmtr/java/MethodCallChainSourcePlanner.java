@@ -119,7 +119,7 @@ final class MethodCallChainSourcePlanner {
         boolean chainBreaksByRule
     ) {
         /**
-         * SPIKE (fan-root-true-column, #190). Reports whether this initializer's chain root is an object creation whose
+         * Reports whether this initializer's chain root is an object creation whose
          * constructor arguments are always width-driven (never source-preserved) AND whose selector links reach the
          * canonical-fan threshold — the exact shape the object-creation-ROOT arm of
          * {@link VariableInitializerLayout#variableInitializerFanBestFitting} may fan source-neutrally. Roots that could
@@ -138,7 +138,7 @@ final class MethodCallChainSourcePlanner {
         }
 
         /**
-         * G3: the {@code initializerStartsOnContinuationLine} and {@code tailArgumentsSpanMultipleSourceLines}
+         * The {@code initializerStartsOnContinuationLine} and {@code tailArgumentsSpanMultipleSourceLines}
          * source-shape inputs were retired. The former is now treated as always true — a fitting single-selector
          * object-creation-chain initializer packs flat rather than fanning by the author's line break, matching the
          * below-threshold fan rule — which makes the source-multiline-initializer disjunction constant-true and collapses
@@ -311,7 +311,7 @@ final class MethodCallChainSourcePlanner {
     }
 
     /**
-     * The canonical-fan structural rule (End-state A): decides whether a fluent chain fans one selector per line purely
+     * The canonical-fan structural rule: decides whether a fluent chain fans one selector per line purely
      * by its structural shape, independent of the author's source layout and independent of width. This is the single
      * source of truth for the rule; {@code MethodCallChainPrinter.chainBreaksByRule} delegates here, and
      * {@link #initializerShape(MethodCallChainAnalysis)} folds the same verdict into

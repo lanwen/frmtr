@@ -240,7 +240,7 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * Canonical-fan cutover seam (End-state A): routes a fan-threshold, comment/lambda-free chain to the source-neutral
+     * Routes a fan-threshold, comment/lambda-free chain to the source-neutral
      * fan builder, independent of the author's source shape. Delegates to {@link ChainFanLayout}, which owns the
      * fan-position rules, the fan-shape rules, and the source-neutral root builders.
      */
@@ -249,7 +249,7 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * Reports whether a chain is one {@link #canonicalFanChain} would fan (the End-state A structural rule fires and no
+     * Reports whether a chain is one {@link #canonicalFanChain} would fan (the structural fan rule fires and no
      * carve-out applies). Delegates to {@link ChainFanLayout}.
      */
     boolean chainFansByCanonicalRule(MethodCallExpr expression) {
@@ -289,8 +289,8 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * The lambda-body position (U7) of the canonical-fan cutover: whether an expression-lambda-body chain should fan by
-     * the End-state A rule and its root is one the lambda-body fan renders idempotently. Delegates to
+     * The lambda-body position of the canonical fan: whether an expression-lambda-body chain should fan by
+     * the canonical rule and its root is one the lambda-body fan renders idempotently. Delegates to
      * {@link ChainFanLayout}.
      */
     boolean lambdaBodyChainFansByCanonicalRule(MethodCallExpr expression) {
@@ -311,7 +311,7 @@ final class MethodCallChainPrinter {
         return forcedMethodCallChain(expression, firstLineWidth, LayoutContext.root());
     }
 
-    // LDM-2f (#190): the layout-carrying entry seam. A caller that shares its first line with a fixed prefix (the return
+    // The layout-carrying entry seam. A caller that shares its first line with a fixed prefix (the return
     // chain threads {@code layout.withLeftEdgePrefix("return ")}) hands that context through here so the chain width gates
     // can attribute the prefix at the rendered column. The no-{@code layout} overload above passes {@code root()} (empty
     // prefix), so a forced-chain caller that threads no prefix measures with none. The residual fixed-baseline probes
@@ -366,7 +366,7 @@ final class MethodCallChainPrinter {
         return compactRootWithBrokenFinalChainSegment(expression, lineWidth, LayoutContext.root());
     }
 
-    // LDM-2f (#190): the layout-carrying entry seam for the compact-root-with-broken-final-segment shape. The return chain
+    // The layout-carrying entry seam for the compact-root-with-broken-final-segment shape. The return chain
     // threads {@code layout.withLeftEdgePrefix("return ")} through here so {@code compactRootLineWidth} can attribute the
     // {@code return } prefix at the rendered column. The no-{@code layout} overload above passes {@code root()} (empty
     // prefix), so a caller that threads no prefix measures with none.
@@ -677,7 +677,7 @@ final class MethodCallChainPrinter {
             // flat compact never "fits flat", so a conditionalGroup would fan the receiver on every pass, but the standalone
             // lambda-body renderer ({@code LambdaExpressionPrinter}) still decides that body's shape from a deferred
             // lambda-arrow source-shape read, which oscillates once the receiver is un-collapsed. (The sibling
-            // method-call-body arrow read {@code lambdaBodyStartsAfterHeader} was retired by the #190 F2 slice; the
+            // method-call-body arrow read {@code lambdaBodyStartsAfterHeader} was retired; the
             // block/nested-lambda arrow reads here are not yet.) Such a chain keeps the {@link Doc#bestFitting} arm
             // (rendered collapsed), so it does not introduce a new oscillation.
             List<Doc> arms = List.of(flat, fanOut);
@@ -846,7 +846,7 @@ final class MethodCallChainPrinter {
             && !chainComments.methodCallSegmentHasComment(calls.getFirst())
             && methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
             && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                    // C10-b: measure the block-lambda root first line at the root's true rendered block/type depth
+                    // Measure the block-lambda root first line at the root's true rendered block/type depth
                     // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
                     .filter(firstLine -> layoutWidth.nodeLine(methodRoot, firstLine) <= options.lineWidth())
                     .isPresent()
@@ -882,7 +882,7 @@ final class MethodCallChainPrinter {
             root instanceof ObjectCreationExpr objectCreation
             && calls.size() == 1
         ) {
-            // LDM-3g (#210): rank the compact-with-broken-segment shape against the one-segment-per-line fan-out and let
+            // Rank the compact-with-broken-segment shape against the one-segment-per-line fan-out and let
             // the renderer keep whichever wraps least at the real output column, rather than committing to a shape via the
             // fixed-column firstLineWidth probe inside objectRootSingleSegmentChain below. Only width-driven, comment-free,
             // source-compact-constructor chains reach the ranker; it defers back to the imperative tail otherwise.
@@ -921,7 +921,7 @@ final class MethodCallChainPrinter {
             if (
                 methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
                 && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                        // C10-b: measure the block-lambda root first line at the root's true rendered block/type depth
+                        // Measure the block-lambda root first line at the root's true rendered block/type depth
                         // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
                         .filter(firstLine -> layoutWidth.nodeLine(methodRoot, firstLine) <= options.lineWidth())
                         .isPresent()
@@ -941,7 +941,7 @@ final class MethodCallChainPrinter {
             if (expressionLambdaRoot.isPresent()) {
                 return expressionLambdaRoot;
             }
-            // LDM-3 (B8/D16): when the final segment carries breakable arguments the compact-with-broken-segment shape and
+            // When the final segment carries breakable arguments the compact-with-broken-segment shape and
             // the one-segment-per-line fan-out are both legal broken layouts that differ in rendered line count, so rank
             // them with a single Doc.bestFitting and let the renderer keep whichever wraps least at the real output column,
             // rather than committing to a shape via the fixed-column LayoutWidth probe below. Only width-driven,
@@ -1022,7 +1022,7 @@ final class MethodCallChainPrinter {
         if (rootDocIsPlainExpressionRenderRoot) {
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
-        // Object-creation root cutover seam (End-state A): a comment-free, non-anonymous, non-empty-argument
+        // Object-creation root seam: a comment-free, non-anonymous, non-empty-argument
         // constructor-rooted fan-threshold chain ({@code new EndpointFactory(a, b, c, d).generate(…).blockFirst(…)}) whose
         // planner rendering is {@code BROKEN_OBJECT_CREATION} routes through the shared {@code chainFanOut} builder, whose
         // object-creation-root arm renders the constructor arguments through the source-neutral width-driven
@@ -1057,7 +1057,7 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * The canonical-fan structural rule (End-state A) — see {@link MethodCallChainSourcePlanner#chainBreaksByRule} for
+     * The canonical-fan structural rule — see {@link MethodCallChainSourcePlanner#chainBreaksByRule} for
      * the link-count/root-kind thresholds, which that planner method owns as the single source of truth. This chain
      * printer and the variable-initializer path (via {@code InitializerChainShape.chainBreaksByRule}) both read the
      * identical verdict, so a fan-threshold chain routes onto the same source-neutral fan without the rule drifting
@@ -1102,7 +1102,7 @@ final class MethodCallChainPrinter {
      * chain must break onto the {@link #compactRootWithBrokenFinalSegment} / {@link #brokenRootWithAttachedFinalSegment}
      * broken shapes.
      *
-     * <p>{@code layout} is threaded (#190) so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * <p>{@code layout} is threaded so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
      * available at this flat-gate. It is NOT consulted here: the decision uses the fixed-budget
      * {@code lineWidth.applyAsInt(…)} floor. The statement/field callers pass their real {@link LayoutContext}
      * (a {@code STATEMENT}/{@code root()} context whose {@code leftEdgePrefix} is empty), matching the sibling
@@ -1143,7 +1143,7 @@ final class MethodCallChainPrinter {
      * carries breakable arguments, is not already source-multiline, has no comments, and its opener {@code Type.create(}
      * itself fits at {@code lineWidth}, so the broken shape is only chosen when it is both needed and valid.
      *
-     * <p>{@code layout} is threaded (#190) so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * <p>{@code layout} is threaded so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
      * available at this statement/field single-segment flat-gate. It is NOT consulted here: the opener-fit decision uses
      * the fixed-budget {@code lineWidth.applyAsInt(…)} floor (the statement/field callers pass an empty-prefix
      * context).
@@ -1174,7 +1174,7 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * LDM-3 (B8/D16): emits one ranked {@link Doc#bestFitting(java.util.List) bestFitting} for a comment-free,
+     * Emits one ranked {@link Doc#bestFitting(java.util.List) bestFitting} for a comment-free,
      * width-driven single-segment method-call chain whose final segment carries breakable arguments, replacing the
      * {@link LayoutWidth}-probe gate that hand-picked the broken shape. The two alternatives are ordered flattest-first —
      * (1) the compact shape that keeps the root and selector on one line and breaks only the final segment's argument list
@@ -1194,8 +1194,8 @@ final class MethodCallChainPrinter {
      * applies and there is nothing to rank. A deliberately-multiline chain or a promoted root is a source-preserved shape,
      * never a width-ranked alternative, so ranking can never override it.
      *
-     * <p><strong>Comment handling (Phase D).</strong> The {@code !analysis.hasComments()} bail was removed: the caller
-     * already withholds any chain whose final selector carries its own comment, and post-Phase-C every comment renders
+     * <p><strong>Comment handling.</strong> The {@code !analysis.hasComments()} bail was removed: the caller
+     * already withholds any chain whose final selector carries its own comment, and every comment renders
      * through the claim-neutral {@code ownedComment} rail, so building both ranked arms eagerly can no longer drop or
      * double-claim a comment. Verified byte-identical across the full suite (CommentPresence / Idempotence /
      * AstEquivalence, zero golden moves).
@@ -1233,7 +1233,7 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * LDM-3g (#210): the object-creation-rooted sibling of {@link #rankedSingleSegmentChain}. Emits one ranked
+     * The object-creation-rooted sibling of {@link #rankedSingleSegmentChain}. Emits one ranked
      * {@link Doc#bestFitting(java.util.List) bestFitting} for a comment-free, width-driven single-segment chain whose root
      * is a source-compact constructor ({@code new Type(args).selector(...)}) and whose final segment carries breakable
      * arguments, replacing the {@link #objectRootSingleSegmentChain} first-line {@code LayoutWidth} probe that hand-picked
@@ -1256,9 +1256,9 @@ final class MethodCallChainPrinter {
      * arguments. A deliberately-multiline chain or a source-broken constructor is a source-preserved shape, never a
      * width-ranked alternative, so ranking can never override it.
      *
-     * <p><strong>Comment handling (Phase D).</strong> The {@code !analysis.hasComments()} bail was removed. Unlike the
+     * <p><strong>Comment handling.</strong> The {@code !analysis.hasComments()} bail was removed. Unlike the
      * method-root ranker's caller, this caller does not pre-withhold comment-bearing chains, so they now reach the ranker;
-     * post-Phase-C every comment renders through the claim-neutral {@code ownedComment} rail, so building both ranked arms
+     * every comment renders through the claim-neutral {@code ownedComment} rail, so building both ranked arms
      * eagerly (and deferring to {@link #objectRootSingleSegmentChain} otherwise) can no longer drop or double-claim a
      * comment. Verified byte-identical across the full suite (CommentPresence / Idempotence / AstEquivalence, zero golden
      * moves).
@@ -1411,7 +1411,7 @@ final class MethodCallChainPrinter {
         // First-segment attachment only ever engaged for a chain the author wrote source-multiline — the retired
         // {@code sourceMultilineChain} signal (now constant-false) — so this gate can no longer attach. Its structural
         // guards are inert (every path returns false); the last source read it carried, the
-        // {@code sourceFirstLineIsOnlyChainRoot} source-first-line probe, was retired in G3, so the gate is now a pure
+        // {@code sourceFirstLineIsOnlyChainRoot} source-first-line probe, was retired, so the gate is now a pure
         // structural no-op and both passes take the imperative chain path identically.
         if (
             chainPlan.rootRendering() != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
@@ -1438,7 +1438,7 @@ final class MethodCallChainPrinter {
             Expression root,
             MethodCallExpr firstCall
     ) {
-        // C10-b: measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
+        // Measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
         if (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))) {
             return inlineMethodCall(firstCall);
         }
@@ -1446,7 +1446,7 @@ final class MethodCallChainPrinter {
     }
 
     private String firstSegmentAttachedToSimpleRootFirstLine(Expression root, MethodCallExpr firstCall) {
-        // C10-b: measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
+        // Measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
         if (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))) {
             return compactSource.compact(firstCall);
         }
@@ -1554,7 +1554,7 @@ final class MethodCallChainPrinter {
             return brokenScopedMethodRoot.orElseThrow();
         }
         if (
-            // C10-b: measure the method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
+            // Measure the method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
             layoutWidth.nodeLine(methodRoot, compactSourceWidthText(methodRoot)) > options.lineWidth()
             || methodCallRootScopeOverflows(methodRoot)
         ) {
@@ -1570,7 +1570,7 @@ final class MethodCallChainPrinter {
                 .map(MethodCallExpr.class::cast)
                 .filter(call -> call.getArguments().size() > 1)
                 .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent())
-                // C10-b: measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
+                // Measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
                 .filter(call -> layoutWidth.nodeLine(call, compactSourceWidthText(call)) > options.lineWidth());
         if (scopedCall.isEmpty()) {
             return Optional.empty();
@@ -1587,7 +1587,7 @@ final class MethodCallChainPrinter {
         return methodRoot.getScope()
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
-                // C10-b: measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
+                // Measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
                 .map(scopedCall -> layoutWidth.nodeLine(scopedCall,
                         compactSourceWidthText(scopedCall)
                     ) > options.lineWidth()
@@ -1607,7 +1607,7 @@ final class MethodCallChainPrinter {
         }
         if (
             expression.getArguments().size() > 1
-            // C10-b: measure the promoted method call at its true rendered block/type depth (nodeLine) instead of CURRENT.
+            // Measure the promoted method call at its true rendered block/type depth (nodeLine) instead of CURRENT.
             && !sourceShapePolicy.fitsOnOneLine(expression, text -> layoutWidth.nodeLine(expression, text))
         ) {
             return calls.brokenMethodCall(expression);
@@ -1619,7 +1619,7 @@ final class MethodCallChainPrinter {
         }
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
-                    // C10-b: measure the promoted block-lambda first line at its true rendered block/type depth
+                    // Measure the promoted block-lambda first line at its true rendered block/type depth
                     // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
                     .filter(firstLine -> layoutWidth.nodeLine(expression, firstLine) <= options.lineWidth())
                     .map(ignored -> expressionRenderer.format(expression, LayoutContext.root()))
@@ -1655,7 +1655,7 @@ final class MethodCallChainPrinter {
     ) {
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(root), expression)
-                    // C10-b: measure the promoted-root block-lambda first line at the root's true rendered block/type
+                    // Measure the promoted-root block-lambda first line at the root's true rendered block/type
                     // depth ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
                     .filter(firstLine -> layoutWidth.nodeLine(root, firstLine) <= options.lineWidth())
                     .map(ignored -> Doc.concat(rootDoc, methodCallChainSegment(expression, finalSegmentSuffix)))
@@ -1695,13 +1695,12 @@ final class MethodCallChainPrinter {
      * {@link #objectRootSingleSegmentChain}, whose fan-out branch renders the single-simple-argument tail compact on its
      * dotted line (see the {@code singleSimpleMethodCallSegmentArgument} case there).
      *
-     * <p>LDM-2f (#190), revising #236, first activated this only for the return chain (behind a non-empty
-     * {@link LayoutContext#leftEdgePrefix()}). PR #279 review (#1) generalizes it to <strong>every</strong> caller: a
-     * statement chain ({@code new ProfileRequest(...).submit(10);}) wants the same {@code new ProfileRequest(...)}\n
-     * {@code .submit(10)} shape rather than the arg-opened {@code .submit(}\n{@code 10}\n{@code )} — "break on the dot,
-     * not inside a single-arg call". The verdict is a pure function of the AST (an {@link ObjectCreationExpr} root and a
-     * single simple selector argument), so it is a fixpoint regardless of any leading prefix; the enclosing width probe in
-     * {@link #objectRootSingleSegmentChain} still decides flat-versus-fan. Restricted to {@link ObjectCreationExpr} roots;
+     * <p>This applies to <strong>every</strong> caller: a statement chain ({@code new ProfileRequest(...).submit(10);})
+     * wants the same {@code new ProfileRequest(...)}\n{@code .submit(10)} shape rather than the arg-opened
+     * {@code .submit(}\n{@code 10}\n{@code )}. The verdict is a pure function of the AST (an {@link ObjectCreationExpr}
+     * root and a single simple selector argument), so it is a fixpoint regardless of any leading prefix; the enclosing
+     * width probe in {@link #objectRootSingleSegmentChain} still decides flat-versus-fan. Restricted to
+     * {@link ObjectCreationExpr} roots;
      * "simple" mirrors {@link ControlConditionMethodCallLayout#hasComplexArgument}'s inverse via
      * {@link ChainSegmentWidthLayout#singleSimpleMethodCallSegmentArgument} ({@code NameExpr | FieldAccessExpr | ThisExpr | SuperExpr |
      * LiteralExpr}); a lambda, method-call, multi-argument, or already-multiline tail is not simple and still opens
@@ -1868,7 +1867,7 @@ final class MethodCallChainPrinter {
      * {@link LayoutContext#leftEdgePrefix()}:
      *
      * <ul>
-     *   <li><strong>Prefix threaded (#190).</strong> When a caller supplies its fixed leading prefix — the
+     *   <li><strong>Prefix threaded.</strong> When a caller supplies its fixed leading prefix — the
      *   {@code return } chain threads {@code "return "} — the rendered column is known exactly:
      *   {@code nodeIndentWidth(root) + leftEdgePrefix.length() + firstLine.length()}. The source-column floor is
      *   <em>dropped</em>, because it is only a stand-in for the prefix this arm measures directly and could over- or
@@ -1882,9 +1881,6 @@ final class MethodCallChainPrinter {
      *   unmodelled leading prefix (a {@code NAME … = }, a continuation indent) lives. Dropping the floor for these callers
      *   under-measures and regresses {@code source-multiline-method-root-chain-initializer}, so the floor stays for them.</li>
      * </ul>
-     *
-     * <p>This mirrors the sibling {@link ExpressionLambdaArgumentLayout} first-line gate (#226) and the depth-aware chain
-     * probes (#162).
      */
     private int compactRootLineWidth(
             Expression root,
@@ -1900,7 +1896,7 @@ final class MethodCallChainPrinter {
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),
                     layoutWidth.nodeIndentWidth(root) + firstLine.length()))
-                // C10-a: rangeless (synthetic) fallback measures at the rendered column, mirroring the prefix-set arm's
+                // Rangeless (synthetic) fallback measures at the rendered column, mirroring the prefix-set arm's
                 // nodeIndentWidth term, instead of a fixed indentation baseline.
                 .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + firstLine.length());
     }
@@ -2057,8 +2053,8 @@ final class MethodCallChainPrinter {
         if (hasSingleExpressionLambdaArgument(methodRoot)) {
             return Optional.of(prefix + "(");
         }
-        // C10-b: measure the promoted method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
-        // (promotedRootArgumentsShouldBreak ignores the oracle post-C10-a; the fitsOnOneLine gate reads it.)
+        // Measure the promoted method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
+        // (promotedRootArgumentsShouldBreak ignores the oracle; the fitsOnOneLine gate reads it.)
         ToIntFunction<String> methodRootWidth = text -> layoutWidth.nodeLine(methodRoot, text);
         if (promotedRootArgumentsShouldBreak(methodRoot, methodRootWidth, LayoutContext.root())) {
             return Optional.of(prefix + "(");
@@ -2077,7 +2073,7 @@ final class MethodCallChainPrinter {
      * close, the expression-lambda sibling of {@link #brokenRootWithAttachedFinalSegment} on the statement/field
      * single-segment chain path.
      *
-     * <p>{@code layout} is threaded (#190) so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * <p>{@code layout} is threaded so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
      * available at this flat-gate. It is NOT consulted here: the opener-fit decision uses the fixed-budget
      * {@code lineWidth.applyAsInt(…)} floor (the statement/field callers pass an empty-prefix context).
      */
@@ -2168,7 +2164,7 @@ final class MethodCallChainPrinter {
      * leading prefix accounted for (dropping it under-measures the initializer/return chains). The wider-of rule can only
      * measure wider, never relax a break.
      *
-     * <p>{@code layout} is read here (chain-unify U3, #190): when a caller threads a same-line prefix through
+     * <p>{@code layout} is read here: when a caller threads a same-line prefix through
      * {@link LayoutContext#leftEdgePrefix()} the rendered column is known exactly
      * ({@code nodeIndentWidth(root) + leftEdgePrefix.length() + text.length()}) and the source-column floor is dropped,
      * exactly as {@link #compactRootLineWidth} does. Its consumer {@link #promotedRootArgumentsShouldBreak} is reached by
@@ -2187,7 +2183,7 @@ final class MethodCallChainPrinter {
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column - 1) + text.length(),
                     layoutWidth.nodeIndentWidth(root) + text.length()))
-                // C10-a: rangeless (synthetic) fallback measures at the rendered column, mirroring the wider-of arm's
+                // Rangeless (synthetic) fallback measures at the rendered column, mirroring the wider-of arm's
                 // nodeIndentWidth term, instead of the fixed one-indent baseline.
                 .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + text.length());
     }
@@ -2262,7 +2258,7 @@ final class MethodCallChainPrinter {
             return false;
         }
         String compact = compactSource.compact(expression);
-        // C10-a: the fixed one-indent term was OR-dominated — rootLineWidth is never smaller than
+        // The fixed one-indent term was OR-dominated — rootLineWidth is never smaller than
         // nodeIndentWidth(root) + compact.length(), which already dominates the one-indent baseline — so the
         // rendered-column comparison alone yields the identical verdict.
         return rootLineWidth(expression, compact, layout) > options.lineWidth();
@@ -2408,7 +2404,7 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> firstLineWidth,
             LayoutContext layout
     ) {
-        // D4 (leftEdgePrefix foundation, slice F5): an inter-segment {@code //} line comment attached as the sole
+        // An inter-segment {@code //} line comment attached as the sole
         // selector's LEADING comment ({@code new X(...)}⏎{@code // note}⏎{@code .selector(...)}) must render on the
         // comment-preserving exploded path — the constructor broken open, the selector re-emitting its leading comment on
         // its own continuation line — regardless of the author's line breaks. The verdict keys purely on comment presence
@@ -2445,8 +2441,8 @@ final class MethodCallChainPrinter {
             // already-broken selectors are excluded by singleSimpleMethodCallSegmentArgument, so they keep the existing
             // argument-opening fan-out.
             //
-            // PR #279 review (#1): this dot-break — introduced for the return chain (LDM-2f #190, revising #236) behind a
-            // non-empty leftEdgePrefix gate — is now applied to every caller. A statement chain
+            // This dot-break — introduced for the return chain behind a non-empty leftEdgePrefix gate — is now applied to
+            // every caller. A statement chain
             // ({@code new ProfileRequest(...).submit(10);}) reaches this branch once
             // {@link #refuseOpeningSingleSimpleObjectRootChainTail} declines the arg-opening compact shape, and wants the
             // same {@code new ProfileRequest(...)}⏎{@code .submit(10)} shape, not the arg-opened
@@ -2458,7 +2454,7 @@ final class MethodCallChainPrinter {
                     objectRootContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
                 );
             }
-            // PR #279 review (#7): the tail selector fans onto its own continuation line, so measure it THERE
+            // The tail selector fans onto its own continuation line, so measure it THERE
             // ({@code segmentOnOwnLine == true}, continuation budget) and let its own argument group open only when
             // {@code .selector(args)} genuinely overruns that column — instead of force-breaking it one-argument-per-line
             // via {@code brokenMethodCallChainSegment}. The compact-overflow probe above measures the whole compact chain

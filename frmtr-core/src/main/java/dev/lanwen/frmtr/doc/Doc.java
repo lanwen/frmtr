@@ -152,7 +152,7 @@ public sealed interface Doc
      * separators of its own.
      *
      * <p>A non-empty even-length list is rejected: it ends with a trailing separator that the renderer's pairwise walk
-     * never reaches, so the separator would be silently dropped (the same data-loss footgun fixed in {@code 0332c16c}).
+     * never reaches, so the separator would be silently dropped.
      * The factory fails fast rather than emit output that quietly differs from the list handed in.
      *
      * @throws IllegalArgumentException if {@code parts} is non-empty with an even number of elements (a trailing
@@ -241,7 +241,7 @@ public sealed interface Doc
 
     /**
      * Builds a ranked-broken-layout node whose alternatives carry per-alternative <em>priorities</em>, giving a caller a
-     * way to say "prefer this shape over that one even though it uses more lines" (convergence-redesign Mechanism 2). The
+     * way to say "prefer this shape over that one even though it uses more lines". The
      * priority is a secondary ranking key placed <strong>after the fit gate and before line count</strong>: among the
      * alternatives that fit, the highest-priority one wins regardless of how many lines it uses; a fitting alternative
      * still beats any overflowing one whatever its priority (priority never rescues an overflowing arm), and equal
@@ -271,7 +271,7 @@ public sealed interface Doc
      * width-measured as if the comment were absent — the comment can never push that code over the line width or change
      * which separator prints first.
      *
-     * <p>Content is single-line only in this version; a {@link HardLine} inside it is rejected at render time.
+     * <p>Content is single-line only; a {@link HardLine} inside it is rejected at render time.
      */
     static Doc lineSuffix(Doc content) {
         return new LineSuffix(content);

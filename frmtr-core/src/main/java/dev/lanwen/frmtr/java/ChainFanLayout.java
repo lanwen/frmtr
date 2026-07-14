@@ -26,7 +26,7 @@ import java.util.function.Predicate;
  * Owns the source-neutral chain-FAN machinery: whether a chain fans, and — once it is being fanned — which one-per-line
  * shape it takes.
  *
- * <p>This helper hosts the two {@link BreakRuleRegistry} that drive the End-state A canonical fan (reprint-by-default
+ * <p>This helper hosts the two {@link BreakRuleRegistry} that drive the canonical fan (reprint-by-default
  * break-rule model, {@code docs/proposals/reprint-by-default-break-rules.md}). The FAN-POSITION registry
  * ({@code chainFanRules}) answers "does this chain fan here?" — the single {@code canonical-fan} rule that routes a
  * fan-threshold, comment/lambda-free chain to {@link #chainFanOut} independent of the author's source shape. The FAN-SHAPE
@@ -102,13 +102,13 @@ final class ChainFanLayout {
 
     /**
      * The fan-position break rules, resolved first-match-wins. Stage 0 of the reprint-by-default break-rule model
-     * ({@code docs/proposals/reprint-by-default-break-rules.md}) hosts exactly one — the End-state A canonical fan — so
+     * ({@code docs/proposals/reprint-by-default-break-rules.md}) hosts exactly one — the canonical fan — so
      * this registry answers the same question {@link #canonicalFanChain} asked inline: fan the chain when the canonical
      * rule admits it, otherwise (no match &rarr; {@link Optional#empty()}) leave it to the imperative cascade the caller
      * falls back to. The chain-shaped {@link ChainFanRequest} candidate carries the caller-appended final-segment suffix
      * so the general {@link BreakRule}/{@link BreakRuleRegistry} abstraction hosts the chain without a leaky node-level
      * signature. The remaining fan sub-shapes inside {@link #chainFanOut} (factory-root fold, single-selector,
-     * trivial-receiver attach, fanned selectors) are the Stage-1 extraction targets.
+     * trivial-receiver attach, fanned selectors) are hosted by the sibling {@link #fanShapeRules}.
      */
     private final BreakRuleRegistry<ChainFanRequest> chainFanRules;
 
@@ -190,9 +190,9 @@ final class ChainFanLayout {
     }
 
     /**
-     * Canonical-fan cutover seam (End-state A): routes a fan-threshold, comment/lambda-free chain straight to the
-     * source-neutral {@link #chainFanOut} builder, <em>independent of the author's source shape</em>, and returns empty
-     * for every other chain so the caller keeps its existing decision tree.
+     * Routes a fan-threshold, comment/lambda-free chain straight to the source-neutral {@link #chainFanOut} builder,
+     * <em>independent of the author's source shape</em>, and returns empty for every other chain so the caller keeps its
+     * existing decision tree.
      *
      * <p>This is the shared, multi-caller sibling of the two source-neutral fan routes already inside
      * {@code MethodCallChainPrinter.methodCallChain}: the AUTO stay-flat-gate route (which fans a fitting fan-threshold
@@ -207,7 +207,7 @@ final class ChainFanLayout {
      * the {@code chainFanOut} shape here — the same shape both {@code sourceMultilineArguments} passes must converge on —
      * before the caller can consult source shape removes that dependence: {@code chainFanOut} is a pure function of the
      * AST, so both passes rebuild the identical fan (a fixpoint by construction, the argument the single-segment rankers
-     * and the initializer / factory-root cutover seams already rely on).
+     * and the initializer / factory-root seams already rely on).
      *
      * <p>Withheld, matching the other fan routes: a chain with any own or contained comment, any block-lambda argument,
      * or any commented segment re-renders its root once through the fan and would double-claim comments. Additionally
@@ -239,8 +239,7 @@ final class ChainFanLayout {
         // than dropping to a bare rule-driven break. {@code ChainWidthBreakExplain#record} self-gates on {@code flatWidth > lineWidth},
         // so a chain fanned purely by the link-count/root-kind rule while it still fits records nothing (it is not a width
         // break). The width is measured at the chain's real rendered column (its {@code nodeIndentWidth} plus the caller's
-        // {@code leftEdgePrefix}), so the record no longer reads the transitional {@code LayoutContext.widthBudget} selector;
-        // this is an {@code --explain}-only diagnostic and never changes the emitted {@code Doc}.
+        // {@code leftEdgePrefix}); this is an {@code --explain}-only diagnostic and never changes the emitted {@code Doc}.
         chainWidthBreakExplain.record(expression, analysis, request.layout());
         return chainFanOut(
             analysis.root(),
@@ -251,13 +250,13 @@ final class ChainFanLayout {
     }
 
     /**
-     * Reports whether a chain is one {@link #canonicalFanChain} would fan: the End-state A structural rule fires
+     * Reports whether a chain is one {@link #canonicalFanChain} would fan: the structural fan rule fires
      * ({@code chainBreaksByRule}) and none of the carve-outs apply (own/contained comments, block-lambda arguments,
      * commented or expression-lambda selectors, or an attachable expression-lambda body). This is the exact gate
      * {@link #canonicalFanChain} applies before it emits {@code chainFanOut}, factored out so a caller can ask the
      * question without rendering the fan.
      *
-     * <p>The binary/ternary-operand seam (U8) uses this: when a broken binary argument's {@code flat} rendering already
+     * <p>The binary/ternary-operand seam uses this: when a broken binary argument's {@code flat} rendering already
      * fans a chain operand through this rule (via the dispatched {@code chainFanOut}), the argument printer must not also
      * offer the operand-per-line {@code broken} alternative — that {@code flat}-vs-{@code broken} choice would flip the
      * operand between the fanned and flat shapes across passes. Committing the flat (chain-fanned) shape is the AST-pure
@@ -376,7 +375,7 @@ final class ChainFanLayout {
      * comment (the {@code // XXX} after {@code .streamArn();}) on the STATEMENT when the flat chain shares that source line
      * with the terminator, but on the LAST SELECTOR once the chain is broken across lines. That flips
      * {@code MethodCallChainAnalysis.hasComments} between passes: a flat-source pass reads the chain comment-free and fans
-     * it through {@code chainFanOut} (attaching the first selector, End-state A Rule 1), while the broken re-format reads
+     * it through {@code chainFanOut} (attaching the first selector), while the broken re-format reads
      * the comment on the selector, withholds the fan, and drops to the source-shape imperative ladder that fans from the
      * first selector — {@code streamsListResult.streams()} ⇄ {@code streamsListResult}⏎{@code .streams()} forever. Letting
      * the fan claim this one shape routes BOTH passes through the same source-neutral {@code chainFanOut}, so the placement
@@ -426,14 +425,14 @@ final class ChainFanLayout {
 
     /**
      * Reports whether {@code expression} is a binary or ternary expression that contains a flattened operand which the
-     * End-state A canonical-fan rule fans ({@link #chainFansByCanonicalRule}). Such an expression's dispatched flat
+     * canonical-fan rule fans ({@link #chainFansByCanonicalRule}). Such an expression's dispatched flat
      * rendering hard-breaks that operand into a source-neutral {@code chainFanOut}, so any caller that would otherwise
      * offer a source-shape-gated operand-per-line broken alternative must instead commit the flat (chain-fanned) shape —
      * it is the AST-pure fixpoint the two passes converge on.
      *
-     * <p>Canonical-fan cutover seam (End-state A), the binary/logical/string-concat OPERAND carrier.
+     * <p>The binary/logical/string-concat OPERAND carrier of the canonical fan.
      * This is the shared carve-out gate for every binary-argument / binary-initializer decider whose flat arm already
-     * fans a chain operand: {@link BreakableArgumentExpressionPrinter} (U8) uses the equivalent recursion on the
+     * fans a chain operand: {@link BreakableArgumentExpressionPrinter} uses the equivalent recursion on the
      * method-call/object-creation argument-list path; the same question is asked by {@link MethodCallPrinter}'s
      * single-binary-argument path (the {@code assertTrue(chain.isPresent() && chain2)} / {@code println("..." + chain)}
      * carrier that renders a forced operand-per-line break on a flat-source pass but fans the operand on a
@@ -473,8 +472,8 @@ final class ChainFanLayout {
 
 
     /**
-     * The lambda-body position (U7) of the canonical-fan cutover: reports whether a chain that IS an expression-lambda
-     * body should fan by the End-state A rule ({@link #chainFansByCanonicalRule}), <em>and</em> its root is one the
+     * The lambda-body position of the canonical fan: reports whether a chain that IS an expression-lambda
+     * body should fan by the canonical rule ({@link #chainFansByCanonicalRule}), <em>and</em> its root is one the
      * lambda-body fan renders idempotently.
      *
      * <p>The lambda-body fan hugs the chain root on the lambda-header line and fans the selectors below it, rendering
@@ -487,7 +486,7 @@ final class ChainFanLayout {
      * lambda body fanned here oscillates between {@code new X().setA(} and {@code new X()}⏎{@code .setA(} forever (the
      * kafka {@code Endpoints}/{@code ProduceResponse} {@code .map(x -> new Record()....)} shapes). Object-creation-rooted
      * lambda-body chains are therefore withheld from the fan and left on the packed / opener-breaking shapes below, which
-     * are already source-shape-stable for them; they remain the deferred slice of this cutover (the nested-root gap the
+     * are already source-shape-stable for them; they remain the deferred slice here (the nested-root gap the
      * chain-path-unification plan calls out for {@code chainFanOut} rendering a non-name root at {@code root()}).
      *
      * <p>Also withheld: a body-chain whose lambda is the argument of a <em>chain-selector</em> call
@@ -577,7 +576,7 @@ final class ChainFanLayout {
         LayoutContext layout
     ) {}
 
-    // Factory / type-like root cutover seam: a {@code promotesFirstCall} root (an uppercase {@code NameExpr} or
+    // Factory / type-like root seam: a {@code promotesFirstCall} root (an uppercase {@code NameExpr} or
     // {@code FieldAccessExpr} type qualifier, e.g. {@code ClusterConfig}) with two or more calls folds its FIRST call —
     // the factory invocation ({@code .defaultBuilder()}) — onto the root line and fans only the remaining selectors,
     // {@code Type.factory()}⏎{@code .next()}⏎{@code .build()}. This mirrors {@code MethodCallChainSourcePlanner.plan}'s
@@ -593,8 +592,8 @@ final class ChainFanLayout {
     // {@code EXPRESSION_RENDERER} rootRendering produces — byte-identical, and idempotent because that doc is a pure
     // function of the AST plus the render column.
     //
-    // Review round 2 (comment #4, "class + method should not break until there is a space left"). A factory call
-    // carrying an expression lambda folds onto the root line in two source-neutral cases: (a) its whole compact form
+    // A factory call carrying an expression lambda folds onto the root line in two source-neutral cases: (a) its whole
+    // compact form
     // fits flat ({@link #expressionLambdaFactoryCallPromotesFlat} — {@code IntStream.iterate(50, n -> n + 7)}), and
     // (b) it has TWO OR MORE arguments ({@link #expressionLambdaFactoryCallFoldsAsMultiArgGroup} —
     // {@code Flux.usingWhen(connectionFactory.create(), connection -> …, Connection::close)}), which
@@ -626,7 +625,7 @@ final class ChainFanLayout {
         );
     }
 
-    // Object-creation root cutover seam (End-state A), the constructor-root analogue of the factory-root promotion
+    // Object-creation root seam, the constructor-root analogue of the factory-root promotion
     // above: a comment-free, non-anonymous, non-empty-argument {@code new Type(args)} root renders SOURCE-NEUTRALLY
     // through {@link #promotedObjectCreationRootDoc} (a width-driven {@code Doc.group} of the constructor argument
     // list), so the constructor arguments break by the renderer's width verdict at the true column on every pass
@@ -676,10 +675,10 @@ final class ChainFanLayout {
     // its own argument list only on genuine overflow, exactly like the single-selector case; the remaining selectors
     // fan one per line under the same continuation indent, the final one carrying the tail.
     //
-    // Gated on {@code calls.size() >= 2}: PR #279 review (#2) extended the attach from the canonical fan (three or more
+    // Gated on {@code calls.size() >= 2}: the attach extends from the canonical fan (three or more
     // selectors, {@code chainBreaksByRule}'s plain-receiver threshold) down to a sub-threshold TWO-selector chain that
-    // reached this builder because its flat form was over-width ({@code entry.state().shouldPrioritize(subject.owner())}
-    // — "can the receiver and the first selector stick together until there is a space?"). The concern with the old
+    // reached this builder because its flat form was over-width ({@code entry.state().shouldPrioritize(subject.owner())}).
+    // The concern with the old
     // {@code >= 3} gate was that an over-wide {@code root.firstSelector(args)} opener whose OWN argument list breaks would
     // flip across passes; the two gates below make that impossible for the shapes admitted here, so the extension stays a
     // fixpoint (corpus idempotence unchanged): the first selector is rendered as atomic text that never opens its own
@@ -714,12 +713,12 @@ final class ChainFanLayout {
             && rootAvoidsShortRootPadding(candidate.root());
     }
 
-    // Bare-name-receiver lambda-selector hug (PR #279 review #2). Extends the trivial-receiver first-selector attach to a
+    // Bare-name-receiver lambda-selector hug. Extends the trivial-receiver first-selector attach to a
     // first selector whose sole trailing argument is an EXPRESSION LAMBDA ({@code probe.withVirtualTime(() -> …)}), so the
     // receiver name and its lambda-carrying first selector stay on the opening line rather than fanning the receiver onto
     // its own line ({@code return probe}⏎{@code .withVirtualTime(…)}). Restricted to a bare {@code NameExpr} receiver — NOT
     // the broader trivial-receiver set: a {@code FieldAccessExpr} or {@code this}/{@code super} root keeps the fan-from-first
-    // shape for the lambda case (the reviewer's "keep field-access roots fanning" guard). The attached selector is rendered
+    // shape for the lambda case. The attached selector is rendered
     // through the ordinary source-neutral segment renderer (NOT the atomic-text {@link #attachedFirstSelectorSegment}), so
     // its expression-lambda body breaks by WIDTH at the attached column exactly like a fanned selector would; because the
     // attach itself is a deterministic structural verdict keyed only on the root/selector AST kind, both passes rebuild the
@@ -888,7 +887,7 @@ final class ChainFanLayout {
      * ({@code Doc.group(Type + softChainContinuation(.factory()))}, which keeps {@code Type.factory()} on one line when it
      * fits and splits to {@code Type}⏎{@code .factory()} only when the column forces it).
      *
-     * <p>Canonical-fan cutover seam (End-state A), the multi-argument factory-root convergence. A multi-argument factory
+     * <p>The canonical-fan multi-argument factory-root convergence. A multi-argument factory
      * call renders SOURCE-NEUTRALLY as a width-driven {@link Doc#group} of its argument list ({@code Type.factory(} then
      * each argument, the {@code )} glued to the last), so the {@code DocRenderer} keeps the arguments flat when they fit at
      * the promoted root's live column and breaks them one per line only on genuine overflow. Rendering the argument-list
@@ -905,62 +904,18 @@ final class ChainFanLayout {
      * fan upstream, so this only guards the residual.
      */
     private Doc promotedFactoryRootDoc(MethodCallExpr factoryCall) {
-        // Canonical-fan cutover seam (End-state A), the single-argument-chain factory-root convergence. A one-argument
-        // promoted factory call whose sole argument is itself a fan-threshold chain ({@code Optional.of(a.b().c().d())},
-        // {@code Arrays.stream(a.b().c())}) renders SOURCE-NEUTRALLY as a width-driven {@link Doc#group}: {@code Type.factory(}
-        // glued on the root line, the argument fan under one continuation indent, the {@code )} dedented. This replaces
-        // {@code groupedPromotedMethodCall}, whose {@code softChainContinuation} group instead splits the SCOPE off the
-        // factory name ({@code Optional}⏎{@code .of(...)}) when the whole promoted call overflows, and whose
-        // {@code sourceMultilineArguments} branch keeps the name attached ({@code Optional.of(}⏎{@code ...}) once the source
-        // argument spans lines — the flat-vs-split flip that IS the {@code ExpectLeaderAction} / {@code LogManagerTest} /
-        // {@code DescribeConsumerGroupTest} residual: on the flat-source pass the early canonical-fan route reaches this
-        // through {@code chainFanOut} and {@code groupedPromotedMethodCall} splits the name off; on the re-format the factory
-        // argument now spans lines, {@code chainHasSourceMultilineArguments} is true, the early route is skipped, and the
-        // imperative plan tail keeps the name attached. Rendering the argument fan as a width-driven group here makes the
-        // {@code Type.factory(} opener the renderer's width verdict at the true column on every pass — the name stays glued
-        // and only the argument fan breaks — a fixpoint by construction, matching the multi-argument arm below.
-        //
-        // The fan is built ONCE, prefix-agnostic ({@code canonicalFanChain(argument, "", root())}), so the argument's root
-        // renders at {@link LayoutContext#root()} and cannot re-flip against the opener. Withheld when the argument is not a
-        // fannable chain ({@code canonicalFanChain} empty — a non-fan call, an object-creation or comment/lambda carrier),
-        // when the factory call carries its own comments, or for the zero-argument case, all of which fall through to
-        // {@code groupedPromotedMethodCall}'s established shapes.
         if (
             factoryCall.getArguments().size() == 1
             && factoryCall.getArgument(0) instanceof MethodCallExpr chainArgument
             && factoryCall.getAllContainedComments().isEmpty()
         ) {
-            Optional<Doc> fan = canonicalFanChain(chainArgument, "", LayoutContext.root());
-            if (fan.isPresent()) {
-                String prefix = methodCallPrefix.apply(factoryCall);
-                Doc fanDoc = fan.orElseThrow();
-                return Doc.group(
-                    Doc.concat(
-                        Doc.text(prefix + "("),
-                        Doc.indent(Doc.concat(Doc.SOFT_LINE, fanDoc)),
-                        Doc.SOFT_LINE,
-                        Doc.text(")")
-                    )
-                );
+            Optional<Doc> singleChainArg = singleChainArgFactoryRootDoc(factoryCall, chainArgument);
+            if (singleChainArg.isPresent()) {
+                return singleChainArg.orElseThrow();
             }
         }
-        // Review round 2 (comment #1, "CacheFactory.newBuilder() should stick together, with higher priority than keeping
-        // `= root` on the LHS line"). A ZERO-ARGUMENT promoted factory call ({@code CacheFactory.newBuilder()}) renders as
-        // ATOMIC text ({@code Type.factory()}) rather than through {@code groupedPromotedMethodCall}, whose
-        // {@code softChainContinuation} group splits the type off the selector ({@code CacheFactory}⏎{@code .newBuilder()})
-        // when the whole factory root does not fit at its live column. That split is exactly what the field-chain
-        // initializer showed: on the attached arm ({@code NAME = CacheFactory.newBuilder()…} at a deep declaration column)
-        // the group could not keep {@code CacheFactory.newBuilder()} together, so it broke the type off the selector, and
-        // that arm won the initializer {@code bestFitting} on line count. Rendering the factory root atomically makes the
-        // arm's FIRST LINE ({@code NAME = CacheFactory.newBuilder()}) overflow when the type + selector do not fit at the
-        // attach column, so the renderer's fit gate — not a soft-line split — drops the attached arm and the
-        // break-after-{@code =} arm wins, keeping {@code CacheFactory.newBuilder()} together on the continuation line. It is
-        // a pure function of the AST, so both passes render the identical atomic text and the verdict is a fixpoint. This is
-        // the google-java-format / prettier-java convention that a type qualifier never splits from its first call. A short
-        // LHS (the {@code Flux.usingWhen(…)} case, comment #4) keeps the factory root ATTACHED because the atomic opener
-        // fits there — the fit gate attaches when there is space and only breaks after {@code =} when there is not.
         if (factoryCall.getArguments().isEmpty() && factoryCall.getAllContainedComments().isEmpty()) {
-            return Doc.text(methodCallPrefix.apply(factoryCall) + "()");
+            return zeroArgFactoryRootDoc(factoryCall);
         }
         if (factoryCall.getArguments().size() <= 1) {
             return groupedPromotedMethodCall.apply(factoryCall);
@@ -968,6 +923,65 @@ final class ChainFanLayout {
         if (!factoryCall.getAllContainedComments().isEmpty()) {
             return expressionRenderer.format(factoryCall, LayoutContext.root());
         }
+        return multiArgFactoryRootDoc(factoryCall);
+    }
+
+    // The canonical-fan single-argument-chain factory-root convergence. A one-argument
+    // promoted factory call whose sole argument is itself a fan-threshold chain ({@code Optional.of(a.b().c().d())},
+    // {@code Arrays.stream(a.b().c())}) renders SOURCE-NEUTRALLY as a width-driven {@link Doc#group}: {@code Type.factory(}
+    // glued on the root line, the argument fan under one continuation indent, the {@code )} dedented. This replaces
+    // {@code groupedPromotedMethodCall}, whose {@code softChainContinuation} group instead splits the SCOPE off the
+    // factory name ({@code Optional}⏎{@code .of(...)}) when the whole promoted call overflows, and whose
+    // {@code sourceMultilineArguments} branch keeps the name attached ({@code Optional.of(}⏎{@code ...}) once the source
+    // argument spans lines — the flat-vs-split flip that IS the {@code ExpectLeaderAction} / {@code LogManagerTest} /
+    // {@code DescribeConsumerGroupTest} residual: on the flat-source pass the early canonical-fan route reaches this
+    // through {@code chainFanOut} and {@code groupedPromotedMethodCall} splits the name off; on the re-format the factory
+    // argument now spans lines, {@code chainHasSourceMultilineArguments} is true, the early route is skipped, and the
+    // imperative plan tail keeps the name attached. Rendering the argument fan as a width-driven group here makes the
+    // {@code Type.factory(} opener the renderer's width verdict at the true column on every pass — the name stays glued
+    // and only the argument fan breaks — a fixpoint by construction, matching the multi-argument arm below.
+    //
+    // The fan is built ONCE, prefix-agnostic ({@code canonicalFanChain(argument, "", root())}), so the argument's root
+    // renders at {@link LayoutContext#root()} and cannot re-flip against the opener. Withheld when the argument is not a
+    // fannable chain ({@code canonicalFanChain} empty — a non-fan call, an object-creation or comment/lambda carrier),
+    // when the factory call carries its own comments, or for the zero-argument case, all of which fall through to
+    // {@code groupedPromotedMethodCall}'s established shapes.
+    private Optional<Doc> singleChainArgFactoryRootDoc(MethodCallExpr factoryCall, MethodCallExpr chainArgument) {
+        Optional<Doc> fan = canonicalFanChain(chainArgument, "", LayoutContext.root());
+        if (fan.isPresent()) {
+            String prefix = methodCallPrefix.apply(factoryCall);
+            Doc fanDoc = fan.orElseThrow();
+            return Optional.of(Doc.group(
+                Doc.concat(
+                    Doc.text(prefix + "("),
+                    Doc.indent(Doc.concat(Doc.SOFT_LINE, fanDoc)),
+                    Doc.SOFT_LINE,
+                    Doc.text(")")
+                )
+            ));
+        }
+        return Optional.empty();
+    }
+
+    // A ZERO-ARGUMENT promoted factory call ({@code CacheFactory.newBuilder()}) renders as
+    // ATOMIC text ({@code Type.factory()}) rather than through {@code groupedPromotedMethodCall}, whose
+    // {@code softChainContinuation} group splits the type off the selector ({@code CacheFactory}⏎{@code .newBuilder()})
+    // when the whole factory root does not fit at its live column. That split is exactly what the field-chain
+    // initializer showed: on the attached arm ({@code NAME = CacheFactory.newBuilder()…} at a deep declaration column)
+    // the group could not keep {@code CacheFactory.newBuilder()} together, so it broke the type off the selector, and
+    // that arm won the initializer {@code bestFitting} on line count. Rendering the factory root atomically makes the
+    // arm's FIRST LINE ({@code NAME = CacheFactory.newBuilder()}) overflow when the type + selector do not fit at the
+    // attach column, so the renderer's fit gate — not a soft-line split — drops the attached arm and the
+    // break-after-{@code =} arm wins, keeping {@code CacheFactory.newBuilder()} together on the continuation line. It is
+    // a pure function of the AST, so both passes render the identical atomic text and the verdict is a fixpoint. This is
+    // the google-java-format / prettier-java convention that a type qualifier never splits from its first call. A short
+    // LHS (the {@code Flux.usingWhen(…)} case) keeps the factory root ATTACHED because the atomic opener
+    // fits there — the fit gate attaches when there is space and only breaks after {@code =} when there is not.
+    private Doc zeroArgFactoryRootDoc(MethodCallExpr factoryCall) {
+        return Doc.text(methodCallPrefix.apply(factoryCall) + "()");
+    }
+
+    private Doc multiArgFactoryRootDoc(MethodCallExpr factoryCall) {
         String prefix = methodCallPrefix.apply(factoryCall);
         return Doc.group(
             Doc.concat(
@@ -985,7 +999,7 @@ final class ChainFanLayout {
     }
 
     /**
-     * Canonical-fan cutover seam (End-state A), the expression-lambda factory-root convergence. Reports whether a promoted
+     * The canonical-fan expression-lambda factory-root convergence. Reports whether a promoted
      * factory call carrying a compact EXPRESSION lambda ({@code IntStream.iterate(50, n -> n + 7)}) may fold onto the root
      * line through {@link #chainFanOut}'s factory promotion. Without this the {@code chainFanOut} gate withholds every
      * lambda-carrying first call, so the flat-source pass fans the chain with {@code IntStream} on its own line
@@ -1018,14 +1032,14 @@ final class ChainFanLayout {
     }
 
     /**
-     * Canonical-fan cutover seam (End-state A), review round 2 (comment #4). Reports whether a promoted factory call
-     * carrying an expression lambda may fold onto the root line through {@link #chainFanOut}'s factory promotion because it
-     * has TWO OR MORE arguments, so {@link #promotedFactoryRootDoc} renders it through the width-driven MULTI-ARGUMENT
+     * Reports whether a promoted factory call carrying an expression lambda may fold onto the root line through
+     * {@link #chainFanOut}'s factory promotion because it has TWO OR MORE arguments, so {@link #promotedFactoryRootDoc}
+     * renders it through the width-driven MULTI-ARGUMENT
      * {@link Doc#group} ({@code Flux.usingWhen(} on the root line, each argument fanned one per line, {@code )} dedented)
      * rather than through {@code groupedPromotedMethodCall}'s source-shape-sensitive single-argument lambda-hug branches.
-     * This keeps the factory root ({@code Type.factory(}) glued to the root line and only fans its argument list — the
-     * maintainer's "class + method should not break until there is a space left" for a lambda-carrying factory call whose
-     * whole flat form overflows (so {@link #expressionLambdaFactoryCallPromotesFlat} declines it).
+     * This keeps the factory root ({@code Type.factory(}) glued to the root line and only fans its argument list for a
+     * lambda-carrying factory call whose whole flat form overflows (so {@link #expressionLambdaFactoryCallPromotesFlat}
+     * declines it).
      *
      * <p>Scoped so the fold is a fixpoint: no block lambda (block-lambda hugs stay on the deferred lambda-arrow seam), no
      * contained comments (the width-driven group would not preserve an inter-argument comment), TWO OR MORE arguments (a
@@ -1057,7 +1071,7 @@ final class ChainFanLayout {
      * the {@code DocRenderer} keeps them flat when they fit at the root's live column and breaks them one per line only on
      * genuine overflow.
      *
-     * <p>Canonical-fan cutover seam (End-state A), the constructor-root convergence — the object-creation analogue of the
+     * <p>The canonical-fan constructor-root convergence — the object-creation analogue of the
      * factory-root {@code source-multiline-method-root-chain-initializer} oscillation. {@code chainFanOut} rebuilds the
      * root once per pass. Without rendering the group directly, an object-creation root would reach
      * {@code expressionRenderer.format(root, root())} via {@code chainFanOut} but {@code brokenObjectCreationRenderer} via

@@ -223,19 +223,14 @@ final class MemberBlockPrinter {
      * Keeps a line comment that trails a nested type's closing brace on the same source line inline after that type
      * instead of routing it to the next own line.
      *
-     * <p>A {@code //} comment written immediately after a nested type's closing brace, e.g.
-     * {@code class Beacon { ... }} {@code // inner beacon}, conceptually belongs to that brace line, not to a standalone
-     * slot. JavaParser exposes it as an enclosing-body orphan rather than as the type's own trailing comment because type
-     * declarations do not claim trailing comments, so without this it would fall through to the source-order interleaver
-     * and render on the next line. This attaches each such comment as a {@link Doc#lineSuffix(Doc)} on the type it trails
-     * so it stays on the closing-brace line, and returns the remaining orphans for normal interleaving.
+     * <p>A {@code //} after a nested type's closing brace ({@code class Beacon { ... }} {@code // inner beacon}) belongs
+     * to that brace line, but JavaParser exposes it as an enclosing-body orphan (type declarations do not claim trailing
+     * comments), so the interleaver would push it to the next line. This attaches each as a {@link Doc#lineSuffix(Doc)}
+     * on the type it trails and returns the remaining orphans for normal interleaving.
      *
-     * <p>The scan is deliberately restricted to {@link TypeDeclaration} members: a method's or field's closing-brace
-     * trailing comment is left on its own line as before, because only a type's closing brace carries the
-     * "comment belongs to the brace line" convention this method restores. Only line comments that begin strictly after
-     * the type's end column on its end line qualify; block comments and comments that open their own line are left to the
-     * interleaver. The attached doc claims the comment under the same {@code (owner, INTERLEAVED)} anchor the interleaver
-     * would use, so claim ownership and idempotence are unchanged.
+     * <p>Restricted to {@link TypeDeclaration} members (only a type's closing brace carries this convention) and to line
+     * comments beginning strictly after the type's end column on its end line. The attached doc claims under the same
+     * {@code (owner, INTERLEAVED)} anchor the interleaver would use, so claim ownership and idempotence are unchanged.
      */
     private List<JavaCommentTrivia> attachInlineTrailingMemberComments(
             Node owner,

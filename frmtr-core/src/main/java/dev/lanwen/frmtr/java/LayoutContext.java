@@ -21,21 +21,18 @@ package dev.lanwen.frmtr.java;
  * @param leftEdgePrefix text that already occupies this node's first line ahead of it (for example an assignment
  *     prefix); the empty string when the node owns its own first column
  * @param trailingContent same-line content the <em>caller</em> will emit immediately after this node, which node-local
- *     IR cannot see but a width gate must account for. The canonical case is a declaration header's throws clause: its
- *     width has to include the {@code " {"} (body) or {@code ";"} (abstract) opener the caller appends on the same
- *     line, so the gate is fed that opener here rather than guessing it node-locally. The empty string when no
- *     same-line content follows (the common case, e.g. a statement or a return value that ends its own line). It is a
- *     positional fact — <em>where</em> this node sits relative to what the caller emits after it — and so lives on the
- *     context, distinct from the node's own rendered text
+ *     IR cannot see but a width gate must account for — canonically a declaration header's throws clause, whose width
+ *     must include the {@code " {"} (body) or {@code ";"} (abstract) opener the caller appends on the same line. The
+ *     empty string when no same-line content follows (the common case). A positional fact — <em>where</em> this node
+ *     sits relative to what the caller emits after it — so it lives on the context, distinct from the node's rendered
+ *     text
  * @param leadingBreak whether the caller has already committed this node to lead with a break, so an enclosed
  *     call/reference receiver ({@code (…).method(…)}, {@code (…)::member}) must break its parenthesized scope
- *     unconditionally instead of first gating on its own width. The canonical case is an assignment or variable
- *     initializer right-hand side whose surrounding line has already been decided too wide to keep flat: the
- *     suffix-preserving dispatcher is told "you are already past the break decision" here rather than re-deriving it.
- *     {@code false} when no such decision has been made and the receiver is free to stay compact if it fits (the
- *     common case). It is a positional fact — <em>whether this node's position is already inside a broken line</em> —
- *     and so lives on the context, distinct from the node's own rendered text, which is why {@link
- *     EnclosedSuffixDispatcher} reads it from here (#189) rather than carrying it as a separate dispatch argument
+ *     unconditionally instead of gating on its own width — canonically an assignment or initializer right-hand side
+ *     whose surrounding line was already decided too wide to keep flat. {@code false} when no such decision has been
+ *     made and the receiver may stay compact if it fits (the common case). A positional fact — <em>whether this node's
+ *     position is already inside a broken line</em> — so {@link EnclosedSuffixDispatcher} reads it from here (#189)
+ *     rather than as a separate dispatch argument
  */
 record LayoutContext(
     EnclosingConstruct enclosing,
@@ -54,33 +51,30 @@ record LayoutContext(
     }
 
     /**
-     * Derives a copy of this context whose caller will emit {@code trailingContent} on the same line immediately after
-     * the node — for example a declaration header handing its throws-clause gate the {@code " {"} body opener it is
-     * about to append. Every other positional fact is preserved. Following the {@code LayoutContext} discipline this
-     * produces a fresh value rather than mutating; the original is unchanged.
+     * Derives a copy whose caller will emit {@code trailingContent} on the same line immediately after the node — for
+     * example a declaration header handing its throws-clause gate the {@code " {"} body opener it is about to append.
+     * Every other positional fact is preserved; produces a fresh value (never mutates).
      */
     LayoutContext withTrailingContent(String trailingContent) {
         return new LayoutContext(enclosing, leftEdgePrefix, trailingContent, leadingBreak);
     }
 
     /**
-     * Derives a copy of this context that records whether the node is already committed to lead with a break — for
-     * example an assignment or initializer right-hand side whose surrounding line the caller has already decided must
-     * break, so an enclosed suffix receiver breaks its parenthesized scope unconditionally instead of re-gating on its
-     * own width. Every other positional fact is preserved. Following the {@code LayoutContext} discipline this produces
-     * a fresh value rather than mutating; the original is unchanged.
+     * Derives a copy recording whether the node is already committed to lead with a break — for example an assignment
+     * or initializer right-hand side whose surrounding line the caller has already decided must break, so an enclosed
+     * suffix receiver breaks its parenthesized scope unconditionally instead of re-gating on its own width. Every other
+     * positional fact is preserved; produces a fresh value (never mutates).
      */
     LayoutContext withLeadingBreak(boolean leadingBreak) {
         return new LayoutContext(enclosing, leftEdgePrefix, trailingContent, leadingBreak);
     }
 
     /**
-     * Derives a copy of this context whose node renders after {@code leftEdgePrefix} on the same first line — for example
-     * a {@code return } keyword ahead of a returned method-call chain, or an assignment prefix ({@code NAME = }) ahead of
-     * an initializer. A width gate that measures the node's first line reads this back and adds its width at the rendered
-     * column, so the prefix does not have to be inferred from the node's stale source column. Every other positional fact
-     * is preserved. Following the {@code LayoutContext} discipline this produces a fresh value rather than mutating; the
-     * original is unchanged.
+     * Derives a copy whose node renders after {@code leftEdgePrefix} on the same first line — for example a
+     * {@code return } keyword ahead of a returned method-call chain, or an assignment prefix ({@code NAME = }) ahead of
+     * an initializer. A width gate measuring the node's first line reads this back and adds its width at the rendered
+     * column, so the prefix need not be inferred from the node's stale source column. Every other positional fact is
+     * preserved; produces a fresh value (never mutates).
      */
     LayoutContext withLeftEdgePrefix(String leftEdgePrefix) {
         return new LayoutContext(enclosing, leftEdgePrefix, trailingContent, leadingBreak);

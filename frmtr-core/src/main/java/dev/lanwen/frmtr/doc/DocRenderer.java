@@ -28,14 +28,12 @@ public final class DocRenderer {
     private final Map<String, Mode> groupModes = new HashMap<>();
 
     /**
-     * Structural indentation fact for each output line, in line order, recorded only when a caller renders through
-     * {@link #renderIndented(Doc)}; empty (never populated) on the byte-identical {@link #render(Doc)} path. Each entry
-     * says whether the line's leading whitespace was emitted by {@link #newline(int, DocWidths.Measurement)} (a
-     * structural indent the formatter chose) and, if so, at which indent <em>level</em> (not columns). Lines whose
-     * leading whitespace is literal — text-block interiors, whose embedded newlines flow through {@link #append(String)}
-     * rather than {@code newline} — are recorded as non-structural, so a presentation layer can leave their indentation
-     * exactly as the formatter emitted it. Levels are the authoritative, tab-width-independent signal that column
-     * counting cannot recover from the finished text.
+     * Structural indentation fact for each output line, in order, recorded only when a caller renders through
+     * {@link #renderIndented(Doc)}; empty on the byte-identical {@link #render(Doc)} path. Each entry says whether the
+     * line's leading whitespace was emitted by {@link #newline(int, DocWidths.Measurement)} (a structural indent) and at
+     * which indent <em>level</em>. Text-block interior lines (whose embedded newlines flow through {@link #append(String)})
+     * are non-structural, so a presentation layer leaves their literal indentation as emitted. Levels are the
+     * authoritative, tab-width-independent signal the finished text cannot recover.
      */
     private final List<LineIndent> lineIndents = new ArrayList<>();
 
@@ -154,11 +152,9 @@ public final class DocRenderer {
 
     /**
      * Renders a {@link Doc.Fill}'s alternating {@code [content, separator, …]} parts with greedy per-separator packing:
-     * every content piece renders flat, and each separator is laid out flat when the separator plus the next content
-     * would still fit on the current line and broken otherwise. The fit probe reuses the shared {@link DocWidths}
-     * authority, so it stays compatible with the renderer's memoized, bounded width measurement: each lookahead measures
-     * only one separator and one following content (their flat widths, individually memoized by node identity), never the
-     * whole tail, which keeps the walk linear in the number of parts rather than quadratic.
+     * every content piece renders flat, and each separator stays flat when the separator plus the next content still
+     * fits on the current line, broken otherwise. Each lookahead measures only one separator and one following content
+     * through the shared {@link DocWidths} authority (never the whole tail), keeping the walk linear, not quadratic.
      */
     private void renderFill(List<Doc> parts, int indent, DocWidths.Measurement widths) {
         if (parts.isEmpty()) {
@@ -179,14 +175,12 @@ public final class DocRenderer {
     }
 
     /**
-     * Renders a {@link Doc.ConditionalGroup} by choosing the first alternative (in order, including the last) whose flat
-     * layout fits the space left on the current line and rendering it flat; if no alternative fits, the last is rendered
-     * in break mode as the unconditional fallback. This mirrors the {@link Doc.Group} fit decision but over an ordered
-     * list of candidates: each candidate is probed with the shared {@link DocWidths} authority (the same question a group
-     * asks itself), so a conditional group composes with the renderer's memoized, bounded width measurement. Because
-     * every non-last alternative is chosen purely by flat fit, an alternative containing a forced break never fits and is
-     * skipped, so only the last alternative is reachable as a broken layout (see {@link Doc#conditionalGroup}). The
-     * factory rejects an empty list, so this walk always has at least one alternative to fall back on.
+     * Renders a {@link Doc.ConditionalGroup} by choosing the first alternative whose flat layout fits the space left on
+     * the current line and rendering it flat; if none fits, the last renders in break mode as the unconditional
+     * fallback. Each candidate is probed with the shared {@link DocWidths} authority, the same fit question a
+     * {@link Doc.Group} asks. Since non-last alternatives are chosen purely by flat fit, one containing a forced break
+     * never fits and is skipped, so only the last is reachable as a broken layout (see {@link Doc#conditionalGroup}); the
+     * factory rejects an empty list, so there is always a fallback.
      */
     private void renderConditionalGroup(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
         for (Doc alternative : alternatives) {
@@ -202,12 +196,11 @@ public final class DocRenderer {
     /**
      * Renders a {@link Doc.BestFitting} by keeping the alternative that minimizes rendered line count at the live output
      * column (rule B8 + D16). Selection is delegated to {@link DocWidths.Measurement#chooseBestFitting} — the same
-     * decision the line-count simulation uses — so the alternative rendered here is always the one the ranking measured;
-     * they cannot drift because there is one decision function, not two. The ranking probes are side-effect-free
-     * (they never touch {@code out}, {@code column}, {@code groupModes}, or {@code lineSuffixes}), so the winner is then
-     * rendered <em>once</em>, for real, in break mode — the same top-level mode a {@code ConditionalGroup} fallback uses,
-     * letting the chosen alternative's own inner groups decide flat-vs-broken from the column they reach. A nested
-     * best-fitting node inside the winner re-enters this method and is ranked at the next depth, under the shared bound.
+     * decision the line-count simulation uses, so the alternative rendered here cannot drift from the one the ranking
+     * measured. The probes are side-effect-free (they never touch {@code out}, {@code column}, {@code groupModes}, or
+     * {@code lineSuffixes}), so the winner is rendered <em>once</em>, in break mode, letting its own inner groups decide
+     * flat-vs-broken from the column they reach. A nested best-fitting node inside the winner is ranked at the next
+     * depth, under the shared bound.
      */
     private void renderBestFitting(Doc.BestFitting bestFitting, int indent, DocWidths.Measurement widths) {
         List<Doc> alternatives = bestFitting.alternatives();
@@ -272,7 +265,7 @@ public final class DocRenderer {
     }
 
     /**
-     * Guards the version-one restriction that line-suffix content is single-line: a {@link Doc.HardLine} buried in a
+     * Guards the restriction that line-suffix content is single-line: a {@link Doc.HardLine} buried in a
      * suffix would, once flushed at a line break, emit a second break and could retroactively change a layout already
      * decided around the (zero-width) suffix. All trailing-comment call sites produce single-line content.
      */
@@ -286,12 +279,10 @@ public final class DocRenderer {
      * Reports whether {@code doc} contains a forced newline ({@link Doc.HardLine}) anywhere in its tree — i.e. whether it
      * is a genuinely multi-line layout that can never render flat.
      *
-     * <p>Exposed as a pure structural query (it touches no {@link DocWidths}/renderer state) so a printer can enforce the
+     * <p>A pure structural query (touches no {@link DocWidths}/renderer state) so a printer can enforce the
      * {@link Doc#conditionalGroup(java.util.List) conditionalGroup} contract locally: only the LAST alternative may be a
-     * broken layout, and a non-last alternative that carries a forced break is dead. A printer that assembles its broken
-     * fallback from a source-shape-dependent helper (which may hand back a FLAT one-liner instead of a broken shape) uses
-     * this to detect that degenerate flat result and substitute a real broken layout, so the fallback always carries a
-     * forced break as the contract requires.
+     * broken layout. A printer whose broken fallback comes from a source-shape-dependent helper (which may hand back a
+     * FLAT one-liner) uses this to detect that degenerate result and substitute a real broken layout.
      */
     public static boolean containsHardLine(Doc doc) {
         return switch (doc) {

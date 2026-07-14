@@ -111,7 +111,7 @@ final class ObjectCreationPrinter {
      * one line — but it also collapses a source-multiline argument list back to flat when it fits, instead of preserving
      * the author's break.
      *
-     * <p>This exists for the canonical-fan cutover ({@link MethodCallChainPrinter}): a constructor-rooted fan-threshold
+     * <p>This exists for the canonical fan ({@link MethodCallChainPrinter}): a constructor-rooted fan-threshold
      * chain must render its root the same way on every pass so it converges. {@code MethodCallChainPrinter.chainFanOut}
      * routes an object-creation root through this renderer rather than {@code rendering.render} (source-shape
      * sensitive: it preserves a four-plus-argument source-multiline list) or {@code brokenObjectCreation} (always

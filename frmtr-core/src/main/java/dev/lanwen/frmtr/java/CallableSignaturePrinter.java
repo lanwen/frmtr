@@ -99,9 +99,9 @@ final class CallableSignaturePrinter {
      * parameters may need to break to leave room for throws clauses or a following block.
      */
     Doc parameters(CallableDeclaration<?> declaration, boolean forceBreak) {
-        // A leading line comment on any parameter must render on its own line above that parameter, which is only safe
-        // once the whole list breaks one parameter per line. Force the break here even when the flat list would fit so
-        // the rendered `//` never lands mid-line and comment out the rest of the signature.
+        // A leading line comment on a parameter must render on its own line above it, which is only safe once the whole
+        // list breaks one-per-line. Force the break even when the flat list fits, so the `//` never comments out the
+        // rest of the signature.
         forceBreak = forceBreak || parametersHaveLeadingLineComment(declaration);
         List<Doc> parameters = new ArrayList<>();
         Optional<Node> previous = declaration.getReceiverParameter()
@@ -155,10 +155,9 @@ final class CallableSignaturePrinter {
     }
 
     boolean parametersFitOnContinuation(CallableDeclaration<?> declaration) {
-        // The compact continuation layout renders every parameter on one line from flat text that carries no comment, so
-        // a leading line comment would be dropped there. Refuse the continuation when any parameter has one; the caller
-        // then falls back to the broken parameter list, which renders the comment on its own line. Block-comment-only
-        // parameters keep their existing continuation eligibility because a block comment can stay inline.
+        // The compact continuation renders every parameter on one line from comment-free flat text, so a leading line
+        // comment would be dropped there; refuse the continuation when any parameter has one (the caller falls back to
+        // the broken list, which gives the comment its own line). Block-comment-only parameters stay eligible.
         if (parametersHaveLeadingLineComment(declaration)) {
             return false;
         }
@@ -199,13 +198,10 @@ final class CallableSignaturePrinter {
     /**
      * Decides whether the callable parameter list must break before later signature clauses are appended.
      *
-     * <p>C10 (#220): the flat signature is measured at the declaration's real rendered column. A declaration inside an
-     * inner class or nested type renders one block/type level deeper per enclosing scope, so a signature that fits at
-     * one unit can overflow at its true column. {@link LayoutWidth#nodeLine} counts every enclosing
-     * {@code TypeDeclaration}/{@code BlockStmt} and floors at one level, and the {@code currentIndentedWidth} term is
-     * kept as a floor so a top-level declaration is still measured against at least one unit. The caller's
-     * {@code prefix} and {@code suffix} (the {@code "throws … {"}/{@code ";"} the header appends on this line) are
-     * folded into the measured text, mirroring the throws-clause and try-with-resources rendered-column gates.
+     * <p>The flat signature is measured at the declaration's true rendered column ({@link LayoutWidth#nodeLine} counts
+     * every enclosing {@code TypeDeclaration}/{@code BlockStmt}, floored at one unit by {@code currentIndentedWidth}), so
+     * a signature that fits at one level can still overflow when nested. The caller's {@code prefix}/{@code suffix} (the
+     * {@code "throws … {"}/{@code ";"} appended on this line) are folded into the measured text.
      */
     boolean parametersBreak(String prefix, CallableDeclaration<?> declaration, String suffix) {
         String parameters = callableParameterText(declaration);
@@ -218,15 +214,13 @@ final class CallableSignaturePrinter {
     }
 
     /**
-     * Reports whether a declaration's return type (or its name-and-open-paren opener) is itself too wide to leave the
-     * parameter list any room on the signature's first line, the width-driven signal that the return type's own type
-     * arguments must break rather than the parameter list.
+     * Reports whether a declaration's return type plus name-and-open-paren opener is itself too wide to leave the
+     * parameter list any first-line room — the width signal that the return type's own type arguments must break rather
+     * than the parameter list.
      *
-     * <p>A generic return type such as
-     * {@code Function<Collection<X>, Publisher<Y>> decode()} or {@code Mono<VeryLongRouteKey> resolveRoute(a, b)}
-     * overflows because the type itself is wide; breaking the parameters cannot rescue it (the opener up to {@code (}
-     * already overruns, or there are no parameters to break), so the type's arguments must fan. Measured at the
-     * declaration's rendered column ({@link LayoutWidth#nodeLine} floored by the current indent), mirroring
+     * <p>A wide generic return type ({@code Function<Collection<X>, Publisher<Y>> decode()},
+     * {@code Mono<VeryLongRouteKey> resolveRoute(a, b)}) overflows on the opener up to {@code (}, which breaking the
+     * parameters cannot rescue, so the type's arguments must fan. Measured at the declaration's rendered column like
      * {@link #parametersBreak(String, CallableDeclaration, String)}.
      */
     boolean returnTypeOverflows(String returnTypeNamePrefix) {
@@ -235,16 +229,13 @@ final class CallableSignaturePrinter {
     }
 
     /**
-     * Reports whether the callable parameter list can actually break onto continuation lines.
+     * Reports whether the callable parameter list can actually break onto continuation lines — distinct from
+     * {@link #parametersBreak(String, CallableDeclaration, String)}, which only asks whether the flat signature overflows.
      *
-     * <p>This is distinct from {@link #parametersBreak(String, CallableDeclaration, String)}, which only asks whether the
-     * flat signature overflows the line width. An empty parameter list ({@code ()}, with no ordinary parameters and no
-     * receiver parameter) always renders inline and has no break group, so an overflowing signature cannot move a
-     * following clause onto a lower-column continuation line by breaking the parameters. The throws-clause width decision
-     * must consult this before treating the parameters as broken: when {@code ()} cannot break, the {@code )} stays at the
-     * end of the over-width signature, so the throws clause is measured against the full flat signature and wraps onto its
-     * own line instead of being rendered inline next to a {@code )} that never moved. Width-based decisions that do not
-     * depend on the parameters actually breaking (such as the multiline-return-type break) keep using
+     * <p>An empty {@code ()} has no break group, so an overflowing signature cannot move a following clause onto a lower
+     * column by breaking it. The throws-clause width decision consults this before treating the parameters as broken:
+     * when {@code ()} cannot break, the throws clause is measured against the full flat signature and wraps onto its own
+     * line rather than sitting next to a {@code )} that never moved. Decisions independent of an actual break keep using
      * {@link #parametersBreak(String, CallableDeclaration, String)} directly.
      */
     boolean parametersCanBreak(CallableDeclaration<?> declaration) {
@@ -344,12 +335,10 @@ final class CallableSignaturePrinter {
     /**
      * Prints one ordinary parameter, prepending any {@code //} line comment that leads it in source order.
      *
-     * <p>A leading line comment renders on its own line above the parameter, outside the per-parameter group so the
-     * trailing hard line never forces a breakable type's own group to break. The {@code parameters(...)} entry points
-     * already force the whole list to break when any parameter has one, so the hard line lands the comment on a fresh line
-     * at the parameter indent and the parameter text follows on the next line. The comment is recovered by source order
-     * ({@link #parameterLeadingLineComments}) so it stays owned by this parameter however whitespace lays the gap out,
-     * which is what keeps the same comment claimed once across the default layout and its collapsed/expanded shapes.
+     * <p>The leading comment renders on its own line above the parameter, outside the per-parameter group so its hard
+     * line never forces a breakable type's group to break; the {@code parameters(...)} entry points already break the
+     * whole list when any parameter has one. It is recovered by source order ({@link #parameterLeadingLineComments}) so
+     * it stays owned by this parameter and claimed once across the default, collapsed, and expanded shapes.
      */
     private Doc parameter(CallableDeclaration<?> declaration, Optional<Node> previous, Parameter parameter) {
         List<Doc> rendered = new ArrayList<>();
@@ -361,18 +350,17 @@ final class CallableSignaturePrinter {
     }
 
     private Doc parameterCore(Parameter parameter) {
-        // A C-style array parameter (byte b[]) must render through the non-breaking text path: its after-name bracket
-        // shape has no group to break, and the breakable path would print the type body (name-spanning) followed by the
-        // name again, reproducing the duplicated-name bug. parameterTypeAndNameText handles the element-type prefix and
-        // after-name bracket suffix.
+        // A C-style array parameter (byte b[]) must use the non-breaking text path: its after-name brackets have no
+        // group to break, and the breakable path would print the name-spanning type body then the name again (the
+        // duplicated-name bug). parameterTypeAndNameText handles the element-type prefix and after-name bracket suffix.
         if (
             !parameter.isVarArgs()
             && !CStyleArrayDeclarators.parameterHasCStyleBrackets(parameter)
             && typeCanBreak.test(parameter.getType())
         ) {
-            // The breakable branch emits the type body and the name as separate docs, so the between-type-and-name
-            // comment cannot ride along in the flat name text; claim and render it here, between the two, so it survives
-            // whether the type group stays flat or breaks.
+            // The breakable branch emits type body and name as separate docs, so the between-type-and-name comment
+            // cannot ride the flat name text; claim and render it here, between the two, so it survives a flat or broken
+            // type group.
             List<Doc> parts = new ArrayList<>();
             parameterLeadingBlockComment(parameter).ifPresent(parts::add);
             parts.add(parameterModifierAnnotationPrefix(parameter));
@@ -464,16 +452,12 @@ final class CallableSignaturePrinter {
      * Claims and renders the {@code //} line comments that lead {@code parameter} in source order, recovering them
      * however whitespace re-bucketed them across the parameter's neighbors.
      *
-     * <p>JavaParser attaches a line comment written above a parameter to that parameter's own trivia at the default
-     * layout, but a whitespace collapse/expand re-buckets the same comment onto the <em>previous</em> parameter (as its
-     * trailing own comment) even though the AST is unchanged. Selecting by JavaParser's attachment would therefore drop
-     * the comment under perturbation. This query is source-order instead: it asks {@link CommentTracker#gapLineCommentsBefore}
-     * for the line comments parked on the previous parameter (or receiver) that lie strictly between it and
-     * {@code parameter}, and adds {@code parameter}'s own leading line comment for the default layout (which the gap query
-     * intentionally excludes as {@code body}'s own trivia). Both paths claim by identity, so a comment is rendered exactly
-     * once; in the default layout the own path wins and the gap path returns empty, while under perturbation the gap path
-     * recovers the comment from the previous parameter and the own path is empty. The first ordinary parameter (no
-     * previous node) uses only the own path, which the default layout always populates.
+     * <p>A whitespace collapse/expand can re-bucket a parameter's leading comment onto the <em>previous</em> parameter's
+     * trailing trivia, so selecting by JavaParser attachment drops it. This query is source-order instead: it unions the
+     * gap comments parked between the previous parameter (or receiver) and {@code parameter}
+     * ({@link CommentTracker#gapLineCommentsBefore}) with {@code parameter}'s own leading comment. Both claim by identity,
+     * so the comment renders exactly once — the own path wins at the default layout, the gap path recovers it under
+     * perturbation. The first parameter has no previous node and uses only the own path.
      */
     private List<Doc> parameterLeadingLineComments(
             CallableDeclaration<?> declaration,
@@ -482,10 +466,9 @@ final class CallableSignaturePrinter {
     ) {
         List<Doc> rendered = new ArrayList<>();
         if (declaration != null && previous.isPresent()) {
-            // Scan both the previous parameter and the declaration itself: a whitespace collapse parks the comment as the
-            // previous parameter's trailing own comment, while a whitespace expand parks it as the declaration's orphan,
-            // so both buckets are needed to recover it regardless of shape. gapLineCommentsBefore selects only line
-            // comments that lie strictly between the previous parameter and this one and claims each by identity.
+            // Scan both the previous parameter and the declaration: a collapse parks the comment as the previous
+            // parameter's trailing own comment, an expand as the declaration's orphan, so both buckets are needed.
+            // gapLineCommentsBefore selects only line comments strictly between the two and claims each by identity.
             rendered.addAll(
                 comments.gapLineCommentsBefore(previous.orElseThrow(), parameter, List.of(previous.orElseThrow(), declaration))
             );
@@ -502,11 +485,10 @@ final class CallableSignaturePrinter {
 
     /**
      * Reports whether any ordinary parameter of {@code declaration} is led by a {@code //} line comment in source order,
-     * used to force the parameter list to break. This is a pure source read over the declaration's contained comments and
-     * the parameter boundaries (the same source-order ownership {@link #parameterLeadingLineComments} renders from) and
-     * claims nothing, so it can be asked before the list layout is chosen without disturbing comment accounting. It is
-     * shape-independent: a comment the layout pushed onto the previous parameter still counts because it still lies in the
-     * gap before the parameter it leads.
+     * used to force the parameter list to break. A pure source read (the same source-order ownership
+     * {@link #parameterLeadingLineComments} renders from) that claims nothing, so it can be asked before the layout is
+     * chosen. Shape-independent: a comment the layout pushed onto the previous parameter still lies in the gap before the
+     * parameter it leads.
      */
     private boolean parametersHaveLeadingLineComment(CallableDeclaration<?> declaration) {
         List<Comment> lineComments = declaration.getAllContainedComments()
@@ -602,14 +584,13 @@ final class CallableSignaturePrinter {
     }
 
     /**
-     * Builds the {@link LayoutContext} that tells a breakable parameter annotation where it actually renders, so its
-     * flat/structured choice is width-driven at the real column instead of reading the author's source line breaks.
+     * Builds the {@link LayoutContext} that tells a breakable parameter annotation where it renders, so its
+     * flat/structured choice is width-driven at the real column instead of reading source line breaks.
      *
-     * <p>A broken parameter list indents its parameters one unit past the member baseline that {@link
-     * #currentIndentedWidth} already assumes, so {@link LayoutContext#leftEdgePrefix()} contributes that extra unit plus
-     * every prefix part before this one (joined by the same {@code " "} the render uses). The trailing content is the
-     * rest of the prefix, then the {@code " Type name"} the parameter emits after the prefix on the same line — so the
-     * annotation breaks only when keeping it flat would push that type/name past the width.
+     * <p>{@link LayoutContext#leftEdgePrefix()} carries the extra indent unit a broken parameter list adds past the
+     * member baseline plus every earlier prefix part; the trailing content carries the rest of the prefix and the
+     * {@code " Type name"} emitted after it. The annotation then breaks only when keeping it flat would push that
+     * type/name past the width.
      */
     private LayoutContext parameterAnnotationLayout(List<ParameterPrefixPart> parts, int index, Parameter parameter) {
         StringBuilder leftEdge = new StringBuilder(options.indentUnit());
@@ -661,10 +642,10 @@ final class CallableSignaturePrinter {
     }
 
     private String parameterTypeAndNameText(Parameter parameter) {
-        // A C-style parameter (byte b[]) carries its brackets after the name, so the type node's token range spans the
-        // name and compact text already reads "byte b[]". Rendering the element type as the prefix and re-appending the
-        // brackets after the name keeps the name from being emitted twice while preserving the after-name bracket
-        // position the AST-equivalence guardrail requires (see CStyleArrayDeclarators).
+        // A C-style parameter (byte b[]) carries its brackets after the name, so the type's token range spans the name
+        // and compact text already reads "byte b[]". Rendering the element type as prefix and re-appending the brackets
+        // avoids emitting the name twice while keeping the after-name position the AST-equivalence guardrail requires
+        // (see CStyleArrayDeclarators).
         if (CStyleArrayDeclarators.parameterHasCStyleBrackets(parameter)) {
             return compactTypeLike.apply(CStyleArrayDeclarators.parameterElementType(parameter))
                 + " "

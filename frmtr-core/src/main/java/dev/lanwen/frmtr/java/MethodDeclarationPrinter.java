@@ -176,15 +176,12 @@ final class MethodDeclarationPrinter {
 
     /**
      * Recovers the {@code //} line comment written alone between a method signature's {@code )} and its body {@code {}
-     * — trivia that the structured {@link JavaPrinter} block rendering never emits — and renders it on its own line
-     * below the signature, preserving the source shape: a {@link Doc#HARD_LINE} before the comment drops it onto a fresh
-     * line at the member indent and a second {@link Doc#HARD_LINE} after it drops the {@code {} onto the line below.
+     * — trivia the structured block rendering never emits — and renders it on its own line below the signature
+     * (a {@link Doc#HARD_LINE} on each side drops the comment to the member indent and the {@code {} to the next line).
      *
-     * <p>This is the structured-path counterpart of the raw commented-signature fallback handled by
-     * {@link CommentedMethodSignaturePrinter}: methods with {@code >=2} statements stay on this structured path, where
-     * {@code block.apply(body)} drops the body block's own comment. The trailing {@link Doc#HARD_LINE} is mandatory — a
-     * line comment with the brace on the same line would comment the brace out. When no such gap comment exists the slot
-     * is empty and the body renders exactly as before, keeping comment-free methods byte-identical.
+     * <p>The structured-path counterpart of the raw fallback in {@link CommentedMethodSignaturePrinter}, for methods with
+     * {@code >=2} statements. The trailing {@link Doc#HARD_LINE} is mandatory — a brace on the comment's line would be
+     * commented out. With no gap comment the slot is empty and comment-free methods stay byte-identical.
      */
     private Optional<Doc> signatureToBodyGapComment(MethodDeclaration declaration) {
         return declaration.getBody()
@@ -196,12 +193,12 @@ final class MethodDeclarationPrinter {
     /**
      * Finds the line comment trivia in the {@code )}-to-{@code {} gap, looking in every bucket JavaParser may park it in.
      *
-     * <p>The same source comment lands in a different parser bucket depending on the whitespace around it, so recovering
-     * only one bucket drops the comment under re-shaped layouts and breaks idempotence:
+     * <p>The same comment lands in a different bucket depending on surrounding whitespace, so recovering only one drops
+     * it under re-shaped layouts and breaks idempotence:
      *
      * <ul>
-     *   <li><b>body own comment</b> — the comment on its own line between {@code )} and {@code {} (the issue #23 source
-     *       shape) attaches as the body block's own trivia;</li>
+     *   <li><b>body own comment</b> — the comment on its own line between {@code )} and {@code {} attaches as the
+     *       body block's own trivia;</li>
      *   <li><b>last-parameter own comment</b> — once this printer renders the comment back onto the signature line
      *       ({@code ) // note} with {@code {} below), re-parsing that output re-buckets it onto the last parameter's own
      *       trivia, so a second format pass must still find it there;</li>
@@ -209,9 +206,9 @@ final class MethodDeclarationPrinter {
      *       expanded-whitespace shape), JavaParser leaves it as an orphan of the method declaration.</li>
      * </ul>
      *
-     * <p>Every bucket is filtered to line comments that lie in the gap — after the parameter list ends and before
-     * {@code body} begins — so a leading comment before the signature or a comment trailing the body is never claimed.
-     * The body-own bucket needs no lower bound because JavaParser only attaches a leading line comment there.
+     * <p>Every bucket is filtered to line comments in the gap — after the parameter list and before {@code body} — so a
+     * comment leading the signature or trailing the body is never claimed. The body-own bucket needs no lower bound
+     * because JavaParser only attaches a leading line comment there.
      */
     private Optional<JavaCommentTrivia> gapCommentTrivia(MethodDeclaration declaration, BlockStmt body) {
         Optional<JavaCommentTrivia> bodyOwn = commentPlacement.ownComment(body)
@@ -299,12 +296,11 @@ final class MethodDeclarationPrinter {
     }
 
     private Doc annotationMethodGapComments(MethodDeclaration declaration) {
-        // A comment that sits between a method's annotations and its name is also offered by the shared annotation-prefix
-        // printer (DeclarationPrefixPrinter.postAnnotationComments), which renders first. This gap recovery offers each
-        // comment under its own (declaration, OWN) ownership key — distinct from the bare (comment, INTERLEAVED) key the
-        // prefix printer uses — so the dry-run records the true first-traversal claimant and {@code ownsHere} suppresses
-        // whichever offer lost. Output is unchanged because the suppressed offer already lost the first-claim race and
-        // rendered empty; when the prefix printer does not cover a gap comment this path remains its sole claimant.
+        // A comment between a method's annotations and its name is also offered by the shared annotation-prefix printer
+        // (DeclarationPrefixPrinter.postAnnotationComments). This gap recovery offers each under its own (declaration,
+        // OWN) key — distinct from the prefix printer's (comment, INTERLEAVED) — so the dry-run records the true first
+        // claimant and ownsHere suppresses the loser; this path is the sole claimant for any gap comment the prefix
+        // printer does not cover.
         return Doc.concat(
             annotationMethodGapCommentTrivia(declaration)
                     .map(trivia -> comments.comment(trivia, declaration, OwnerSlot.OWN))

@@ -22,25 +22,19 @@ import java.util.Set;
  * Owns line-comment detection and the source-comment {@link Doc} slots for {@link ConditionalExpressionPrinter}'s ternary
  * rendering.
  *
- * <p>This helper hosts the family that answers "does this {@code ?:} carry a line comment, and where does it render?": the
- * force-broken gate {@link #conditionalContainsLineComment} that routes a commented ternary off the flat arm; the full
- * rebuild {@link #commentedConditionalExpression}, which gathers every candidate line comment from <em>both</em> the child
- * expressions' own comments and the conditional's orphan comments and classifies each — by where it begins in source order
- * relative to the {@code ?} and {@code :} operator-token positions — into a condition-trailing, {@code ?}-leading,
- * then-trailing, {@code :}-leading, or else-trailing slot; and the branch-tail recovery {@link #branchTailTrailingComment}
- * that keeps a comment trailing a multi-line branch's last token on that branch's line. The boundary exists so the ternary
- * printer's flat-versus-broken decision tree can consult one comment authority — must this ternary break to keep a comment,
- * and if so which slot re-emits it — instead of carrying every comment scan and operator-position classification inline.
+ * <p>This helper answers "does this {@code ?:} carry a line comment, and where does it render?" through three entry points:
+ * the force-broken gate {@link #conditionalContainsLineComment}, the full rebuild
+ * {@link #commentedConditionalExpression} (which classifies each candidate into a condition-trailing, {@code ?}-leading,
+ * then-trailing, {@code :}-leading, or else-trailing slot), and the branch-tail recovery
+ * {@link #branchTailTrailingComment}. The boundary exists so the printer's flat-versus-broken decision tree can consult one
+ * comment authority instead of carrying every comment scan and operator-position classification inline.
  *
- * <p>The helper claims no ownership of the ternary's shape, width, or nesting: it reports the comments present and renders
- * the ones it is asked for, but never decides whether the conditional stays flat, breaks for width, or how a branch
- * expression itself lays out. That stays with the caller, which threads {@link #conditionalContainsLineComment} into its
- * force-broken gate, delegates the comment rebuild through {@link #commentedConditionalExpression}, and renders branch
- * expressions on its own {@link ConditionalExpressionPrinter#conditionalBranch} path so their inner comments survive.
- * Because the {@code ?} and {@code :} are not AST nodes, classification keys purely off source position — a relationship a
- * whitespace perturbation cannot change — and every candidate is read from the same own-comment / orphan / contained-comment
- * sets the renderers consume and claimed once by identity, so a withhold verdict and the render stay in lockstep and no
- * comment is double-claimed.
+ * <p>The helper claims no ownership of the ternary's shape, width, or nesting; that stays with the caller, which threads
+ * these entry points into its dispatch and renders branch expressions on its own
+ * {@link ConditionalExpressionPrinter#conditionalBranch} path so their inner comments survive. Because the {@code ?} and
+ * {@code :} are not AST nodes, classification keys purely off source position, and every candidate is read from the same
+ * own/orphan/contained sets the renderers consume and claimed once by identity, so the withhold verdict and the render stay
+ * in lockstep and no comment is double-claimed.
  */
 final class ConditionalCommentLayout {
 
@@ -64,26 +58,15 @@ final class ConditionalCommentLayout {
      * Recovers a line comment that trails a ternary branch's last token but that the branch renderer drops, and renders
      * it inline after the branch.
      *
-     * <p>This covers the then-branch &rarr; {@code :} gap when the then-branch is a multi-line binary chain. JavaParser
-     * attaches a {@code base + offset // tuned} comment to the whole branch (its own comment, which
-     * {@link #commentedConditionalExpression} already routes through the {@code THEN_TRAILING} slot), but in
-     * {@code aaa + bbb // mid + ccc // tail} it instead parks the trailing {@code // tail} after the chain's last operand
-     * as that operand's leading trivia. The binary continuation renderer only offers comments <em>between</em> operands,
-     * so it reaches {@code // mid} but never a comment that begins after the whole chain's last token, and the ternary
-     * then-branch &rarr; {@code :} slot is owned by neither printer. This is the ternary then-branch analog of the
-     * after-initializer/before-{@code ;} slot recovered by
+     * <p>This covers the then-branch &rarr; {@code :} gap when the then-branch is a multi-line binary chain: in
+     * {@code aaa + bbb // mid + ccc // tail} JavaParser parks the trailing {@code // tail} after the chain's last operand,
+     * where the between-operand binary renderer never reaches it and the ternary slot owns neither — the ternary analog of
      * {@link JavaCommentPlacementPolicy#trailingInitializerCommentsBeforeSemicolon(Node, Node)}.
      *
-     * <p>Rendering happens here, on the branch's last printed line, rather than re-routing the whole conditional through
-     * {@link #commentedConditionalExpression}: that path renders branches with the own-comment-stripping clone renderer,
-     * which a multi-line branch's between-operand comments ({@code // mid}) cannot survive because a cloned node is absent
-     * from the per-run comment map. Keeping the branch on its existing {@link ConditionalExpressionPrinter#conditionalBranch}
-     * renderer preserves every inner comment; only the genuinely-trailing tail comment is added back here.
-     *
-     * <p>The comment is claimed once by identity through {@link CommentTracker#comment(Comment)}: the binary renderer
-     * never offers it (it has no operand after the last to pin it between), so this is its only claimant. A branch with no
-     * such trailing comment — including the {@code @default} single-line then-branch whose comment is the branch's own
-     * trivia, not contained trivia after the branch end — yields {@link Doc#EMPTY} and leaves the layout unchanged.
+     * <p>Rendering happens here, on the branch's last printed line, rather than re-routing the conditional through
+     * {@link #commentedConditionalExpression}, whose own-comment-stripping clone renderer cannot preserve a multi-line
+     * branch's inner comments. The comment is claimed once by identity ({@link CommentTracker#comment(Comment)}); a branch
+     * with no such trailing comment (including the {@code @default} single-line then-branch) yields {@link Doc#EMPTY}.
      */
     Doc branchTailTrailingComment(Expression branch) {
         Optional<Comment> branchOwn = branch.getComment();
@@ -100,20 +83,13 @@ final class ConditionalCommentLayout {
     /**
      * Rebuilds a conditional expression when line comments are attached around the ternary operators.
      *
-     * <p>JavaParser attaches these comments to nearby expressions, not to {@code ?} or {@code :} tokens, and which bucket
-     * it picks depends on the source layout: at one shape a {@code ? // x} comment is the then expression's own leading
-     * comment, while a whitespace perturbation that moves it onto its own line re-buckets it as one of the conditional's
-     * orphan comments. The formatter therefore gathers every candidate line comment from <em>both</em> the child
-     * expressions' own comments and the conditional's orphan comments, then classifies each by where it begins in source
-     * order relative to the condition, then, and else expression ranges and the {@code ?} / {@code :} operator-token
-     * positions: trailing the condition, leading the {@code ?} branch, trailing the then branch, leading the {@code :}
-     * branch, or trailing the else branch. A line comment that actually trails the containing expression statement is
-     * left to statement-level handling.
-     *
-     * <p>The classification is deliberately position-based rather than column-arithmetic or attachment-bucket based. The
-     * {@code ?} and {@code :} are not AST nodes, so the branch a comment belongs to is decided purely by whether the
-     * comment begins before or after each operator token's source position — a relationship a whitespace perturbation
-     * cannot change.
+     * <p>JavaParser attaches these to nearby expressions, not to {@code ?}/{@code :}, and the bucket shifts with layout (a
+     * {@code ? // x} comment is the then-expression's own leading comment, or, once on its own line, a conditional
+     * orphan). So the formatter gathers every candidate from both the child expressions' own comments and the
+     * conditional's orphans, then classifies each by source position relative to the operator tokens: condition-trailing,
+     * {@code ?}-leading, then-trailing, {@code :}-leading, or else-trailing. A comment trailing the containing statement is
+     * left to statement-level handling. Classification is position-based (the {@code ?}/{@code :} are not AST nodes), so a
+     * whitespace perturbation cannot change which branch a comment belongs to.
      */
     Optional<Doc> commentedConditionalExpression(ConditionalExpr expression) {
         List<Comment> candidates = ternaryBranchComments(expression);
@@ -203,7 +179,7 @@ final class ConditionalCommentLayout {
 
     /**
      * Classifies a candidate line comment into its ternary region by source position. STATEMENT_TRAILING is left to
-     * statement-level handling (never rendered here). Mirrors the prior position-based classification exactly.
+     * statement-level handling (never rendered here).
      */
     private Region classifyTernaryComment(
             ConditionalExpr expression,
@@ -250,13 +226,10 @@ final class ConditionalCommentLayout {
      * Collects the line comments that sit around a ternary's operators, from both the child expressions' own comments
      * and the conditional's orphan comments, in source order.
      *
-     * <p>Comments from a nested conditional branch are excluded: they are already owned by the inner {@link
-     * ConditionalExpr} and would otherwise be classified twice. Each candidate is included once even when it is reachable
-     * through more than one association. Dedup is by <em>object identity</em> rather than {@code equals}: after a
-     * whitespace collapse JavaParser can attach the <em>same</em> comment instance to two child expressions at once (for
-     * instance both the condition's and the then expression's own comment), and a content-based {@code contains} check
-     * would still admit that single instance twice. A comment claimed twice would render twice and trip the formatter's
-     * duplicate-claim guardrail, so the same node must be collected at most once however many associations reach it.
+     * <p>Comments from a nested conditional branch are excluded (the inner {@link ConditionalExpr} owns them). Dedup is by
+     * object identity, not {@code equals}: a whitespace collapse can attach the same comment instance to two child
+     * expressions at once, and collecting it twice would render (and claim) it twice, tripping the duplicate-claim
+     * guardrail.
      */
     private List<Comment> ternaryBranchComments(ConditionalExpr expression) {
         List<Comment> candidates = new ArrayList<>();
@@ -309,11 +282,9 @@ final class ConditionalCommentLayout {
      * Reports whether a condition / {@code ?}-region comment trails the condition rather than leading the {@code ?}
      * branch.
      *
-     * <p>This is the flat {@code cond ? // x} shape: the comment begins after the {@code ?} token yet still on the
-     * condition's end line, so rendering it as a condition-trailing comment keeps it before the line break. A comment on
-     * its own line — before or after {@code ?} — or one inline before {@code ?} leads the {@code ?} branch instead. The
-     * predicate keys off source position — the comment begins after the {@code ?} operator yet on the condition's end
-     * line — so it preserves the {@code @default} classification.
+     * <p>True only for the flat {@code cond ? // x} shape — the comment begins after the {@code ?} token yet on the
+     * condition's end line — so rendering it condition-trailing keeps it before the line break. Any comment on its own
+     * line, or inline before {@code ?}, leads the {@code ?} branch instead.
      */
     private boolean conditionTrailsBeforeQuestionBranch(
             ConditionalExpr expression,
@@ -341,10 +312,9 @@ final class ConditionalCommentLayout {
      * Finds the source position of the ternary operator token (the {@code ?} or {@code :}) that sits in the source-order
      * gap between two of the conditional's child expressions.
      *
-     * <p>The {@code ?} is the only such token between the condition and the then expression, and the {@code :} the only
-     * one between the then and else expression, so scanning the conditional's token stream for the matching operator
-     * whose position lies strictly between {@code before}'s end and {@code after}'s begin pins the outer operator without
-     * confusing it with an operator from a nested conditional (those live inside a branch sub-range).
+     * <p>Scanning the token stream for the matching operator whose position lies strictly between {@code before}'s end and
+     * {@code after}'s begin pins the outer operator — a nested conditional's operators live inside a branch sub-range, so
+     * they never fall in this gap.
      */
     private Optional<Position> operatorPosition(
             ConditionalExpr expression,
@@ -376,14 +346,10 @@ final class ConditionalCommentLayout {
      * Prints one commented ternary branch after the surrounding classifier has decided whether the comment belongs
      * before or after the branch expression.
      *
-     * <p>A leading comment renders on its own line(s) <em>before</em> the operator token, matching the source shape where
-     * the comment block sits above the {@code ?} or {@code :}; the operator then leads its operand on the following line.
-     * When a region claimed several stacked line comments they arrive here already joined with {@link Doc#HARD_LINE}, so
-     * the whole block prints above the operator with no line dropped.
-     *
-     * <p>A branch can carry both a leading and a trailing comment at once when a whitespace perturbation re-buckets
-     * comments onto the branch's line; both are rendered so neither is lost. At the {@code @default} shape a branch never
-     * holds both, so this leaves the unperturbed layout untouched while keeping the perturbed shapes comment-complete.
+     * <p>A leading comment renders on its own line(s) before the operator token (matching the source shape where the
+     * block sits above {@code ?}/{@code :}); stacked lines arrive already {@link Doc#HARD_LINE}-joined. A branch can carry
+     * both a leading and a trailing comment when a perturbation re-buckets comments onto its line, so both are rendered;
+     * at {@code @default} a branch never holds both, leaving the unperturbed layout untouched.
      */
     private Doc conditionalCommentedBranch(
             String operatorToken,

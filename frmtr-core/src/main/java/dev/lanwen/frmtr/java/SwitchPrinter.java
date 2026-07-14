@@ -225,15 +225,11 @@ final class SwitchPrinter {
      * Renders the {@code switch} statement's own leading block comment ({@code /* note *}{@code / switch (...)}),
      * placing it inline before {@code switch} or on its own line by source position.
      *
-     * <p>{@link StatementRuleEnvelope} suppresses the shared leading slot whenever the {@code switch} statement carries an
-     * own block comment, so this printer owns rendering it. The shared
-     * {@link JavaCommentPlacementPolicy#ownSameLineBlockCommentBeforeNode(Node)} query only recovers the comment when it
-     * shares the {@code switch} line, which a whitespace perturbation that lifts the comment onto the line above defeats:
-     * the envelope still suppresses the slot, so the comment would be dropped. This local prefix instead selects the own
-     * block comment by source order ({@link CommentIndex#startsBefore(Comment, Node)}) and then decides inline versus
-     * own-line by line position ({@link CommentIndex#startsOnBeginLine(Comment, Node)}). At {@code @default} the comment
-     * shares the {@code switch} line, so it renders inline exactly as before. The shared same-line policy is intentionally
-     * left untouched because {@code catch}/{@code finally} prefixes depend on its strict same-line behavior.
+     * <p>{@link StatementRuleEnvelope} suppresses the shared leading slot for a {@code switch} carrying an own block
+     * comment, so this printer owns it. It selects by source order (not the shared same-line query, which drops the
+     * comment when a whitespace perturbation lifts it onto the line above) and chooses inline vs own-line by line
+     * position — inline at {@code @default}. The shared same-line policy stays untouched because {@code catch}/
+     * {@code finally} prefixes depend on its strict same-line behavior.
      */
     private Doc switchLeadingBlockCommentPrefix(SwitchStmt statement) {
         return commentPlacementPolicy.ownComment(
@@ -307,17 +303,10 @@ final class SwitchPrinter {
      * Renders the switch entries while restoring switch-owner orphan comments that source placed between the brace and an
      * entry (or between entries), such as a {@code // keep first detail} note stacked before a {@code case}.
      *
-     * <p>JavaParser parks a leading comment cluster before a {@code case} as orphans of the {@code switch} (or, when the
-     * whitespace is reshaped, mis-attaches one to the selector), and {@link #switchEntryLeadingComments} only recovers
-     * the part still adjacently attached to the entry — so the rest was dropped once the layout moved. Interleaving the
-     * switch's orphan comments with the entries in source order restores them before the entry they precede, shape
-     * independently. Claim-coupling keeps a comment {@code switchEntryLeadingComments} already emitted from rendering
-     * twice.
-     *
-     * <p>The interleaved set also includes the line comments JavaParser mis-attaches to the selector under collapse: a
-     * note stacked before the first {@code case} that shares the selector's line becomes the selector's own trailing
-     * trivia even though it belongs before the entry. {@link #selectorLeadingEntryComments} recovers it by source
-     * position (after the selector, before the first entry), so it interleaves like the switch's own orphans.
+     * <p>Interleaving the switch's orphan comments (plus the notes {@link #selectorLeadingEntryComments} recovers from
+     * the selector under collapse) with the entries in source order restores them before the entry they precede, shape
+     * independently — {@link #switchEntryLeadingComments} alone recovers only the part still adjacent to the entry.
+     * Claim-coupling keeps an already-emitted comment from rendering twice.
      */
     private Doc switchBlockBody(Node owner, NodeList<SwitchEntry> entries) {
         List<JavaCommentTrivia> orphanComments = new ArrayList<>(
@@ -367,11 +356,10 @@ final class SwitchPrinter {
     /**
      * Recovers the line comments JavaParser parked on the selector that source placed before the first entry.
      *
-     * <p>Under collapse a note stacked before the first {@code case} that shares the selector's line is re-bucketed onto
-     * the selector as its own trailing trivia. Selecting the selector's own and orphan line comments that lie in the
-     * source-order gap after the selector ends and before the first entry begins keeps them owned by the entry list,
-     * regardless of which bucket the parser used. At the {@code @default} shape the selector owns no such comment (the
-     * notes are switch orphans), so this contributes nothing and {@code @default} output is unchanged.
+     * <p>Under collapse a note before the first {@code case} sharing the selector's line becomes the selector's trailing
+     * trivia; selecting the selector's own/orphan line comments in the source-order gap between selector and first entry
+     * keeps them owned by the entry list whichever bucket the parser used. Contributes nothing at {@code @default} (the
+     * notes are switch orphans there), so that shape is unchanged.
      */
     private List<JavaCommentTrivia> selectorLeadingEntryComments(Node owner, NodeList<SwitchEntry> entries) {
         if (entries.isEmpty()) {
@@ -623,12 +611,9 @@ final class SwitchPrinter {
 
     /**
      * Renders a {@code case x -> // note body} rule arm whose arrow-leading line comment a whitespace perturbation moved
-     * off the body statement (where {@link #commentedRuleBody} would have rendered it) and onto the case label expression
-     * or the entry orphan bucket.
-     *
-     * <p>The recovered comment renders on its own indented line after {@code ->}, exactly as the body-owned comment does,
-     * so the arm matches the {@code @default} shape byte for byte while the body renders inline through the ordinary body
-     * renderer (the body no longer owns the comment in this shape).
+     * off the body statement (where {@link #commentedRuleBody} renders it) and onto the case label or entry orphan bucket.
+     * The recovered comment renders on its own indented line after {@code ->} like the body-owned comment, so the arm
+     * matches the {@code @default} shape byte for byte while the body renders inline.
      */
     private Doc recoveredCommentedRuleBody(Doc label, Doc guard, SwitchEntry entry) {
         Statement statement = entry.getStatements().get(0);
@@ -666,14 +651,11 @@ final class SwitchPrinter {
     }
 
     /**
-     * Recovers a contiguous line-comment cluster before a {@code case} label even when JavaParser splits the cluster
-     * between switch-level orphan comments and the entry's own leading comment.
-     *
-     * <p>The adjacent line-cluster recovery is line-only, so a standalone block or Javadoc comment that leads a
-     * {@code case} ({@code /* note *}{@code / case X:}) lands in neither the cluster nor the line-only own-comment
-     * fallback and was dropped. {@link #switchEntryLeadingBlockComment} closes that gap: it offers the entry's own
-     * non-line leading comment, bounded by source order to comments that begin before the {@code case} keyword so inline
-     * label block comments ({@code case REMOTE /* remote *}{@code /}) stay owned by {@link SwitchCaseLabelLayout#commentPreservingCaseLabel}.
+     * Recovers a contiguous line-comment cluster before a {@code case} label even when JavaParser splits it between
+     * switch-level orphans and the entry's own leading comment. A standalone block/Javadoc lead
+     * ({@code /* note *}{@code / case X:}) falls outside the line-only cluster, so {@link #switchEntryLeadingBlockComment}
+     * offers the entry's non-line leading comment (bounded to before the {@code case} keyword, leaving inline label block
+     * comments {@code case REMOTE /* remote *}{@code /} to {@link SwitchCaseLabelLayout#commentPreservingCaseLabel}).
      */
     private Doc switchEntryLeadingComments(SwitchEntry entry) {
         Doc leadingComments = comments.adjacentLeadingLineComments(entry);
@@ -697,12 +679,11 @@ final class SwitchPrinter {
     /**
      * Offers the entry's own block or Javadoc comment that source placed before the {@code case} label.
      *
-     * <p>Restricted to non-line own comments (the line case is already covered) that begin before the entry in source
-     * order, which excludes inline label block comments such as {@code case REMOTE /* remote *}{@code /} (those begin
-     * after the {@code case} keyword); those remain owned by {@link SwitchCaseLabelLayout#commentPreservingCaseLabel}, so this contributes
-     * nothing where that path already renders. The source-order bound is shape-independent: it recovers the comment both
-     * at the {@code @default} shape (own line above the {@code case}) and under a collapse that pulls it onto the
-     * {@code case} line, where a line-based bound would lose it.
+     * <p>Restricted to non-line own comments (line comments are already covered) beginning before the entry in source
+     * order, which excludes inline label block comments ({@code case REMOTE /* remote *}{@code /}, owned by
+     * {@link SwitchCaseLabelLayout#commentPreservingCaseLabel}). The source-order bound is shape-independent: it recovers
+     * the comment whether it sits above the {@code case} or collapses onto its line, where a line-based bound would lose
+     * it.
      */
     private Doc switchEntryLeadingBlockComment(SwitchEntry entry) {
         return comments.ownTriviaComment(
@@ -716,24 +697,14 @@ final class SwitchPrinter {
      * Offers the line comment(s) that trail a colon {@code case}/{@code default} label on the same source line as the label
      * (or label list), before the statement-group body ({@code case 2: // note}).
      *
-     * <p>JavaParser attaches such a comment to the label expression (the {@code @default}/collapsed shape) or to the
-     * entry's orphan bucket, never to the entry's own trivia, so the entry-scoped trailing slot in {@link #switchEntry}
-     * never sees it and it was dropped. This recovers it from the label/entry buckets bounded to the gap after the label
-     * and before the body (see {@link #caseLabelGapLineComments}), which by construction excludes the body statement's own
-     * leading comment (the statement renderer prints that) and any later entry's leading comment (it lies past this entry's
-     * body).
-     *
-     * <p>The gap recovery is partitioned by whether each comment begins on the label's own source line
-     * ({@link #caseLabelLine(SwitchEntry)} — the last label's line for {@code case X:}, the entry's begin line for
-     * {@code default:}). Only the same-line comments genuinely trail the label the way the author wrote them, so only those
-     * are offered here; they are claimed under the entry's trailing slot exactly once and rendered as a
-     * {@link Doc#lineSuffix(Doc)} by {@link #switchStatementGroupEntry}, flushing at the colon line's break with the body
-     * laid out on the next line. A {@code //} comment block the author placed on its own line(s) below the label is instead
-     * a leading comment of the body; {@link #caseLabelLeadingBodyComments} owns those so the printer no longer hoists the
-     * first such line onto the {@code case} line and joins it with the rest below it (issue #88). The partition is what
-     * keeps both shapes correct: a genuine trailing comment begins on the label line, an own-line leading block begins on a
-     * later line. Only old-style {@code case:}/{@code default:} statement groups reach this path; rule entries keep their
-     * own trailing handling.
+     * <p>JavaParser buckets such a comment onto the label expression or the entry orphans, never the entry's own trivia,
+     * so {@link #switchEntry}'s trailing slot would drop it. This recovers it from the gap after the label and before the
+     * body ({@link #caseLabelGapLineComments}, which excludes the body's and later entries' own leading comments),
+     * partitioned by {@link #caseLabelLine(SwitchEntry)}: only comments on the label's line genuinely trail it and are
+     * offered here (claimed once, rendered as a {@link Doc#lineSuffix(Doc)} by {@link #switchStatementGroupEntry}); a
+     * {@code //} block on lines below the label is a leading comment of the body, owned by
+     * {@link #caseLabelLeadingBodyComments} rather than hoisted onto the {@code case} line (issue #88). Only old-style
+     * {@code case:}/{@code default:} statement groups reach this; rule entries keep their own trailing handling.
      */
     private Doc caseLabelTrailingComment(SwitchEntry entry) {
         int labelLine = caseLabelLine(entry);
@@ -748,20 +719,15 @@ final class SwitchPrinter {
 
     /**
      * Offers the leading {@code //} comment block JavaParser parked in the gap after a colon {@code case}/{@code default}
-     * label and before the statement-group body, when the author placed it on its own line(s) below the label rather than
-     * trailing the label line ({@code case X:} then {@code // note} on the next line).
+     * label when the author placed it on its own line(s) below the label ({@code case X:} then {@code // note} on the next
+     * line), rather than trailing the label line.
      *
-     * <p>This is the own-line counterpart of {@link #caseLabelTrailingComment}: it consumes the same gap recovery but keeps
-     * only the comments that do <em>not</em> begin on the label's own line ({@link #caseLabelLine(SwitchEntry)}).
-     * JavaParser splits such a block between the label expression (which owns the first line) and the body statement (which
-     * owns the rest), or — under a whitespace perturbation that pushes a genuine trailing comment onto its own line — parks
-     * the single line on the label expression or the entry orphan pool. In every such shape the comment is not the body
-     * statement's own leading trivia, so the body renderer never prints it; left unclaimed here it was dropped, and the
-     * older code that hoisted it onto the {@code case} line corrupted its attachment (issue #88). Rendering the recovered
-     * comments as their own lines at the statement indent before the body, claimed once under the entry's leading slot,
-     * places them exactly where leading comments render elsewhere and keeps the whole block together. The body's own
-     * leading comments still render through {@link #switchEntryStatements}; the gap recovery already excludes those (it
-     * never returns the body's own comment), so the two sets do not overlap.
+     * <p>The own-line counterpart of {@link #caseLabelTrailingComment}: same gap recovery, but keeps only comments that do
+     * <em>not</em> begin on the label's line ({@link #caseLabelLine(SwitchEntry)}). In every parser shape these are not the
+     * body's own trivia, so the body renderer never prints them; left unclaimed they were dropped, and older code that
+     * hoisted them onto the {@code case} line corrupted the attachment (issue #88). Rendering them once as their own
+     * indented lines before the body places them where leading comments render elsewhere. Does not overlap the body's own
+     * leading comments ({@link #switchEntryStatements}), which the gap recovery already excludes.
      */
     private List<Doc> caseLabelLeadingBodyComments(SwitchEntry entry) {
         int labelLine = caseLabelLine(entry);
@@ -953,9 +919,6 @@ final class SwitchPrinter {
             return Optional.empty();
         }
         boolean preservesSourceOnlySyntax = raw.contains("/*") || raw.contains("null, default");
-        if (!preservesSourceOnlySyntax && currentIndentedWidth.applyAsInt(raw) <= options.lineWidth()) {
-            return Optional.empty();
-        }
         if (!preservesSourceOnlySyntax) {
             return Optional.empty();
         }
@@ -997,14 +960,11 @@ final class SwitchPrinter {
      * recovered comment block is the only body content, so it is laid out on its own indented line(s) without a trailing
      * break.
      *
-     * <p>The nested statements are sequenced through {@link SourceOrderedCommentInterleaver} exactly like an ordinary
-     * statement block ({@code BlockPrinter}). The interleaver is what restores a standalone {@code //} comment the author
-     * placed between two statements in the case body: JavaParser parks such a comment as the {@code switch} entry's orphan
-     * trivia rather than as either neighbour's own trivia, so the plain statement-separator loop never offered it to a
-     * {@link CommentTracker} claim slot and it was dropped — most visibly when a blank line after the comment detaches it
-     * from the following statement (issue #133). Claim-coupling keeps the comments already placed by
-     * {@link #caseLabelTrailingComment} or {@link #caseLabelLeadingBodyComments} from rendering twice. Blank-line spacing
-     * between statements and around restored comments stays source-driven, matching the regular block path.
+     * <p>Statements are sequenced through {@link SourceOrderedCommentInterleaver} like an ordinary block; the interleaver
+     * restores a standalone inter-statement {@code //} comment that JavaParser parked as entry orphan trivia (which the
+     * plain separator loop dropped, most visibly when a blank line detached it from the next statement — issue #133).
+     * Claim-coupling keeps comments already placed by {@link #caseLabelTrailingComment}/{@link #caseLabelLeadingBodyComments}
+     * from rendering twice; blank-line spacing stays source-driven, matching the regular block path.
      */
     private Doc switchEntryStatements(
             SwitchEntry entry,
@@ -1030,13 +990,11 @@ final class SwitchPrinter {
      * Returns the entry orphan comments that belong <em>between or after</em> the case body statements, dropping any that
      * begin before the first statement.
      *
-     * <p>JavaParser parks a {@code default /*def*}{@code /:} block comment and an own-line {@code //} block stacked under
-     * the label in the same entry orphan bucket as a genuine inter-statement comment. The label-region comments are
-     * already rendered by the label printer ({@link SwitchCaseLabelLayout#defaultSwitchEntryLabel} / {@link SwitchCaseLabelLayout#commentPreservingCaseLabel}, which
-     * use raw token text and therefore never mark a {@link CommentTracker} claim) and by
-     * {@link #caseLabelLeadingBodyComments}. Bounding the interleaved set to comments that do not start before the first
-     * statement keeps the body interleaver from re-emitting a label-region comment a second time while still restoring the
-     * inter-statement orphan that the plain separator loop dropped (issue #133).
+     * <p>JavaParser buckets label-region comments (a {@code default /*def*}{@code /:} block, an own-line block under the
+     * label) alongside genuine inter-statement comments. The label-region ones are already rendered by the label printer
+     * ({@link SwitchCaseLabelLayout#defaultSwitchEntryLabel}/{@link SwitchCaseLabelLayout#commentPreservingCaseLabel}) and
+     * {@link #caseLabelLeadingBodyComments}, so bounding to comments not before the first statement avoids re-emitting them
+     * while still restoring the dropped inter-statement orphan (issue #133).
      */
     private List<JavaCommentTrivia> interStatementOrphanComments(SwitchEntry entry, NodeList<Statement> statements) {
         List<JavaCommentTrivia> orphans = commentPlacementPolicy.orphanCommentsOutsideChildRanges(entry, statements);

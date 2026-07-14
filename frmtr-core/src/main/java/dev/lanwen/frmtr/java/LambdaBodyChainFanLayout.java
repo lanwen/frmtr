@@ -72,8 +72,8 @@ final class LambdaBodyChainFanLayout {
      *
      * <p>The fan itself is built by {@code huggedLambdaBodyChainRenderer} — the shared method-chain printer, which threads
      * {@code firstLine + " "} as the chain's {@link LayoutContext#leftEdgePrefix()} so every width gate measures at the
-     * real rendered column and re-derives the identical source-neutral fan across passes. Both the canonical-fan cutover
-     * seam (End-state A, fan a fan-threshold chain even when it fits) and the historical over-width bare-root branch reuse
+     * real rendered column and re-derives the identical source-neutral fan across passes. Both the canonical fan
+     * (which fans a fan-threshold chain even when it fits) and the historical over-width bare-root branch reuse
      * this one shape so the two triggers produce byte-identical layouts for the chains they share.
      *
      * <p>The close dedents to its own line at the opener's column, the same shape a broken argument list renders

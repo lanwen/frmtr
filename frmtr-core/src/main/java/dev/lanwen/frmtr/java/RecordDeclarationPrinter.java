@@ -276,12 +276,10 @@ final class RecordDeclarationPrinter {
             parts.add(trailingBlock);
         }
         if (trailing != Doc.EMPTY) {
-            // A trailing line comment defers to a line suffix so the unconditional comma the separator emits prints
-            // first and is never commented out; BreakParent forces the component list open so the suffix flushes at the
-            // break that follows the comma. Block comments above stay inline because they sit before the comma.
-            // This BreakParent only opens the list because recordParameters wraps the soft-line parameter envelope in an
-            // enclosing Doc.group(...): the group is what BreakParent poisons into break mode; without it the marker has
-            // no group to force open.
+            // A trailing line comment defers to a line suffix so the separator's unconditional comma prints first and is
+            // never commented out; BreakParent forces the component list open (it poisons the enclosing Doc.group(...)
+            // recordParameters wraps the soft-line envelope in) so the suffix flushes after the comma. Block comments
+            // above stay inline because they sit before the comma.
             parts.add(Doc.BREAK_PARENT);
             parts.add(Doc.lineSuffix(Doc.concat(Doc.text(" "), trailing)));
         }
@@ -292,13 +290,10 @@ final class RecordDeclarationPrinter {
      * Recovers a leading line comment that JavaParser parked as the component's orphan rather than as the type's own
      * comment.
      *
-     * <p>A {@code // comment} written between a component's last annotation and its type, or between the type and the
-     * name, is the type's own trivia at the {@code @default} shape (handled by the {@code typeComment} slot above), so
-     * this orphan bucket is empty there and the recovery is a no-op — golden output is unchanged. When a whitespace
-     * expansion pushes that comment onto its own line, JavaParser re-buckets it from the type's own comment into the
-     * {@link Parameter}'s orphan comments even though the AST is otherwise identical; without this recovery the comment
-     * is in no rendered slot and is dropped. The comment is kept directly before the component tail (its type and name),
-     * matching where the {@code @default} type-attached comment renders.
+     * <p>A {@code // comment} between a component's last annotation and its type (or type and name) is the type's own
+     * trivia at {@code @default} (the {@code typeComment} slot above), so this bucket is empty there. A whitespace
+     * expansion re-buckets it onto the {@link Parameter}'s orphans, where without this recovery it is dropped; it is kept
+     * directly before the component tail, matching the {@code @default} render.
      */
     private Doc recordComponentOrphanLeadingLineComments(Parameter parameter) {
         return Doc.concat(
@@ -429,13 +424,11 @@ final class RecordDeclarationPrinter {
     /**
      * Recovers a gap line comment that ends up trailing {@code parameter} on its own source line.
      *
-     * <p>This mirrors the enum-constant tail recovery: {@link #recordComponentGapComments} renders gap comments as
-     * standalone lines but deliberately leaves out comments that begin on {@code parameter}'s end line (those trail the
-     * component, so they belong inline, not as a free-standing line before the next component). At the {@code @default}
-     * shape a component's gap-leading comment sits on its own line, so this recovery is a no-op and golden output is
-     * unchanged. When a whitespace collapse moves that comment up onto {@code parameter}'s end line — JavaParser then
-     * attaches it to the component name rather than to the {@link Parameter} — neither the parameter own-comment nor the
-     * standalone gap path claims it, so this is where the comment is kept instead of dropped.
+     * <p>{@link #recordComponentGapComments} renders gap comments as standalone lines but leaves out those on
+     * {@code parameter}'s end line (they trail the component inline). At {@code @default} a gap-leading comment sits on
+     * its own line, so this is a no-op; a whitespace collapse moves it up onto {@code parameter}'s end line, where
+     * JavaParser attaches it to the component name and neither the parameter own-comment nor the standalone gap path
+     * claims it — so it is kept here instead of dropped.
      */
     private Doc recordComponentGapTrailingLineComment(
             RecordDeclaration declaration,
@@ -548,8 +541,8 @@ final class RecordDeclarationPrinter {
     }
 
     /**
-     * Computes record header width at the declaration's actual nesting depth, preserving the historical first-member
-     * baseline used by other declaration printers.
+     * Computes record header width at the declaration's actual nesting depth, preserving the first-member baseline
+     * used by other declaration printers.
      */
     private int recordHeaderWidth(RecordDeclaration declaration, String text) {
         return currentIndentedWidth.applyAsInt(text) + extraRecordHeaderIndentWidth(declaration);
@@ -582,10 +575,10 @@ final class RecordDeclarationPrinter {
             docs.add(component);
             separator.ifPresent(docs::add);
             if (!gapComments.isEmpty()) {
-                // The two hard lines are not a blank-line idiom (compare MemberBlockPrinter, which doubles HARD_LINE to
-                // keep a blank line): the join only breaks between multiple gap comments, and the trailing HARD_LINE
-                // terminates the comment block so the next component starts on its own line. The separator already
-                // emitted the comma+HARD_LINE that opens this comment block, so no two hard lines are ever adjacent.
+                // The two hard lines are not a blank-line idiom (unlike MemberBlockPrinter, which doubles HARD_LINE for a
+                // blank line): the join only breaks between multiple gap comments, and the trailing HARD_LINE terminates
+                // the block so the next component starts fresh. The separator already emitted the opening comma+HARD_LINE,
+                // so no two hard lines are ever adjacent.
                 docs.add(Doc.join(Doc.HARD_LINE, gapComments));
                 docs.add(Doc.HARD_LINE);
             }

@@ -19,13 +19,10 @@ final class CommentedModulePrinter {
     /**
      * Rebuilds a raw commented module declaration after the caller has chosen this escape hatch.
      *
-     * <p>The module body is split into directive units by their terminating {@code ;} rather than by physical source
-     * lines, so the reconstruction is independent of how the source distributed whitespace. A purely line-based split
-     * silently dropped every directive when whitespace was collapsed (the whole module on one line) and duplicated the
-     * {@code module} keyword when whitespace was expanded (each token on its own line). Standalone line comments between
-     * directives keep their own line; block comments stay attached to the directive unit that owns them. Blank runs are
-     * compacted to a single blank line so comment-only sections keep separation without preserving accidental vertical
-     * whitespace.
+     * <p>The body is split into directive units by their terminating {@code ;}, not by physical lines, so reconstruction
+     * is independent of source whitespace (a line-based split dropped directives when collapsed and duplicated the
+     * {@code module} keyword when expanded). Standalone line comments keep their own line, block comments stay with the
+     * directive that owns them, and blank runs are compacted to a single blank line.
      */
     String formatCommentedModule(String rawModule) {
         String stripped = rawModule.strip();
@@ -68,11 +65,9 @@ final class CommentedModulePrinter {
     /**
      * Splits a raw module body into directive and standalone-comment units independent of source whitespace.
      *
-     * <p>Directives are delimited by their terminating {@code ;} (with any same-segment trailing comments kept on the
-     * directive). A standalone line comment (one not trailing a directive's {@code ;}) becomes its own unit so it keeps a
-     * dedicated line. A blank source line that separates units is recorded as a single blank marker. Splitting on {@code ;}
-     * rather than on newlines is what makes the reconstruction robust to collapsed (everything on one line) and expanded
-     * (one token per line) whitespace alike.
+     * <p>Directives are delimited by their terminating {@code ;} (same-segment trailing comments kept on the directive);
+     * a standalone line comment becomes its own unit; a separating blank line is a single blank marker. Splitting on
+     * {@code ;} rather than newlines makes this robust to collapsed and expanded whitespace alike.
      */
     private List<ModuleBodyUnit> moduleBodyUnits(String body) {
         List<ModuleBodyUnit> units = new ArrayList<>();
@@ -151,12 +146,10 @@ final class CommentedModulePrinter {
      * Appends comments that trail a directive's {@code ;} into {@code current}, but only when they truly belong to this
      * directive rather than leading the next one.
      *
-     * <p>A {@code //} line comment after the {@code ;} always trails this directive (it runs to the end of the line). A
-     * {@code /} block comment after the {@code ;} trails this directive only when nothing but whitespace, a line break,
-     * or the closing brace follows it: if a directive keyword or name follows, the block comment leads that next
-     * directive (e.g. {@code requires x; /* note *}{@code / uses y;} — the {@code /* note *}{@code /} leads {@code uses}).
-     * Consuming such a comment here would otherwise move it onto the wrong directive when the source was collapsed onto
-     * a single line.
+     * <p>A {@code //} after the {@code ;} always trails this directive. A block comment after the {@code ;} trails it only
+     * when whitespace, a line break, or the closing brace follows; if a directive keyword follows, it leads the next
+     * ({@code requires x; /* note *}{@code / uses y;} — the {@code /* note *}{@code /} leads {@code uses}), which matters
+     * when the source is collapsed onto one line.
      */
     private int appendTrailingComments(String body, int index, StringBuilder current) {
         int length = body.length();

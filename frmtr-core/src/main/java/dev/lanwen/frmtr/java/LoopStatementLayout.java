@@ -142,24 +142,19 @@ final class LoopStatementLayout {
      * the loop header and the body, claiming the comment exactly once and placing it the same way the {@code if}
      * close-paren path places a condition comment.
      *
-     * <p>A braceless loop body normally collapses onto the header line ({@code while (cond) call();}). A line comment in
-     * the header-to-body gap cannot share that line with the body statement: the {@code //} would comment out everything
-     * after it. The comment's intended position is read from where it sits in source: a comment that begins on the same
-     * line as the header end ({@code while (cond) // note}) is a header-trailing comment and stays inline on the header
-     * line, exactly as {@link ControlConditions#closeParenTrailingLineComment} keeps an {@code if (cond) // note} inline;
-     * a comment on its own line below the header ({@code while (cond)\n // note\n body}) leads the body and moves above
-     * the indented body statement. Either way the body breaks to an indented next line.
+     * <p>A braceless body normally collapses onto the header line ({@code while (cond) call();}), but a header-to-body
+     * {@code //} comment cannot share that line (it would comment out the body). Source position decides placement: a
+     * comment on the header-end line ({@code while (cond) // note}) stays inline like
+     * {@link ControlConditions#closeParenTrailingLineComment}; one on its own line below the header leads the body and
+     * moves above it. Either way the body breaks to an indented next line.
      *
-     * <p>The comment lives in a single grammar slot — the header-to-body gap — but JavaParser attaches it to different
-     * nodes depending on source whitespace: at the {@code @default} shape an own-line comment is the body's own leading
-     * trivia (the {@link #statementRenderer} envelope prints it); a collapse re-buckets it onto the header expression
-     * named by {@code afterNode} as that node's trailing trivia, and an expand re-buckets it onto the {@code controlStmt}
-     * as an orphan. {@link JavaCommentPlacementPolicy#gapLineCommentsBefore(Node, Node, java.util.Collection)} recovers
-     * the comment from whichever bucket holds it while deliberately excluding the body's own comment, and every recovered
-     * comment is claimed once under the body's leading slot — the same slot {@link CommentTracker#gapLineCommentsBefore}
-     * would claim it in — so exactly one of the two paths (gap recovery here, or the body renderer) prints it. It is
-     * therefore neither dropped under perturbation nor duplicated at {@code @default}. Returns {@link Optional#empty()}
-     * when no leading line comment is present in any bucket, leaving the caller's existing same-line collapse intact.
+     * <p>JavaParser attaches that gap comment to different nodes by whitespace (body's own leading trivia at
+     * {@code @default}, the {@code afterNode} header expression's trailing trivia under a collapse, the
+     * {@code controlStmt} orphans under an expand);
+     * {@link JavaCommentPlacementPolicy#gapLineCommentsBefore(Node, Node, java.util.Collection)} recovers it from
+     * whichever bucket (excluding the body's own comment) and claims it once under the body's leading slot, so exactly
+     * one path prints it — neither dropped under perturbation nor duplicated at {@code @default}. Empty when no leading
+     * line comment is present, leaving the caller's same-line collapse intact.
      */
     private Optional<Doc> bracelessLoopBody(Node controlStmt, Node afterNode, Statement body) {
         if (body.isBlockStmt()) {
@@ -237,7 +232,7 @@ final class LoopStatementLayout {
         Expression iterable = statement.getIterable();
         String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
         if (
-            // C10-c: measure the for-each header at the statement's true rendered block/type depth
+            // Measure the for-each header at the statement's true rendered block/type depth
             // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
             layoutWidth.nodeLine(statement, header + " {}") <= options.lineWidth()
             || !(iterable instanceof MethodCallExpr methodCall)
@@ -431,17 +426,14 @@ final class LoopStatementLayout {
     /**
      * Recovers the line comment that trails a {@code do ... while (cond);} statement after the closing {@code ;}.
      *
-     * <p>At {@code @default} JavaParser attaches that comment to the {@link DoStmt}, so {@link StatementRuleEnvelope}
-     * claims and renders it through the shared statement trailing-comment slot and the {@code while} condition carries no
-     * own trailing comment. When the body is written across multiple source lines, JavaParser instead attaches the comment
-     * to the {@code while} condition expression, where the condition renderer (which prints the condition without its own
-     * comment) would otherwise drop it. This reclaims the comment from the condition's own trailing slot through the
-     * layout-independent {@link CommentTracker#trailingComment(Node)} anchor, which defers it as a {@code lineSuffix} after
-     * the {@code ;} (matching how {@link StatementPrinter#expressionStatementTrailingComment(ExpressionStmt)} and the
-     * {@code try} renderer place statement trailing comments). The anchor binds the comment to the stable
-     * {@code (condition, TRAILING)} slot and decides emptiness from the recorded owner rather than a build-time claim, so
-     * the comment survives whichever ranked layout wins without being dropped or double-printed; in the single-line-body
-     * shape the condition slot is unowned and this path is empty, so it adds nothing.
+     * <p>At {@code @default} the comment is the {@link DoStmt}'s own trivia, rendered by {@link StatementRuleEnvelope}'s
+     * shared trailing slot. When the body spans multiple source lines JavaParser attaches it to the {@code while}
+     * condition instead, where the condition renderer would drop it, so this reclaims it through the layout-independent
+     * {@link CommentTracker#trailingComment(Node)} anchor — bound to the stable {@code (condition, TRAILING)} slot and
+     * deferred as a {@code lineSuffix} after the {@code ;} (like
+     * {@link StatementPrinter#expressionStatementTrailingComment(ExpressionStmt)} and the {@code try} renderer). Emptiness
+     * is decided from the recorded owner, so the comment survives whichever ranked layout wins without being dropped or
+     * double-printed; in the single-line-body shape the slot is unowned and this adds nothing.
      */
     private Doc doWhileTrailingLineComment(DoStmt statement) {
         return comments.trailingComment(statement.getCondition());

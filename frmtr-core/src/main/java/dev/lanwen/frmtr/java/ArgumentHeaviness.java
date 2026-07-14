@@ -21,7 +21,7 @@ import java.util.List;
  * breaks exactly the way an over-wide one already does — including the outward cascade a forced break triggers in every
  * enclosing group).
  *
- * <p>Two independent signals mark a list heavy, motivated by the PR #279 review of the width-driven hub:
+ * <p>Two independent signals mark a list heavy:
  * <ul>
  *   <li><b>Wide constructor lists</b> — a constructor with {@value #LARGE_ARGUMENT_COUNT} or more arguments is hard to
  *       read on one line regardless of what the arguments are. This applies only when the caller opts in
@@ -30,11 +30,11 @@ import java.util.List;
  *       forcing every one to explode is disproportionate, so method calls rely on the nested-token signal below.</li>
  *   <li><b>Deeply/nestedly composed lists</b> — an argument list that both contains a nested call/constructor argument
  *       (an "argument that itself has arguments") and reaches a token count of {@value #HEAVY_TOKEN_THRESHOLD} is too
- *       dense to scan on one line. This is the reviewer's "count tokens, not pure args" rule and fires for both method
+ *       dense to scan on one line. This counts tokens, not pure arguments, and fires for both method
  *       calls and constructors.</li>
  * </ul>
  *
- * <p>The nesting cascade the reviewer asked for ("if the constructor breaks, the enclosing call must break too") is not
+ * <p>The nesting cascade — a broken nested constructor forcing the enclosing call to break too — is not
  * implemented here as an explicit parent-propagation rule: a nested heavy call already emits a forced break, and a forced
  * break poisons the flat measurement of every enclosing {@code Doc.group} (see {@code DocWidths}), so the enclosing
  * argument lists break automatically. The token count additionally rolls a nested call's arguments into its parent's
@@ -43,8 +43,7 @@ import java.util.List;
 final class ArgumentHeaviness {
 
     /**
-     * A constructor argument list of this size or larger always breaks (PR #279 comment #1: "constructors with more than
-     * 4 args, e.g. &gt;=5, should break"). Applied only for the opt-in constructor callers.
+     * A constructor argument list of this size or larger always breaks. Applied only for the opt-in constructor callers.
      */
     static final int LARGE_ARGUMENT_COUNT = 5;
 

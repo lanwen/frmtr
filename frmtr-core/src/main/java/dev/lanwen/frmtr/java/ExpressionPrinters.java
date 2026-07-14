@@ -110,12 +110,12 @@ final class ExpressionPrinters {
             this::brokenMethodCall,
             this::brokenMethodCallWithClosingLine,
             this::forcedMethodCallChain,
-            // Canonical-fan cutover seam U8: a broken binary/ternary chain operand routes its fan-threshold,
-            // comment/lambda-free chain through the shared source-neutral {@code chainFanOut} (empty final-segment
-            // suffix — the operand carries no terminator; the operator slot is added by the binary line), so the operand
-            // fans identically on a flat-source and a pre-broken-argument pass. Non-fan-threshold / lambda / comment
-            // chains are withheld inside {@code canonicalFanChain} and stay on the imperative delegate. Threaded as a
-            // method reference (not a field-reading lambda) because {@code methodCalls} is initialized after this call.
+            // A broken binary/ternary chain operand routes its fan-threshold, comment/lambda-free chain through the
+            // shared source-neutral {@code chainFanOut} (empty final-segment suffix — the operand carries no terminator;
+            // the operator slot is added by the binary line), so the operand fans identically on a flat-source and a
+            // pre-broken-argument pass. Non-fan-threshold / lambda / comment chains are withheld inside
+            // {@code canonicalFanChain} and stay on the imperative delegate. Threaded as a method reference (not a
+            // field-reading lambda) because {@code methodCalls} is initialized after this call.
             this::binaryOperandCanonicalFanChain,
             context.sourceShapePolicy,
             compactSource::compact,
@@ -208,8 +208,8 @@ final class ExpressionPrinters {
             compactSource::compactJoin,
             compactSource::compactTypeLike,
             compactSource::compactTypeLikeWithoutOwnComment,
-            // U8 / G-bucket: instance-method reference (lazy field read) because {@code methodCalls} is assigned later in
-            // this composer's constructor; a {@code methodCalls}-reading lambda would not compile as definitely-assigned.
+            // Instance-method reference (lazy field read) because {@code methodCalls} is assigned later in this
+            // composer's constructor; a {@code methodCalls}-reading lambda would not compile as definitely-assigned.
             this::binaryFansChainOperand,
             commentText
         );
@@ -430,20 +430,15 @@ final class ExpressionPrinters {
     }
 
     /**
-     * Fans an over-width method-call chain that sits in an expression-lambda body onto dotted continuation lines while it
-     * hugs the lambda header on the first line ({@code someCall(x -> assertThat(x)}\n{@code .extracting(...)}\n
+     * Fans an over-width method-call chain in an expression-lambda body onto dotted continuation lines while it hugs the
+     * lambda header on the first line ({@code someCall(x -> assertThat(x)}\n{@code .extracting(...)}\n
      * {@code .containsOnly(...))}).
      *
-     * <p>The chain is forced to break — {@link ExpressionLambdaArgumentLayout} already decided the flat chain overflows at
-     * its real rendered column — so the chain printer lays the bare-call root on the header line and every
-     * {@code .call(...)} on its own continuation line, keeping a single-simple-argument tail compact. The caller owns the
-     * trailing call close, so the chain renders without a final terminator.
-     *
-     * <p>The chain shares its line with {@code firstLine} — the enclosing call opener plus the lambda header up to
-     * {@code ->} — so it renders past that prefix, not at the statement's own column. That prefix is threaded as the
-     * chain's {@link LayoutContext#leftEdgePrefix()} so every width gate the forced chain consults measures at the real
-     * rendered column rather than column zero, matching how the return chain threads its {@code "return "} prefix
-     * (LDM-2f #190/#236).
+     * <p>The chain is forced to break ({@link ExpressionLambdaArgumentLayout} already decided the flat chain overflows at
+     * its real column), so the root stays on the header line and every {@code .call(...)} takes its own continuation line;
+     * the caller owns the trailing close, so no final terminator. {@code firstLine} (the call opener plus the lambda
+     * header up to {@code ->}) is threaded as the chain's {@link LayoutContext#leftEdgePrefix()} so every width gate
+     * measures at the real rendered column, matching how the return chain threads its {@code "return "} prefix.
      */
     Optional<Doc> huggedLambdaBodyChain(String firstLine, MethodCallExpr expression) {
         return methodCalls.forcedMethodCallChainAtBaseline(
@@ -496,35 +491,35 @@ final class ExpressionPrinters {
     }
 
     /**
-     * Canonical-fan cutover seam U8 delegate for {@link BinaryExpressionPrinter}: fans a broken binary/ternary chain
-     * operand through the shared source-neutral {@code chainFanOut}, or returns empty (chain withheld) so the operand
-     * keeps its imperative delegate. Threaded as an instance method reference rather than a {@code methodCalls}-reading
-     * lambda in the {@link BinaryExpressionPrinter} constructor call because {@code methodCalls} is assigned later in this
-     * composer's constructor; the reference binds {@code this} and reads the field lazily at format time.
+     * Delegate for {@link BinaryExpressionPrinter}: fans a broken binary/ternary chain operand through the shared
+     * source-neutral {@code chainFanOut}, or returns empty (chain withheld) so the operand keeps its imperative delegate.
+     * Threaded as an instance method reference rather than a {@code methodCalls}-reading lambda in the
+     * {@link BinaryExpressionPrinter} constructor call because {@code methodCalls} is assigned later in this composer's
+     * constructor; the reference binds {@code this} and reads the field lazily at format time.
      */
     private Optional<Doc> binaryOperandCanonicalFanChain(MethodCallExpr expression, LayoutContext layout) {
         return methodCalls.canonicalFanChain(expression, "", layout);
     }
 
     /**
-     * Canonical-fan cutover seam (G bucket) predicate for the binary/logical/string-concat OPERAND carriers: reports
-     * whether a binary/ternary expression contains a chain operand the End-state A rule fans, so a caller whose flat arm
-     * already fans that operand commits the dispatched {@code flat} (chain-fanned) shape instead of a source-shape-gated
-     * operand-per-line broken arm. Shared by {@link BreakableArgumentExpressionPrinter} (via {@link ObjectCreationPrinter}
-     * and {@link MethodCallPrinter}) and by {@link VariableInitializerLayout} (via {@link FieldDeclarationPrinter}, its
-     * broken object-creation binary argument). Threaded as an instance method reference for the same lazy-field-read
-     * reason as {@link #binaryOperandCanonicalFanChain}.
+     * Predicate for the binary/logical/string-concat OPERAND carriers: reports whether a binary/ternary expression
+     * contains a chain operand the canonical fan rule fans, so a caller whose flat arm already fans that operand commits
+     * the dispatched {@code flat} (chain-fanned) shape instead of a source-shape-gated operand-per-line broken arm. Shared
+     * by {@link BreakableArgumentExpressionPrinter} (via {@link ObjectCreationPrinter} and {@link MethodCallPrinter}) and
+     * by {@link VariableInitializerLayout} (via {@link FieldDeclarationPrinter}, its broken object-creation binary
+     * argument). Threaded as an instance method reference for the same lazy-field-read reason as
+     * {@link #binaryOperandCanonicalFanChain}.
      */
     boolean binaryFansChainOperand(Expression expression) {
         return methodCalls.binaryFansChainOperand(expression);
     }
 
     /**
-     * Canonical-fan cutover seam U7: the lambda-body-position gate handed to {@link LambdaExpressionPrinter}. It is the
-     * End-state A rule ({@link MethodCallChainPrinter#chainFansByCanonicalRule}) scoped to the roots the lambda-body fan
-     * renders idempotently —
-     * object-creation-rooted chains are withheld to avoid the {@code new X().setA(...)} ⇄ {@code new X()}⏎{@code .setA(...)}
-     * nested-root oscillation (see {@link MethodCallChainPrinter#lambdaBodyChainFansByCanonicalRule}).
+     * The lambda-body-position gate handed to {@link LambdaExpressionPrinter}. It is the canonical fan rule
+     * ({@link MethodCallChainPrinter#chainFansByCanonicalRule}) scoped to the roots the lambda-body fan renders
+     * idempotently — object-creation-rooted chains are withheld to avoid the {@code new X().setA(...)} ⇄
+     * {@code new X()}⏎{@code .setA(...)} nested-root oscillation (see
+     * {@link MethodCallChainPrinter#lambdaBodyChainFansByCanonicalRule}).
      */
     private boolean lambdaBodyChainFansByCanonicalRule(MethodCallExpr expression) {
         return methodCalls.lambdaBodyChainFansByCanonicalRule(expression);
@@ -540,16 +535,13 @@ final class ExpressionPrinters {
     }
 
     /**
-     * Canonical-fan cutover seam, the lambda-body ARROW position (SPIKE, #190). Renders the source-neutral
-     * {@code chainFanOut} fan of a fan-threshold, comment/lambda-free chain that is a lambda body — the same fan the U7
-     * hug seam already emits, but produced ONCE at {@link LayoutContext#root()} with an empty prefix so
+     * Renders the lambda-body arrow-position fan: the source-neutral {@code chainFanOut} fan of a fan-threshold,
+     * comment/lambda-free lambda-body chain, produced ONCE at {@link LayoutContext#root()} so
      * {@link LambdaExpressionPrinter} can wrap the identical fan Doc into both arms of its break-after-{@code ->} vs
-     * attach-root-to-{@code ->} {@code Doc.bestFitting}. Returns empty for a chain the lambda-body fan withholds
-     * (object-creation root, chain-selector-hosted lambda, or any comment/lambda carrier), which keeps that lambda on the
-     * unchanged source-shape branches. Scoped to {@link #lambdaBodyChainFansByCanonicalRule} rather than the bare
-     * {@link MethodCallChainPrinter#chainFansByCanonicalRule} for the same idempotence reason the U7 hug seam is: the fan
-     * renders the root at
-     * column zero, so an object-creation root would oscillate its {@code new X()} hug across passes.
+     * attach-root-to-{@code ->} {@code Doc.bestFitting}. Empty for a chain the lambda-body fan withholds (object-creation
+     * root, chain-selector-hosted lambda, or any comment/lambda carrier). Scoped to
+     * {@link #lambdaBodyChainFansByCanonicalRule} for idempotence: the fan renders the root at column zero, so an
+     * object-creation root would oscillate its {@code new X()} hug across passes.
      */
     private Optional<Doc> lambdaBodyCanonicalFanChain(MethodCallExpr expression) {
         if (!methodCalls.lambdaBodyChainFansByCanonicalRule(expression)) {
@@ -563,11 +555,11 @@ final class ExpressionPrinters {
     }
 
     /**
-     * Canonical-fan cutover seam delegate for the variable-initializer layout (SPIKE, #190): emits the source-neutral
-     * {@code chainFanOut} for a fan-threshold, comment/lambda-free chain regardless of the author's source shape, or
-     * returns empty (chain withheld) so the initializer keeps its imperative cascade. Same delegate the return-value path
-     * already uses; threaded so the initializer's break-after-{@code =} decider can rank a fanned chain against its own
-     * shape at the true column instead of the source-gated forced chain.
+     * Delegate for the variable-initializer layout: emits the source-neutral {@code chainFanOut} for a fan-threshold,
+     * comment/lambda-free chain regardless of the author's source shape, or returns empty (chain withheld) so the
+     * initializer keeps its imperative cascade. Same delegate the return-value path already uses; threaded so the
+     * initializer's break-after-{@code =} decider can rank a fanned chain against its own shape at the true column instead
+     * of the source-gated forced chain.
      */
     Optional<Doc> canonicalFanChain(MethodCallExpr expression, String suffix, LayoutContext layout) {
         return methodCalls.canonicalFanChain(expression, suffix, layout);
@@ -580,10 +572,10 @@ final class ExpressionPrinters {
         return methodCalls.forcedMethodCallChain(expression, firstLineWidth);
     }
 
-    // LDM-2f (#190): the layout-carrying overload the initializer chain threads. The initializer supplies its assignment
-    // prefix through {@code layout.withLeftEdgePrefix("NAME = ")} so the chain width gate can attribute it at the rendered
-    // column and reach the object-creation dot-split tail. Other callers of the two-arg overload above pass no prefix and
-    // stay byte-identical.
+    // The layout-carrying overload the initializer chain threads. The initializer supplies its assignment prefix through
+    // {@code layout.withLeftEdgePrefix("NAME = ")} so the chain width gate can attribute it at the rendered column and
+    // reach the object-creation dot-split tail. Other callers of the two-arg overload above pass no prefix and stay
+    // byte-identical.
     Optional<Doc> forcedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth,
@@ -592,9 +584,9 @@ final class ExpressionPrinters {
         return methodCalls.forcedMethodCallChain(expression, firstLineWidth, layout);
     }
 
-    // Output-seam slice #2: the variable initializer's forced method-call-chain entry (initializer analogue of the
-    // return chain's composite entry). Delegates to MethodCallPrinter.initializerChain so VariableInitializerLayout
-    // threads a single initializer chain callback rather than the raw layout-carrying forced-chain overload above.
+    // The variable initializer's forced method-call-chain entry (initializer analogue of the return chain's composite
+    // entry). Delegates to MethodCallPrinter.initializerChain so VariableInitializerLayout threads a single initializer
+    // chain callback rather than the raw layout-carrying forced-chain overload above.
     Optional<Doc> initializerChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth,
@@ -603,11 +595,11 @@ final class ExpressionPrinters {
         return methodCalls.initializerChain(expression, firstLineWidth, layout);
     }
 
-    // Output-seam slice #3: the expression statement's method-call-chain shape entry (statement analogue of the return
-    // chain's composite entry). Delegates to MethodCallPrinter.statementChain so StatementPrinter threads a single
-    // statement chain callback rather than the chain shape-callbacks (source-multiline statement call, forced call with
-    // terminator, and the has-final-trailing-comment / has-comments / is-source-multiline / root-is-object-creation /
-    // root-is-field-access predicates) the cascade used to compose.
+    // The expression statement's method-call-chain shape entry (statement analogue of the return chain's composite
+    // entry). Delegates to MethodCallPrinter.statementChain so StatementPrinter threads a single statement chain callback
+    // rather than the chain shape-callbacks (source-multiline statement call, forced call with terminator, and the
+    // has-final-trailing-comment / has-comments / is-source-multiline / root-is-object-creation / root-is-field-access
+    // predicates) the cascade used to compose.
     Optional<Doc> statementChain(
             MethodCallExpr expression,
             ExpressionStmt statement,

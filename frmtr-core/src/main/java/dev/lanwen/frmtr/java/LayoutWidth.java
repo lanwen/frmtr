@@ -40,9 +40,9 @@ final class LayoutWidth {
     /**
      * Measures a continuation line under a broken statement or member initializer (three indentation units).
      *
-     * <p>Computed directly from the fixed three-unit continuation depth. It stays the fixed shallow-common-case estimate;
-     * a fanned selector that renders deeper already measures at its true column through
-     * {@code MethodCallChainPrinter.fannedSelectorColumnWidth}, which floors on this same value.
+     * <p>The fixed shallow-common-case estimate at the three-unit continuation depth; a fanned selector that renders
+     * deeper already measures at its true column through {@code MethodCallChainPrinter.fannedSelectorColumnWidth}, which
+     * floors on this same value.
      */
     int continuationStatement(String text) {
         return indentColumns(3) + text.length();
@@ -52,9 +52,8 @@ final class LayoutWidth {
      * Measures the closing line of an expression-lambda argument packed inside a broken call argument list (four
      * indentation units).
      *
-     * <p>C10-d: this is the fixed floor the packed-lambda closing gate keeps under its threaded true-column oracle
-     * ({@code ExpressionLambdaArgumentLayout} takes {@code max(this, columnWidth)}); computing it directly retires the
-     * former {@code LAMBDA_ARGUMENT_CLOSING} budget constant.
+     * <p>The fixed floor the packed-lambda closing gate keeps under its threaded true-column oracle
+     * ({@code ExpressionLambdaArgumentLayout} takes {@code max(this, columnWidth)}).
      */
     int lambdaArgumentClosing(String text) {
         return indentColumns(4) + text.length();
@@ -64,9 +63,9 @@ final class LayoutWidth {
      * Measures a statement line inside a block-lambda argument nested under a broken method chain (five indentation
      * units).
      *
-     * <p>Computes this depth directly. It is threaded (as a {@code ToIntFunction<String>} width measure) into the
-     * statement path of a block-lambda argument nested under a broken method chain, where the block/type-only
-     * {@code nodeLine} cannot see the stacked chain-continuation indentation.
+     * <p>Threaded (as a {@code ToIntFunction<String>} width measure) into the statement path of a block-lambda argument
+     * nested under a broken method chain, where the block/type-only {@code nodeLine} cannot see the stacked
+     * chain-continuation indentation.
      */
     int methodChainLambdaBody(String text) {
         return indentColumns(5) + text.length();

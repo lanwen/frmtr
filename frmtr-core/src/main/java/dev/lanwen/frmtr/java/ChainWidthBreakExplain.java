@@ -50,11 +50,10 @@ final class ChainWidthBreakExplain {
      * <p>The flat width is measured at the chain's real RENDERED column, mirroring the prefix-aware chain gate
      * ({@code MethodCallChainPrinter.compactRootLineWidth}): the chain's block/type indentation
      * ({@link LayoutWidth#nodeIndentWidth}) plus any same-line prefix the caller threaded through
-     * {@link LayoutContext#leftEdgePrefix()} (a returned chain's {@code "return "}) plus the compact chain text. This
-     * replaces the retired transitional {@code LayoutContext.widthBudget} fixed-baseline probe. Because this is an
-     * {@code --explain}-only diagnostic it never changes the emitted {@link dev.lanwen.frmtr.doc.Doc}: measuring at the
-     * rendered column only changes the recorded {@code flatWidth} value (to the correct one) and the self-gate that
-     * decides whether this break is attributed to width.
+     * {@link LayoutContext#leftEdgePrefix()} (a returned chain's {@code "return "}) plus the compact chain text.
+     * Because this is an {@code --explain}-only diagnostic it never changes the emitted
+     * {@link dev.lanwen.frmtr.doc.Doc}: measuring at the rendered column only changes the recorded {@code flatWidth}
+     * value (to the correct one) and the self-gate that decides whether this break is attributed to width.
      */
     void record(
             MethodCallExpr expression,

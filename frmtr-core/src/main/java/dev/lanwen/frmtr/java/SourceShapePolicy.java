@@ -29,15 +29,13 @@ import java.util.function.ToIntFunction;
  * own concerns: it does not own offset/slicing math ({@link SourceText}), raw-output comment accounting
  * ({@link RawPreservedSource}), or parse-recovery boundary rules. It calls them; it does not re-own them.
  *
- * <p>This is the first concrete slice of the deferred formatter-owned syntax view: a narrow metadata owner for
- * layout-from-source decisions that a larger view could later absorb. The method-call / chain / object-creation /
- * lambda hub reflows by width or by a structural {@link BreakRule} rather than preserving the author's incidental
- * line breaks, so no {@code RETIREMENT_TARGET} "was this multiline?"-family reads remain (see
- * {@link SourceShapeException}). What remains here are the {@code FIXPOINT_SAFE} reads
- * the formatter's own output reproduces or normalizes: the width-fit gate ({@link #fitsOnOneLine}), deliberate
- * blank-line preservation ({@link #hadBlankLineBetween}), the comment-presence gate ({@link #hasContainedComments}),
- * and the try-with-resources section shape ({@link #tryResources}). Each round-trips to a fixpoint, so a printer can ask
- * this one object for the layout-from-source answers that survive a reprint.
+ * <p>The method-call / chain / object-creation / lambda hub reflows by width or by a structural {@link BreakRule}
+ * rather than preserving incidental line breaks, so no {@code RETIREMENT_TARGET} "was this multiline?"-family reads
+ * remain (see {@link SourceShapeException}). What remains are the {@code FIXPOINT_SAFE} reads the formatter's own
+ * output reproduces or normalizes: the width-fit gate ({@link #fitsOnOneLine}), blank-line preservation
+ * ({@link #hadBlankLineBetween}), the comment-presence gate ({@link #hasContainedComments}), and the
+ * try-with-resources section shape ({@link #tryResources}). Each round-trips to a fixpoint, so a printer can ask this
+ * one object for the layout-from-source answers that survive a reprint.
  */
 final class SourceShapePolicy {
 
@@ -69,16 +67,15 @@ final class SourceShapePolicy {
      * Reports whether a node carries any contained comments, the source-shape gate that decides whether a
      * compact or otherwise source-shaped layout is safe to take without dropping comment content.
      *
-     * <p>"Can this stay compact / be reconstructed source-equivalently?" is a layout-from-source decision, so the gate
-     * that several printers spelled inline as {@code node.getAllContainedComments().isEmpty()} belongs behind this
-     * policy rather than as a bare JavaParser scan at each call site. Containment itself is not re-derived here: the
-     * policy delegates to {@link JavaCommentPlacementPolicy#hasContainedComments(Node)}, the run-indexed query the
-     * comment-containment work owns, so the formatter keeps one containment index instead of a competing scan.
+     * <p>The gate several printers spelled inline as {@code node.getAllContainedComments().isEmpty()} belongs behind this
+     * policy. Containment is not re-derived here: it delegates to
+     * {@link JavaCommentPlacementPolicy#hasContainedComments(Node)}, the run-indexed query, so the formatter keeps one
+     * containment index instead of a competing scan.
      *
-     * <p>Because the delegate is the per-run comment index, this gate is only valid for original nodes from the current
-     * formatting run. Callers that may pass cloned or otherwise detached nodes (for example compact-source
-     * reconstruction that strips comments on a clone) must keep their own JavaParser containment scan; the run index
-     * reports a clone as comment-free, which would change which layout path is taken.
+     * <p>Because that delegate is the per-run index, this gate is only valid for original nodes from the current run.
+     * Callers that may pass cloned or detached nodes (e.g. compact-source reconstruction that strips comments on a clone)
+     * must keep their own JavaParser containment scan: the run index reports a clone as comment-free, which would change
+     * the layout path.
      */
     boolean hasContainedComments(Node node) {
         return commentPolicy.hasContainedComments(node);
@@ -118,13 +115,11 @@ final class SourceShapePolicy {
      * Reports whether a node's source-equivalent compact form fits on one line at its call-site indentation, the single
      * canonical "can this stay on one line?" width gate.
      *
-     * <p>Compact text is source-equivalent by construction, so a width probe over it is itself a source-shape decision:
-     * it asks whether the author's node could render flat rather than how a particular printer happens to spell the
-     * comparison. This method owns the one {@code <= lineWidth()} comparison while leaving the indentation arithmetic to
-     * the caller: each printer passes its own {@code indentedWidth} function so the per-site indent (current statement,
-     * first line, block, continuation, …) is preserved exactly. The function is applied to {@link CompactSourceText}'s
-     * compact text for the node so compact-text generation stays in that helper and only the fit decision lives here.
-     * Sites that test the negation ("must this break?") call {@code !fitsOnOneLine(...)}; the two are the same gate.
+     * <p>This method owns the one {@code <= lineWidth()} comparison while leaving the indentation arithmetic to the
+     * caller: each printer passes its own {@code indentedWidth} function so the per-site indent (statement, first line,
+     * block, continuation, …) is preserved exactly, applied to {@link CompactSourceText}'s compact text so compact-text
+     * generation stays in that helper. Sites testing the negation call {@code !fitsOnOneLine(...)}; the two are the same
+     * gate.
      */
     boolean fitsOnOneLine(Node node, ToIntFunction<String> indentedWidth) {
         return indentedWidth.applyAsInt(compactSource.compact(node)) <= options.lineWidth();

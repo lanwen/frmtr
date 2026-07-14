@@ -12,27 +12,19 @@ import com.github.javaparser.ast.type.Type;
  * after the variable name) is rendered as valid Java without duplicating the variable name. The same shape appears on
  * method and constructor parameters ({@code void write(byte b[])}), which this helper also covers.
  *
- * <p>JavaParser models such a declarator as a {@link VariableDeclarator} (or, for parameters, a {@link Parameter})
- * whose type is an {@link ArrayType} built from {@link ArrayType.Origin#NAME} bracket pairs. Those bracket tokens sit
- * after the declarator name in source, so the type node's token range spans the name. Declaration printers build one
- * shared type prefix from the first declarator and then append each bare declarator name, which is why a naive
- * token-range type prefix re-emits the name and produces non-compiling {@code String filters[] filters} output.
- * Parameter printers hit the same hazard: the type's compact text already spells {@code byte b[]}, so appending the
- * parameter name a second time yields non-compiling {@code byte b[] b}.
+ * <p>JavaParser models such a declarator with an {@link ArrayType} built from {@link ArrayType.Origin#NAME} bracket
+ * pairs whose tokens sit after the name, so the type's token range spans the name. A naive token-range type prefix then
+ * re-emits the name — non-compiling {@code String filters[] filters}, or {@code byte b[] b} for a parameter.
  *
- * <p>The brackets are kept in their original after-name position rather than promoted to the canonical
- * {@code String[] filters} type position. That choice is forced by the formatter's own AST-equivalence guardrail: the
- * verifier ({@link AstEquivalence}) compares trees with JavaParser's {@code EqualsVisitor}, which treats an
- * {@link ArrayType.Origin#NAME} declarator and an {@link ArrayType.Origin#TYPE} declarator as structurally different.
- * Re-positioning the brackets would therefore trip the guardrail even though the two spellings denote the same program.
- * Preserving the source position keeps the output both AST-equivalent and valid; it is also the only correct rendering
- * for a mixed-array-level declaration ({@code int rowSpan[], columnCount}), where promotion would silently change the
- * non-array declarator's type.
+ * <p>The brackets stay in their after-name position rather than being promoted to {@code String[] filters}, because the
+ * AST-equivalence guardrail ({@link AstEquivalence}, via {@code EqualsVisitor}) treats an {@link ArrayType.Origin#NAME}
+ * declarator and an {@link ArrayType.Origin#TYPE} declarator as different, so re-positioning would trip it. Preserving
+ * the source position is also the only correct rendering for a mixed-level declaration ({@code int rowSpan[], columnCount}),
+ * where promotion would change the non-array declarator's type.
  *
- * <p>This helper centralizes the two coupled pieces the field and local-variable printers need so they agree: the
- * shared prefix type (the common element type, so the brackets are not double-counted) and the per-declarator bracket
- * suffix appended after each name. It leaves line-width accounting, comment attachment, and break selection to the
- * calling declaration printers.
+ * <p>This helper centralizes the two coupled pieces field and local-variable printers need: the shared prefix type (the
+ * common element type, so brackets are not double-counted) and the per-declarator after-name bracket suffix. It leaves
+ * line-width accounting, comment attachment, and break selection to the callers.
  */
 final class CStyleArrayDeclarators {
 

@@ -49,7 +49,7 @@ final class VariableInitializerLayout {
     /**
      * A forced-chain callback that carries the initializer's {@link LayoutContext} alongside its first-line-width probe.
      *
-     * <p>LDM-2f (#190). The initializer keyword shares the chain's first line with the assignment prefix
+     * <p>The initializer keyword shares the chain's first line with the assignment prefix
      * ({@code NAME = }), so the caller threads that fixed prefix through {@link LayoutContext#leftEdgePrefix()}. The chain
      * width gate that reads it ({@code MethodCallChainPrinter.compactRootLineWidth}) then attributes the prefix at the
      * rendered column instead of inferring it from the initializer value's stale source column, and the object-creation
@@ -65,7 +65,7 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * SPIKE (fan-root-true-column, #190). The source-neutral canonical-fan callback: emits {@code chainFanOut} for a
+     * The source-neutral canonical-fan callback: emits {@code chainFanOut} for a
      * fan-threshold, comment/lambda-free chain independent of the author's source shape, or empty when the chain is
      * withheld (comment / block-lambda / expression-lambda chains — the deferred lambda-arrow seam). This is the same
      * delegate the return-value path uses; the initializer's break-after-{@code =} decider ranks the fan it produces
@@ -79,7 +79,7 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * The initializer's explicit layout classification (LDM B5/B6): one constant per arm of the width-driven
+     * The initializer's explicit layout classification: one constant per arm of the width-driven
      * broken-or-flat cascade in {@link #variableInitializerBrokenOrFlat}. {@link #classifyBrokenOrFlat} selects the arm
      * from AST shape and rendered width alone -- reproducing the exact ordered conditions of the former imperative ladder
      * -- and {@link #renderBrokenOrFlat} dispatches each arm to the unchanged shape emitters.
@@ -463,7 +463,7 @@ final class VariableInitializerLayout {
     ) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact.apply(initializer) + ";";
         String name = variableName(variable);
-        // SPIKE (fan-root-true-column, #190 foundation). Checked FIRST — ahead of BOTH the source-shape preempt tier and
+        // Checked FIRST — ahead of BOTH the source-shape preempt tier and
         // the (A) renderer-measured gate — because the oscillation it closes is exactly those source-shape-gated routes
         // disagreeing across passes for a fan-carrying initializer. The source-shape tier's chain branches (the
         // object-creation source-multiline branches) fire on a source-multiline pass and produce a shape the (A) gate's
@@ -761,7 +761,7 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * SPIKE (fan-root-true-column, #190 foundation). Makes the break-after-{@code =} verdict of a fan-carrying initializer
+     * Makes the break-after-{@code =} verdict of a fan-carrying initializer
      * SOURCE-NEUTRAL by ranking two AST-derived shapes with {@link Doc#bestFitting} at the true rendered column.
      *
      * <p>A fan-carrying initializer's rendered value <em>force-fans</em> an internal chain, so the value's {@link Doc}
@@ -902,7 +902,7 @@ final class VariableInitializerLayout {
         // Binary/logical/string-concat initializer whose operand is a fan-threshold chain (the "G bucket":
         // {@code long newOffset = log.segments().activeSegment().baseOffset() + 1},
         // {@code String appId = getClass().getSimpleName().toLowerCase(...) + testId}). The dispatched flat rendering
-        // ({@code expression.apply}) already fans that operand by the End-state A rule (its inner {@code chainFanOut} is a
+        // ({@code expression.apply}) already fans that operand by the canonical-fan rule (its inner {@code chainFanOut} is a
         // pure AST function, operator kept inline), so — exactly like the object-creation-argument arm above — both arms
         // are AST-pure and the only remaining choice is attach-after-{@code NAME = } versus break-after-{@code =}, ranked by
         // {@code Doc.bestFitting} at the true column. Without this arm the binary initializer falls to the {@code (A)}
@@ -939,7 +939,7 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * SPIKE (fan-root-true-column, #190). Reports whether {@code call} is a method call whose receiver descends through a
+     * Reports whether {@code call} is a method call whose receiver descends through a
      * parenthesized cast to a fan-threshold method-call chain that {@link CanonicalFanChain} would fan source-neutrally —
      * the {@code ((Cast) a.b().c()).selector()} initializer shape. Only such a value has a flat rendering that hard-breaks
      * (from the inner fan), so ranking its flat and
@@ -960,7 +960,7 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * SPIKE (fan-root-true-column, #190). Reports whether an object-creation constructor argument carries a fan-threshold
+     * Reports whether an object-creation constructor argument carries a fan-threshold
      * method-call chain — either the argument IS such a chain ({@code new ArrayList<>(entry.entity().entries().size())}) or a
      * fanning chain is NESTED inside it ({@code new BrokerDirs(admin.describeLogDirs(IntStream.range(0, 4).boxed().toList()),
      * 0)}, whose {@code describeLogDirs(...)} argument is itself a fanning chain). Either way the whole {@code new X(...)}
@@ -1148,7 +1148,7 @@ final class VariableInitializerLayout {
         if (rankedConvergence.isPresent()) {
             return rankedConvergence.orElseThrow();
         }
-        // Canonical-fan cutover seam (End-state A): a multi-link fluent chain that reaches its link-count/root-kind
+        // A multi-link fluent chain that reaches its link-count/root-kind
         // threshold fans one selector per line, and it must do so through the SAME source-neutral fan on every pass.
         // Placed here, ahead of the source-shape-sensitive object-creation, source-multiline, and attachable-scope
         // branches below, so a fan-threshold plain-receiver / type-like chain is claimed by the fan before those
@@ -1164,7 +1164,7 @@ final class VariableInitializerLayout {
         // deterministic fan shape. Object-creation-rooted chains are intentionally excluded — their dedicated
         // packed / compact / broken-constructor branches below (and the #48 / #221 Case B convergence) own their shape,
         // and chainFanOut renders an object-creation root differently than those branches; widening the fan to them is
-        // a later cutover seam. Comment- and block-lambda-bearing chains stay on the imperative cascade (re-rendering a
+        // a later seam. Comment- and block-lambda-bearing chains stay on the imperative cascade (re-rendering a
         // comment-bearing root through the fan would double-claim its comments — the same guard the landed rankers use).
         Optional<Doc> canonicalFan = variableInitializerCanonicalFan(
             variable,
@@ -1743,7 +1743,7 @@ final class VariableInitializerLayout {
      * Routes a multi-link fan-threshold initializer chain onto the source-neutral canonical fan
      * ({@code MethodCallChainPrinter.chainFanOut}, reached through {@link #variableWithForcedMethodCallChain}), the
      * multi-link sibling of {@link #rankedSimpleRootSingleCallConvergence}'s single-call convergence. Present only for the
-     * exact shape the canonical-fan cutover claims: the chain reaches the End-state A link-count/root-kind threshold
+     * exact shape the canonical fan claims: the chain reaches the link-count/root-kind threshold
      * ({@link MethodCallChainSourcePlanner.InitializerChainShape#chainBreaksByRule()} — the one source of truth for the
      * rule), the root is not an object creation (those keep their dedicated packed / broken-constructor branches, whose
      * collapse shapes {@code chainFanOut} would not reproduce), and the chain carries no own or contained comment and no
@@ -2444,7 +2444,7 @@ final class VariableInitializerLayout {
         // The chain here is an expression-lambda body (NAME = params -> chain), a distinct position from the direct
         // initializer chain: its same-line prefix is NAME = params -> , not NAME = . Threading a non-empty leftEdgePrefix
         // here would newly activate the object-creation dot-split for lambda-body chains too, which is out of the
-        // initializer-chain slice's scope (LDM-2f #190, mirroring #236 keeping return scoped to the direct return chain).
+        // initializer-chain slice's scope (mirroring #236 keeping return scoped to the direct return chain).
         // Pass root(); the firstLineWidth probe still folds the lambda prefix in, so this stays byte-identical.
         Doc body = initializerChain
                 .apply(
@@ -2477,7 +2477,7 @@ final class VariableInitializerLayout {
             MethodCallExpr methodCall,
             String flatName
     ) {
-        // LDM-2f (#190): the initializer's assignment prefix (NAME = ) shares the chain's first line, so hand the chain
+        // The initializer's assignment prefix (NAME = ) shares the chain's first line, so hand the chain
         // gates that fixed prefix through the LayoutContext, mirroring how ReturnExpressionPrinter threads "return ".
         // compactRootLineWidth measures the compact chain root at nodeIndentWidth(root) + "NAME = ".length() + text, so the
         // fit decision depends on the rendered column rather than where the value sits in source (a reindented value is

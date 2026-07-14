@@ -156,19 +156,14 @@ final class ControlConditionCommentLayout {
 
     /**
      * Recovers the close-paren trailing line comment of an {@code if} statement that a whitespace perturbation moved onto
-     * its own line below the {@code )} and re-bucketed onto the enclosing {@link IfStmt} as an orphan, so {@code rawClose
-     * ParenTrailingLineCommentText} no longer finds it inline after the {@code )}.
+     * its own line below the {@code )} and re-bucketed onto the enclosing {@link IfStmt} as an orphan, where the inline
+     * raw-slice path no longer finds it.
      *
-     * <p>At the {@code @default} shape the comment sits inline after {@code )}; the raw-slice path above renders it and
-     * the {@code if} statement holds no such orphan, so this recovery fires only under perturbation and adds nothing at
-     * default. The comment value comes from the orphan comment itself (not a raw slice): there is no inline slice to
-     * match when the comment is on its own line, so requiring a raw-slice match here would silently drop it. The caller
-     * still owns whether the recovered comment renders inline after {@code )} or on its own line.
-     *
-     * <p>This is intentionally scoped to {@link IfStmt}, the only construct with a distinct then-statement node that
-     * bounds the {@code )}-to-body gap. Switch selectors are excluded: a comment between a switch selector and its first
-     * entry is a switch-body leading comment that {@code SwitchPrinter} owns, not a close-paren tail, so recovering it
-     * here would hoist it onto the {@code )} line and double-claim it away from the body.
+     * <p>At {@code @default} the comment sits inline after {@code )} and the raw-slice path renders it, so this fires only
+     * under perturbation. The value comes from the orphan comment itself, not a raw slice (there is no inline slice to
+     * match when it is on its own line). Scoped to {@link IfStmt}, the only construct with a distinct then-statement node
+     * bounding the {@code )}-to-body gap; a switch selector's following comment is a switch-body leading comment
+     * {@code SwitchPrinter} owns, not a close-paren tail.
      */
     private Doc recoveredCloseParenTrailingLineComment(Expression condition) {
         return closeParenTrailingOrphans(condition)

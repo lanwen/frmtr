@@ -80,14 +80,11 @@ final class JavaCommentPlacementPolicy {
     /**
      * Returns an own line comment that trails {@code node} in source order.
      *
-     * <p>This is the trailing-comment <em>ownership</em> question — "is {@code node}'s own line comment one that comes
-     * after the node rather than leading it" — and is deliberately source-order based (see
-     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}) rather than line-equality based. Keying on the end line breaks
-     * when a whitespace perturbation moves a {@code } // note} comment onto the line below the brace even though the AST is
-     * unchanged, dropping the comment. The source-order test is a strict superset at the {@code @default} shape: a comment
-     * genuinely on the node's end line begins past the node's end column, so both tests select the same owner there.
-     * Callers still decide how the recovered comment is rendered (inline {@code lineSuffix} versus its own line); that
-     * rendering choice stays line-based at the call sites and is not part of this ownership query.
+     * <p>The trailing-comment <em>ownership</em> question, deliberately source-order based (see
+     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}) rather than line-equality: an end-line test drops a
+     * {@code } // note} comment a whitespace perturbation moved onto the next line. Source order is a strict superset at
+     * {@code @default} (an end-line comment begins past the end column), so both select the same owner. Callers still
+     * decide inline-{@code lineSuffix}-versus-own-line rendering.
      */
     Optional<JavaCommentTrivia> trailingLineComment(Node node) {
         return ownComment(node, JavaCommentTrivia::isLine).filter(comment -> comment.startsAfterEndOf(node));
@@ -97,15 +94,11 @@ final class JavaCommentPlacementPolicy {
      * Recovers the line comment that trails {@code body} but that JavaParser parked as an orphan of {@code owner} rather
      * than as {@code body}'s own trivia.
      *
-     * <p>This is the orphan-bucket sibling of {@link #trailingLineComment(Node)}, and exists for the same shape-independent
-     * ownership reason. When a clause body's trailing {@code } // note} comment sits on the body's end line, JavaParser
-     * attaches it to the body and {@link #trailingLineComment(Node)} recovers it. When a whitespace perturbation moves the
-     * comment onto the line below the brace, JavaParser instead leaves it as an orphan of the enclosing construct (e.g. the
-     * {@code try}). The AST is otherwise identical, so the comment still trails the same clause; this query keeps that
-     * ownership by selecting the {@code owner} orphan line comments whose source position is after {@code body} ends and
-     * before {@code nextStructural} begins (the next clause, or — when absent — open to the owner's end). Bounding by the
-     * next structural element keeps each clause handoff claiming exactly its own slice instead of swallowing later clauses'
-     * trailing comments.
+     * <p>The orphan-bucket sibling of {@link #trailingLineComment(Node)}: when a whitespace perturbation moves a clause
+     * body's {@code } // note} comment onto the line below the brace, JavaParser leaves it as an orphan of the enclosing
+     * construct (e.g. the {@code try}). This selects the {@code owner} orphan line comments after {@code body} ends and
+     * before {@code nextStructural} begins, so each clause handoff claims exactly its own slice without swallowing later
+     * clauses' trailing comments.
      */
     List<JavaCommentTrivia> trailingLineCommentsAfter(Node owner, Node body, Optional<? extends Node> nextStructural) {
         return orphanComments(owner)
@@ -122,33 +115,18 @@ final class JavaCommentPlacementPolicy {
      * before the closing {@code ;}, which neither the initializer's own renderer nor the declarator's post-{@code ;}
      * trailing slot prints.
      *
-     * <p>The same after-last-token/before-{@code ;} slot holds an inline {@code /* ... *}{@code /} block comment that
-     * trails the final operand of a wrapped binary value ({@code return a == 1 /* x *}{@code / || a == 2 /* y *}{@code /;}
-     * — the issue #93 final-operand comment), so both kinds are recovered here; the {@code startsAfterEndOf} bound below
-     * keeps a between-operand block comment (which begins inside the initializer range and is the comment-aware binary
-     * renderer's to print) out of this bucket exactly as it keeps an inter-operand line comment out.
+     * <p>Both kinds are recovered — the slot also holds an inline block trailing a wrapped binary value's final operand
+     * ({@code return a == 1 /* x *}{@code / || a == 2 /* y *}{@code /;}, the issue #93 final-operand comment). A
+     * {@code //} after the last operand and before the {@code ;} is dropped both ways otherwise: JavaParser parks it as an
+     * orphan of the {@code semicolonOwner} ({@link com.github.javaparser.ast.body.FieldDeclaration} /
+     * {@link com.github.javaparser.ast.stmt.ExpressionStmt}) or as the initializer's contained trivia on the last operand,
+     * while the between-operand renderer only reaches inter-operand comments and the declarator's own slot only the
+     * post-{@code ;} comment.
      *
-     * <p>This is the after-initializer/before-{@code ;} sibling of the two trailing buckets that already cover a declared
-     * initializer's comments, and exists because that slot is owned by neither. The initializer-contained renderer (e.g.
-     * {@code BinaryExpressionPrinter.commentedBinaryLines}) only emits comments <em>between</em> operands — between
-     * {@code ""} and the first {@code +}, or between two {@code +} operands — so it recovers a leading/inter-operand
-     * comment but never one that begins after the whole initializer's last token, even when JavaParser attaches that
-     * trailing comment to the last operand as contained trivia. The declarator's own trailing-line slot
-     * ({@link #trailingLineComment(Node)}, consumed at the call site after the {@code ;}) only sees a comment JavaParser
-     * attached to the declarator and positioned after it, which for a multi-line concatenation is the post-{@code ;}
-     * comment, a different bucket. A {@code //} line that sits after the last {@code +} operand and before the closing
-     * {@code ;} lands in neither: depending on how whitespace lays the operands out JavaParser parks it either as an orphan
-     * of the {@code semicolonOwner} ({@link com.github.javaparser.ast.body.FieldDeclaration} or
-     * {@link com.github.javaparser.ast.stmt.ExpressionStmt}) — the multi-line shape — or as the initializer's own contained
-     * trivia on the last operand — the collapsed shape — so it is dropped both ways.
-     *
-     * <p>This query keeps that comment owned by the initializer tail by unioning both buckets and selecting only the line
-     * comments whose source position is after {@code initializer} ends (see
-     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}), in source order. The {@code startsAfterEndOf} bound is what
-     * makes the union safe: a leading/inter-operand comment such as the START line begins inside the initializer range, so
-     * it is excluded from both halves and only the binary renderer prints it; the post-{@code ;} declarator comment is in
-     * neither bucket. So this query can only ever add the genuinely-trailing comment that both existing slots drop, and the
-     * claim-once wrapper renders it exactly once even if a future initializer renderer also reaches it.
+     * <p>Unioning both buckets and selecting only comments after {@code initializer} ends
+     * ({@link CommentIndex#startsAfterEndOf(Node, Comment)}) makes the union safe: a leading/inter-operand comment begins
+     * inside the initializer range and is excluded, so this can only add the genuinely-trailing comment both slots drop,
+     * claimed once.
      */
     List<JavaCommentTrivia> trailingInitializerCommentsBeforeSemicolon(Node semicolonOwner, Node initializer) {
         return java.util.stream.Stream.concat(
@@ -167,15 +145,10 @@ final class JavaCommentPlacementPolicy {
      * the enclosing {@code controlStmt} ({@code while}/{@code if}/{@code switch} statement or {@code switch} expression)
      * rather than as the condition's own contained trivia.
      *
-     * <p>This is the orphan-bucket sibling of the condition's own {@code getAllContainedComments()} leading comments, and
-     * exists for the same shape-independent ownership reason as {@link #trailingLineCommentsAfter(Node, Node, Optional)}.
-     * At the {@code @default} shape a {@code while ( // note value )} comment is contained trivia of the condition, so the
-     * condition renderer already sees it and this query adds nothing (the control statement holds no such orphan). A
-     * whitespace perturbation that re-shapes the condition re-buckets the same comment onto the enclosing control
-     * statement as an orphan even though the AST is otherwise identical, so the contained-trivia view loses it and it is
-     * dropped. This query keeps the comment owned by the condition by selecting the {@code controlStmt} orphan line
-     * comments whose source position is after the control statement begins (so a comment leading the whole statement is
-     * never claimed) and before {@code condition} begins.
+     * <p>At {@code @default} a {@code while ( // note value )} comment is the condition's contained trivia, so the renderer
+     * sees it and this adds nothing; a whitespace perturbation re-buckets it onto the control statement as an orphan,
+     * where this recovers it by selecting the {@code controlStmt} orphan line comments after the statement begins (never a
+     * comment leading the whole statement) and before {@code condition} begins.
      */
     List<JavaCommentTrivia> leadingConditionComments(Node controlStmt, Node condition) {
         return orphanComments(controlStmt)
@@ -191,13 +164,11 @@ final class JavaCommentPlacementPolicy {
      * Recovers the line comments that trail a control-statement {@code condition} after its closing parenthesis but that
      * JavaParser parked as orphans of the enclosing {@code controlStmt} rather than as the condition's own trivia.
      *
-     * <p>This is the trailing counterpart to {@link #leadingConditionComments(Node, Node)}. At the {@code @default} shape
-     * an {@code if (cond) // note} comment is the condition's (or its last operand's) own trivia, so the close-paren
-     * renderer recovers it directly. A whitespace perturbation that pushes the comment onto its own line below the
-     * close-paren re-buckets it onto the enclosing {@code if}/{@code while}/{@code switch} as an orphan; the own-trivia
-     * view then loses it. This query keeps the comment owned by the condition's tail by selecting the {@code controlStmt}
-     * orphan line comments whose source position is after {@code condition} ends and before {@code body} begins. Bounding
-     * by {@code body} keeps the close-paren tail from swallowing the body/then/else leading comments.
+     * <p>The trailing counterpart to {@link #leadingConditionComments(Node, Node)}. At {@code @default} an
+     * {@code if (cond) // note} comment is the condition's own trivia; a whitespace perturbation onto its own line
+     * re-buckets it onto the enclosing statement, where this recovers it by selecting the {@code controlStmt} orphan line
+     * comments after {@code condition} ends and before {@code body} begins (the {@code body} bound stops it swallowing the
+     * body/then/else leading comments).
      */
     List<JavaCommentTrivia> trailingConditionComments(Node controlStmt, Node condition, Node body) {
         return orphanComments(controlStmt)
@@ -219,17 +190,12 @@ final class JavaCommentPlacementPolicy {
      * Recovers the line comment that sits between {@code afterNode} and {@code body} but that JavaParser parked on one of
      * the supplied {@code attachmentBuckets} instead of as {@code body}'s own leading trivia.
      *
-     * <p>This is the gap-ownership counterpart to {@link #adjacentLeadingLineComments(Node)} for a comment that lives
-     * inside a single grammar slot — here, the {@code case label ->}/{@code body} arm of a switch rule. At the
-     * {@code @default} shape JavaParser attaches a {@code case x -> // note body} comment to {@code body}, so the body's
-     * own leading comment renders it; a whitespace perturbation re-buckets the same comment onto the case label
-     * expression (collapse) or onto the switch entry as an orphan (expand) even though the AST is unchanged, so the
-     * body-own slot no longer holds it and it is dropped. This query keeps the comment owned by the gap by selecting the
-     * line comments from {@code attachmentBuckets} whose source position lies strictly after {@code afterNode} ends and
-     * strictly before {@code body} begins (see {@link CommentIndex#liesBetween(Comment, Node, Node)}). It deliberately
-     * excludes {@code body}'s own comment: the caller renders that one through the body statement renderer, so returning
-     * it here would double-print it. The bucket scan is source-order and shape-independent, so re-pointing ownership here
-     * does not move {@code @default} output, where the gap comment is the body's own trivia and is not in any bucket.
+     * <p>The gap-ownership counterpart to {@link #adjacentLeadingLineComments(Node)} for the {@code case label ->}/{@code body}
+     * arm of a switch rule. At {@code @default} a {@code case x -> // note body} comment is {@code body}'s own trivia; a
+     * whitespace perturbation re-buckets it onto the case label (collapse) or the switch entry orphan pool (expand). This
+     * selects the {@code attachmentBuckets} line comments strictly between {@code afterNode} and {@code body}
+     * ({@link CommentIndex#liesBetween(Comment, Node, Node)}), excluding {@code body}'s own comment (the caller renders
+     * that). Source-order, so {@code @default} output is unchanged.
      */
     List<JavaCommentTrivia> gapLineCommentsBefore(
             Node afterNode,
@@ -251,24 +217,15 @@ final class JavaCommentPlacementPolicy {
      * Recovers the full contiguous {@code //} comment block that sits between {@code afterNode} and {@code body}, no
      * matter how JavaParser split that block across attachment buckets.
      *
-     * <p>This is the {@code else}/{@code else if} leading-comment counterpart of
-     * {@link #gapLineCommentsBefore(Node, Node, Collection)}, which deliberately <em>excludes</em> the body's own
-     * comment. A multi-line {@code //} block written between a then branch's {@code }} and the {@code else} keyword is
-     * not attached to a single node by JavaParser: the trailing lines stay as the enclosing {@code if}'s orphan trivia
-     * while the line immediately above the {@code else}/{@code else if} node becomes that node's own leading trivia. The
-     * two halves then render from two unrelated slots (one above {@code else}, one folded into the nested {@code else
-     * if}'s leading cluster), which both mangles {@code else if} into {@code else //\n if} and rotates the lines across
-     * passes because re-parsing the rotated output re-splits the block onto different nodes.
+     * <p>The {@code else}/{@code else if} counterpart of {@link #gapLineCommentsBefore(Node, Node, Collection)} (which
+     * excludes the body's own comment). JavaParser splits a multi-line block before {@code else} across the enclosing
+     * {@code if}'s orphans and the {@code else if} node's own leading trivia, which renders from two slots — mangling
+     * {@code else if} into {@code else //\n if} and rotating lines across passes.
      *
-     * <p>Collecting the whole block as one source-ordered list lets the caller render it together in a single
-     * deterministic slot above {@code else} and claim every line there, so the nested {@code else if} can never reclaim a
-     * leading line. The query unions every line comment that lies in the gap across all the places JavaParser may have
-     * parked it: the body's own leading comment, {@code afterNode}'s own/orphan trivia (a collapse can re-attach a gap
-     * line onto the then branch's {@code }} line as the then block's own <em>trailing</em> comment), and the supplied
-     * {@code attachmentBuckets} (the enclosing {@code if}). It dedupes by identity and returns source order, so the
-     * {@code @default} shape — where the block is a single contiguous run — renders the same lines in the same order
-     * regardless of which node held each line, and a collapsed shape that splits the block across the then block, the
-     * enclosing {@code if}, and the {@code else} node still recovers every line.
+     * <p>Unioning every gap line comment across all buckets JavaParser may use (the body's own comment, {@code afterNode}'s
+     * own/orphan trivia, and {@code attachmentBuckets}), deduped by identity in source order, lets the caller render and
+     * claim the whole block in one deterministic slot above {@code else} so the nested {@code else if} cannot reclaim a
+     * line; the {@code @default} contiguous run and every collapsed split recover the same lines.
      */
     List<JavaCommentTrivia> gapLeadingLineCommentBlock(
             Node afterNode,
@@ -297,16 +254,12 @@ final class JavaCommentPlacementPolicy {
      * Recovers the line comments JavaParser parked between a {@code default} label's colon and its statement-group body
      * when the entry has no label node to anchor the gap on.
      *
-     * <p>{@link #gapLineCommentsBefore(Node, Node, Collection)} bounds its result with {@link CommentIndex#liesBetween}
-     * (after the anchor <em>ends</em>, before the body begins). For a colon {@code case X:} the anchor is the last label
-     * expression, so the bound is exact. A {@code default:} entry owns no label, so the only available anchor is the entry
-     * itself — and {@code liesBetween(entry, body)} never matches, because a comment between the colon and the body lies
-     * <em>inside</em> the entry's range, not after it ends, so every such comment is dropped once a whitespace perturbation
-     * moves it off the body statement's own trivia onto the entry's orphan pool. This query instead bounds the gap by the
-     * entry's <em>begin</em> position ({@code startsAfterBeginOf(entry)}, i.e. after the {@code default} keyword start) and
-     * the body's begin, excluding the body's own leading comment (the statement renderer prints that) and this entry's own
-     * leading comments (they begin before the entry, so the begin-position bound already excludes them). The result is the
-     * {@code default}-label counterpart of the {@code case}-label gap recovery, shape-independent the same way.
+     * <p>{@link #gapLineCommentsBefore(Node, Node, Collection)} bounds by {@link CommentIndex#liesBetween} (after the
+     * anchor ends), exact for a {@code case X:} label expression. A {@code default:} entry owns no label, so the only
+     * anchor is the entry itself, and a colon-to-body comment lies <em>inside</em> its range rather than after it — so it
+     * is dropped once a perturbation moves it onto the entry's orphan pool. This bounds by the entry's <em>begin</em>
+     * position instead (after the {@code default} keyword) and the body's begin, excluding the body's own leading comment
+     * and this entry's leading comments. The {@code default}-label counterpart of the {@code case}-label gap recovery.
      */
     List<JavaCommentTrivia> defaultLabelGapLineCommentsBefore(
             Node entry,
@@ -333,11 +286,10 @@ final class JavaCommentPlacementPolicy {
      * Returns the block comments JavaParser parked on the supplied {@code attachmentBuckets} that begin before
      * {@code boundary} in source order.
      *
-     * <p>Inline case-label block comments ({@code case REMOTE /* remote *}{@code /, HYBRID}) attach to a label expression
-     * as its own comment, or to the switch entry as an orphan, depending on layout. A caller that re-renders the label
-     * list from its raw commented token text needs the exact set of comments that text already prints, so it can mark them
-     * accounted without claiming any body comment that begins past {@code boundary} (the {@code ->}/{@code :} marker or the
-     * body statement). The query is source-order, so it selects the same set however whitespace lays the labels out.
+     * <p>An inline case-label block ({@code case REMOTE /* remote *}{@code /, HYBRID}) attaches to a label expression or
+     * the switch entry orphan pool by layout. A caller re-rendering the label list from raw token text needs the exact
+     * set that text prints, to mark them accounted without claiming a body comment past {@code boundary} (the
+     * {@code ->}/{@code :} marker or body). Source-order, so the set is stable however whitespace lays the labels out.
      */
     List<JavaCommentTrivia> blockCommentsBefore(Collection<? extends Node> attachmentBuckets, Node boundary) {
         return attachmentBuckets.stream()
@@ -353,23 +305,17 @@ final class JavaCommentPlacementPolicy {
      * Returns every comment (line <em>and</em> block) JavaParser parked on the supplied {@code attachmentBuckets} that
      * lies source-order strictly between {@code afterNode} and {@code body}, in source order.
      *
-     * <p>This is the {@link com.github.javaparser.ast.stmt.LabeledStmt LabeledStmt} leading-comment counterpart of
-     * {@link #gapLineCommentsBefore(Node, Node,
-     * Collection)}. A labeled statement's leading comments (the lines between {@code loop:} and the nested {@code for}/
-     * block) are reproduced verbatim at {@code @default} from the raw source slice between the {@code :} and the nested
-     * statement (see {@code StatementPrinter.labeledStatementLeadingComments}), which preserves author blank-line groups
-     * the AST cannot reconstruct. Under a whitespace collapse the same comments re-bucket onto the {@code LabeledStmt}
-     * orphan pool, the label {@code SimpleName}'s own comment, the nested {@link com.github.javaparser.ast.stmt.ForEachStmt
-     * ForEachStmt}'s own/orphan comments, and the single-line raw slice no longer exposes them as comment-only lines, so
-     * they are dropped. This query recovers exactly those re-bucketed comments by source position.
+     * <p>The {@link com.github.javaparser.ast.stmt.LabeledStmt LabeledStmt} leading-comment counterpart of
+     * {@link #gapLineCommentsBefore(Node, Node, Collection)}. A labeled statement's leading comments are reproduced
+     * verbatim at {@code @default} from the raw {@code :}-to-statement slice (see
+     * {@code StatementPrinter.labeledStatementLeadingComments}); a whitespace collapse re-buckets them onto the
+     * {@code LabeledStmt} orphans, the label's own comment, or the nested statement, where the single-line slice no longer
+     * exposes them. This recovers those by source position.
      *
-     * <p>Unlike {@link #gapLineCommentsBefore(Node, Node, Collection)} this query deliberately <em>keeps</em>
-     * {@code body}'s own comment: a labeled empty {@code for (...) {}} body is rendered as flat text that never emits the
-     * body node's own trivia, so the body-own slot is one of the buckets the leading comment can hide in. It also returns
-     * block comments, since labeled leading comments are mixed line/block. The query never claims; the caller applies its
-     * own raw-slice string dedupe before claiming each surviving comment by identity (which renders already-claimed
-     * comments empty), so the {@code @default} shape — where every such comment is already produced by the raw slice — is
-     * left byte-identical.
+     * <p>Unlike {@link #gapLineCommentsBefore(Node, Node, Collection)} it <em>keeps</em> {@code body}'s own comment (a
+     * labeled empty {@code for (...) {}} body never emits its own trivia, so that slot can hide the leading comment) and
+     * returns blocks too. It never claims; the caller's raw-slice dedupe before claiming keeps {@code @default}
+     * byte-identical.
      */
     List<JavaCommentTrivia> gapCommentsBetween(
             Node afterNode,
@@ -425,16 +371,13 @@ final class JavaCommentPlacementPolicy {
     /**
      * Returns orphan comments that do not start inside one of the supplied child node ranges.
      *
-     * <p>JavaParser may leave comments as parent orphans even when their source line belongs inside a child range. This
-     * query lets block-like printers keep those comments with the child renderer instead of hoisting them to the parent
-     * sequence.
+     * <p>JavaParser may leave comments as parent orphans even when their source line belongs inside a child range, so
+     * this lets block-like printers keep them with the child renderer instead of hoisting them to the parent sequence.
      *
-     * <p>A comment that merely <em>trails</em> a child — it begins on the child's end line but after the child's last
-     * token, e.g. {@code return; /* dead code *}{@code /} — is deliberately kept as a parent orphan rather than handed to
-     * the child. Statement printers recover only the trailing block comment that lives inside their own token range; a
-     * trailing comment JavaParser parked as a block orphan is in no statement's range, so excluding it here on the
-     * coarse line-range test alone would drop it entirely. Keeping it lets the block sequence render it after the
-     * statement, independent of whether source put it on the same line or the next one.
+     * <p>A comment that merely <em>trails</em> a child (begins on its end line but after its last token, e.g.
+     * {@code return; /* dead code *}{@code /}) is deliberately kept as a parent orphan: it is in no statement's own token
+     * range, so excluding it on the coarse line-range test would drop it entirely, whereas keeping it lets the block
+     * sequence render it after the statement.
      */
     List<JavaCommentTrivia> orphanCommentsOutsideChildRanges(Node node, Collection<? extends Node> children) {
         return orphanComments(node, comment -> children.stream().noneMatch(comment::isInsideNotTrailing));
@@ -451,12 +394,10 @@ final class JavaCommentPlacementPolicy {
      * Reports whether {@code node} contains any comments, the run-indexed answer to the cheap
      * {@code getAllContainedComments().isEmpty()} safety gate.
      *
-     * <p>This is the indexed gate that source-shape and compact-layout decisions ask before assuming a node can be
-     * reconstructed or kept on one line without losing comment content. The answer comes from the per-run
-     * {@link JavaCommentMap}, so it is only meaningful for original nodes from the current formatting run: an unknown
-     * detached or cloned node reports {@code false} because the run snapshot has no record of it (see
-     * {@link JavaCommentMap#containedComments(Node)}). Callers that may hold clones must keep their own JavaParser scan
-     * rather than route through this query.
+     * <p>Source-shape and compact-layout decisions ask this before assuming a node can be reconstructed or kept on one
+     * line without losing comment content. The answer comes from the per-run {@link JavaCommentMap}, so an unknown
+     * detached or cloned node reports {@code false} (see {@link JavaCommentMap#containedComments(Node)}); callers holding
+     * clones must keep their own JavaParser scan.
      */
     boolean hasContainedComments(Node node) {
         return !containedComments(node).isEmpty();
@@ -472,16 +413,11 @@ final class JavaCommentPlacementPolicy {
     /**
      * Finds line comments that sit in the source-order gap between two neighboring nodes inside {@code container}.
      *
-     * <p>This is the gap-between-siblings <em>ownership</em> query: which line comments belong to the slot between
-     * {@code previous} and {@code next} (call arguments, record components, resources, operands, …). It is deliberately
-     * source-order based (see {@link CommentIndex#liesBetween(Comment, Node, Node)}) rather than keyed on the
-     * {@code begin.line >= previous.end.line && begin.line < next.begin.line} source-line window the gap printers used
-     * before: that window broke when a whitespace perturbation moved a {@code arg(), // note} trailing comment onto the
-     * line below its argument even though the AST was unchanged, so the comment fell out of every sibling slot and was
-     * dropped. The source-order test is a strict superset at the {@code @default} shape — a comment genuinely on the gap
-     * lines selects the same owner under both — so re-pointing ownership here does not move {@code @default} output.
-     * Callers still own how a recovered comment renders (inline {@code lineSuffix} when it trails a sibling on the
-     * sibling's printed line versus on its own gap line); that rendering choice stays line-based at the call sites.
+     * <p>The gap-between-siblings <em>ownership</em> query (call arguments, record components, resources, operands, …),
+     * source-order based ({@link CommentIndex#liesBetween(Comment, Node, Node)}) rather than a {@code begin.line}-window:
+     * that window dropped a {@code arg(), // note} comment a perturbation moved onto the next line. Source order is a
+     * strict superset at {@code @default}, so it does not move that output. Callers still own
+     * inline-{@code lineSuffix}-versus-own-gap-line rendering.
      */
     List<JavaCommentTrivia> lineCommentsBetween(Node container, Node previous, Node next) {
         int previousLine = CommentIndex.endLine(previous, Integer.MIN_VALUE);
@@ -512,15 +448,11 @@ final class JavaCommentPlacementPolicy {
     /**
      * Finds block comments that sit in the source-order gap between two neighboring nodes inside {@code container}.
      *
-     * <p>This is the {@code /* ... *}{@code /} sibling of {@link #lineCommentsBetween(Node, Node, Node)}, for the
-     * between-operand slot of a binary chain. JavaParser parks an inline block comment that sits between two operands
-     * (e.g. {@code a /* note *}{@code / && b}) as the own comment of the operand that follows it, so the comment is
-     * {@code next}'s own trivia rather than a contained orphan of {@code container}; the gap query that recovers it must
-     * therefore union {@code next}'s own block comment with any block comment {@code container} holds as contained
-     * trivia. Both halves are filtered to the source-order gap (see {@link CommentIndex#liesBetween(Comment, Node,
-     * Node)}) so the query selects the same comment however whitespace lays the operands out. Like its line sibling the
-     * query never claims; the caller decides whether a recovered block comment trails {@code previous} on its printed
-     * line or stands on its own gap line.
+     * <p>The {@code /* ... *}{@code /} sibling of {@link #lineCommentsBetween(Node, Node, Node)}, for a binary chain's
+     * between-operand slot. JavaParser parks an inter-operand block ({@code a /* note *}{@code / && b}) as the following
+     * operand's own comment, so this unions {@code next}'s own block with {@code container}'s contained blocks, both
+     * filtered to the source-order gap ({@link CommentIndex#liesBetween(Comment, Node, Node)}). Never claims; the caller
+     * decides inline-versus-own-gap-line placement.
      */
     List<JavaCommentTrivia> blockCommentsBetween(Node container, Node previous, Node next) {
         return sourceOrderedDistinct(

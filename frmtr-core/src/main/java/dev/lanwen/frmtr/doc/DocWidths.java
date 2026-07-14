@@ -89,14 +89,11 @@ final class DocWidths {
          * "should this separator stay flat?". A fill keeps a separator flat when the separator together with the next
          * content still fits in the columns left on the current line, and breaks only that separator otherwise.
          *
-         * <p>This boundary exists so the rendering walk ({@link DocRenderer#render(Doc)}) and the {@code --explain}
-         * trace ({@link DocExplainRenderer}) ask the fit question through one place and cannot silently drift: both
-         * must advance their column cursor by the same flat/break choice or the explained layout would diverge from the
-         * emitted output. It centralizes only the correctness-relevant probe — the same {@link Doc#concat} of separator
-         * and next content against the same shared width authority. The caller still owns supplying its own remaining
-         * width (each renderer subtracts its own tracked column from the configured line width), mapping the returned
-         * boolean onto its own flat/break mode, and the per-step action that follows (emitting text versus recording a
-         * trace node).
+         * <p>Centralized so the rendering walk ({@link DocRenderer#render(Doc)}) and the {@code --explain} trace
+         * ({@link DocExplainRenderer}) ask the fit question through one place and cannot drift. It owns only the probe
+         * (the same {@link Doc#concat} of separator and next content against the shared width authority); the caller
+         * supplies its own remaining width, maps the boolean onto its flat/break mode, and takes the per-step action
+         * (emit text vs record a trace node).
          */
         boolean separatorFitsFlat(Doc separator, Doc nextContent, int remaining) {
             return fits(Doc.concat(separator, nextContent), remaining);
@@ -108,20 +105,16 @@ final class DocWidths {
 
         /**
          * Ranks a {@link Doc.BestFitting}'s alternatives by rendered line count at the live output column and returns the
-         * winning index (rule B8 + D16). This is the single decision {@link DocRenderer} and the {@link #measureLineCount}
-         * simulation both consult, so the alternative rendered for real is always the alternative the ranking measured —
-         * they cannot drift because there is one function, not two copies of the tie-break.
+         * winning index (rule B8 + D16). The single decision {@link DocRenderer} and the {@link #measureLineCount}
+         * simulation both consult, so the alternative rendered for real is always the one the ranking measured — one
+         * function, not two copies of the tie-break, so they cannot drift.
          *
-         * <p>Only the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} alternatives are measured (linear-time
-         * bound). Beyond {@link #MAX_BEST_FITTING_DEPTH} nested best-fitting levels the node is not ranked at all and
-         * collapses to its first (flattest) alternative, so total exploration stays bounded. The tie-break (D16) is
-         * strict and layered: a layout that fits (no line exceeds the width) beats any that overflows, no matter its line
-         * count; among the fitting candidates a strictly higher {@code priority} wins regardless of line count; within one
-         * fit-and-priority class an alternative wins only if it has <em>strictly fewer</em> lines, or equal lines and
-         * <em>strictly less</em> overflow. Equal fit, priority, lines, and overflow keeps the earlier (flatter)
-         * alternative, which makes the choice deterministic and therefore the reformat a fixpoint. The priority is a
-         * per-alternative static fact carried alongside each candidate's measured {@link LineCount}; see
-         * {@link #betterThan(LineCount, int, LineCount, int)}.
+         * <p>Only the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} alternatives are measured, and beyond
+         * {@link #MAX_BEST_FITTING_DEPTH} nested levels the node collapses to its first (flattest) alternative, keeping
+         * exploration linear. The layered D16 tie-break: fit (no line over width) beats any overflow regardless of line
+         * count; among fitting candidates a strictly higher {@code priority} wins; then strictly fewer lines, then
+         * strictly less overflow. Equal on all keys keeps the earlier (flatter) alternative, which makes the choice
+         * deterministic and the reformat a fixpoint. See {@link #betterThan(LineCount, int, LineCount, int)}.
          *
          * @param priorities the per-alternative priorities (same order as {@code alternatives}); higher wins among
          *     fitting candidates. All-equal (e.g. all-zero) reduces the ranking to the fewest-lines {@link LineCount}
@@ -149,16 +142,15 @@ final class DocWidths {
 
         /**
          * Whether candidate {@code (aCount, aPriority)} is strictly preferable to {@code (bCount, bPriority)} under the
-         * D16 tie-break extended with a per-alternative priority key (convergence-redesign Mechanism 2). The order is,
+         * D16 tie-break extended with a per-alternative priority key. The order is,
          * top to bottom: <strong>fit</strong> (a fitting layout always beats an overflowing one — {@link LineCount#fits});
          * then, <strong>among two fitting candidates only</strong>, a strictly higher {@code priority}; then fewer lines,
          * then less overflow (the {@link LineCount#betterThan} order).
          *
-         * <p>Placement is load-bearing: priority sits <em>after</em> the fit gate so it can never rescue an overflowing
-         * alternative (both must fit before priority is even consulted — the overflow gate stays primary), and
-         * <em>before</em> line count so a higher-priority fitting shape can win over a fewer-lines one. When priorities are
-         * equal (the default all-zero case, and the "neither fits" case where priority is not consulted) this reduces
-         * exactly to {@link LineCount#betterThan}, which is the byte-identity guarantee for callers that set no priority.
+         * <p>Placement is load-bearing: priority sits <em>after</em> the fit gate (so it can never rescue an overflowing
+         * alternative) and <em>before</em> line count (so a higher-priority fitting shape wins over a fewer-lines one).
+         * With equal priorities — the default all-zero case, and the neither-fits case — this reduces exactly to
+         * {@link LineCount#betterThan}, the byte-identity guarantee for callers that set no priority.
          */
         private boolean betterThan(LineCount aCount, int aPriority, LineCount bCount, int bPriority) {
             // Fit gate first: fitting dominates both priority and line count, so priority is only a tie-break among
@@ -174,19 +166,18 @@ final class DocWidths {
 
         /**
          * Counts the lines and overflow a document would render into at a given start column, without emitting anything
-         * or mutating this measurement's width cache. It is the ranking metric for {@link Doc.BestFitting} and a
-         * <em>side-effect-free mirror of {@link DocRenderer}'s rendering walk</em>: it reproduces the same newline, mode,
+         * or mutating this measurement's width cache. The ranking metric for {@link Doc.BestFitting} and a
+         * <em>side-effect-free mirror of {@link DocRenderer}'s rendering walk</em>, reproducing the same newline, mode,
          * {@link Doc.Fill} packing, {@link Doc.IfBreak}/{@code groupId}, {@link Doc.LineSuffix} flushing, and
-         * best-fitting selection so its line count equals the number of newlines the renderer emits. That equality is the
-         * load-bearing invariant, pinned directly by a congruence test ({@code measureLineCount(doc).lines()} ==
-         * newlines {@code render(doc)} emits) so the mirror can never silently drift from the renderer even though the
-         * two walks are separate code: the renderer emits text while this only accumulates counts, and unifying them
-         * would force the byte-identical hot path through a sink abstraction this foundation deliberately leaves intact.
+         * best-fitting selection. Its line count equalling the newlines the renderer emits is the load-bearing invariant,
+         * pinned by a congruence test so the mirror cannot silently drift from the renderer even though the two are
+         * separate walks (one counts, one emits text — unifying them would route the byte-identical hot path through a
+         * sink abstraction this foundation leaves intact).
          *
          * <p>The walk keeps its own scratch column, group-mode map, and line-suffix buffer — never the renderer's — so a
-         * ranking probe cannot perturb an in-progress render. Inner {@link Doc.Group} fit is answered through the shared
-         * memoized {@link #fits} cache (line counting is never written into that cache), and nested best-fitting nodes
-         * are resolved through the same {@link #chooseBestFitting} the renderer uses, under the same depth bound.
+         * ranking probe cannot perturb an in-progress render. Inner {@link Doc.Group} fit and nested best-fitting nodes
+         * are resolved through the same shared {@link #fits} cache and {@link #chooseBestFitting} the renderer uses, under
+         * the same depth bound.
          *
          * @return the number of newlines emitted and {@code Σ max(0, column - lineWidth)} accumulated at each newline and
          *     at end of the document
@@ -448,9 +439,9 @@ final class DocWidths {
      * total overflow past the line width. Used to rank {@link Doc.BestFitting} alternatives (rule D16): a layout that
      * fits (zero overflow) always beats one that overflows; among layouts of equal fit status the winner is the one with
      * strictly fewer lines, then strictly less overflow, then the earliest (flattest) on a tie. This is the
-     * <em>measured-width</em> half of the ranking only; the per-alternative priority key (convergence-redesign
-     * Mechanism 2) sits between the fit gate and line count and is applied by
-     * {@link Measurement#betterThan(LineCount, int, LineCount, int)}, which keeps {@code LineCount} a pure width fact.
+     * <em>measured-width</em> half of the ranking only; the per-alternative priority key sits between the fit gate
+     * and line count and is applied by {@link Measurement#betterThan(LineCount, int, LineCount, int)}, which keeps
+     * {@code LineCount} a pure width fact.
      */
     record LineCount(int lines, int overflow) {
 
@@ -466,17 +457,15 @@ final class DocWidths {
         /**
          * Whether this count is strictly preferable to {@code other} under the D16 tie-break.
          *
-         * <p>The <em>overflow gate</em> is the primary key (rule D16): a fitting layout (zero total overflow) is strictly
-         * better than any overflowing one, no matter how many fewer lines the overflowing one uses. Without this gate the
-         * line-count-first metric could keep an alternative whose first line already overruns the width simply because it
-         * renders in fewer lines, outranking an alternative that fully fits but wraps onto more lines — exactly the
-         * fan-out-versus-argument-break decision a printer needs to route through {@code bestFitting}.
+         * <p>The <em>overflow gate</em> is the primary key (rule D16): a fitting layout (zero total overflow) beats any
+         * overflowing one no matter how many fewer lines the latter uses. Without it the line-count-first metric could
+         * keep an alternative whose first line overruns the width just because it uses fewer lines, outranking one that
+         * fully fits but wraps — the fan-out-versus-argument-break decision a printer routes through {@code bestFitting}.
          *
-         * <p>Within one fit class the existing least-bad metric decides: fewer lines wins; on equal lines, less overflow
-         * wins. When both fit, overflow is zero for each, so the choice reduces to fewer lines. When neither fits the gate
-         * is a no-op and the fewest-lines / least-overflow order is unchanged. Equal lines and equal overflow is
-         * <em>not</em> strictly better, so an earlier alternative already chosen keeps its place — that strictness is what
-         * makes the ranking deterministic and the reformat a fixpoint.
+         * <p>Within one fit class: fewer lines wins, then less overflow (when both fit, overflow is zero so it reduces to
+         * fewer lines; when neither fits the gate is a no-op). Equal lines and overflow is <em>not</em> strictly better,
+         * so the earlier alternative keeps its place — that strictness makes the ranking deterministic and the reformat a
+         * fixpoint.
          */
         boolean betterThan(LineCount other) {
             // Overflow gate first: fitting dominates line count, so a layout that fits can never be outranked by one that

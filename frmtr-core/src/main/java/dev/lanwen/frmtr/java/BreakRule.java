@@ -21,7 +21,7 @@ import java.util.function.Predicate;
  * what lets this one abstraction host constructs whose layout needs more than a bare node without a leaky signature.
  *
  * <p>Keeping the rule a pure function of the candidate is what makes the chosen shape a fixpoint: the same candidate
- * yields the same verdict on every pass, so the model cannot reintroduce the source-shape oscillations the End-state A
+ * yields the same verdict on every pass, so the model cannot reintroduce the source-shape oscillations the reprint-by-width
  * cutover removed. {@link #matches} should therefore read only the candidate (AST-derived facts and positional context)
  * and not re-measure width or consult the author's source layout; {@link #layout} emits one source-neutral shape whose
  * flat-vs-broken fit is ranked by the renderer, not decided here.

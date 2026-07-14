@@ -114,13 +114,13 @@ final class ChainSegmentWidthLayout {
     /**
      * Estimates a chain segment's width when it is kept beside a preceding token on the same line.
      *
-     * <p>C10 (#217): deliberately left source-relative. The reconstruction — the name token's source column minus its
+     * <p>Deliberately left source-relative. The reconstruction — the name token's source column minus its
      * offset within the segment — recovers where the whole segment starts <em>beside its preceding token</em> (see
      * {@link #finalSegmentRenderedWidth}), a source-shaped position that depends on what shares the line, not on the
      * segment's own block/type nesting depth. {@link LayoutWidth#nodeIndentWidth} measures only that nesting depth and
      * so cannot express the beside-a-token column, which is why the one-per-line caller already routes around this via
      * {@code segmentOnOwnLine}. The source column remains the faithful estimate for the beside-a-token case; a correct
-     * rendered-column migration would need the same leading-offset machinery the root gates await (#190).
+     * rendered-column migration would need the same leading-offset machinery the root gates await.
      */
     int methodCallSegmentWidth(
             MethodCallExpr expression,

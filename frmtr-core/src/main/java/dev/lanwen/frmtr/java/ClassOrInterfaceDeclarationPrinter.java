@@ -264,14 +264,11 @@ final class ClassOrInterfaceDeclarationPrinter {
     /**
      * Renders a block comment that JavaParser parked as the leading own comment of a header clause's first type.
      *
-     * <p>A comment written between the declaration name and its {@code extends}/{@code implements}/{@code permits}
-     * keyword (for example {@code class Min/* note *&#47; implements Serializable}) attaches as the own comment of the
-     * clause's first {@link ClassOrInterfaceType} rather than to the name or the keyword. The clause text itself is
-     * rebuilt from the parsed type tree by {@code compactJoinTypeLike}, which never reads that comment, so without this
-     * hook the comment is silently dropped. Emitting it here, claimed once through {@link CommentTracker}, keeps the
-     * comment on the header line just before the clause keyword while leaving the clause text comment-free so the
-     * comment is rendered exactly once. Only the first type's leading comment is recovered, which is the name/clause
-     * boundary the surrounding header layout owns; later inter-type comments stay with the shared type-clause renderer.
+     * <p>A comment between the declaration name and its {@code extends}/{@code implements}/{@code permits} keyword
+     * ({@code class Min/* note *&#47; implements Serializable}) attaches to the clause's first {@link ClassOrInterfaceType},
+     * which {@code compactJoinTypeLike} never reads, so without this it is dropped. Emitting it here (claimed once) keeps
+     * it on the header line before the keyword. Only the first type's leading comment is recovered — the name/clause
+     * boundary the header layout owns; later inter-type comments stay with the shared type-clause renderer.
      */
     private Doc clauseLeadingBlockComment(NodeList<ClassOrInterfaceType> types) {
         if (types.isEmpty()) {

@@ -184,7 +184,7 @@ final class LambdaExpressionPrinter {
 
     Doc parenthesizedLambdaBreak(LambdaExpr expression) {
         String parameters = lambdaParameters(expression);
-        // Trivial-receiver first-selector attach (gjf/prettier-java, comment #3). A parenthesized lambda statement whose body
+        // Trivial-receiver first-selector attach (gjf/prettier-java). A parenthesized lambda statement whose body
         // is a fan-threshold chain rooted at a TRIVIAL RECEIVER keeps the root (and its already-attached first selector, from
         // {@code chainFanOut}) ANCHORED on the {@code ->} line — {@code (dispatchJob -> orderEvent.validateOrder()}⏎{@code
         // .deliveryPlan()}… — rather than breaking after the arrow. This mirrors the same anchor
@@ -297,14 +297,14 @@ final class LambdaExpressionPrinter {
         if (methodCallBodyWithOpener.isPresent()) {
             return methodCallBodyWithOpener.orElseThrow();
         }
-        // Canonical-fan cutover seam, the lambda-body ARROW position (SPIKE, #190). Checked BEFORE the body branches
+        // The canonical fan at the lambda-body ARROW position. Checked BEFORE the body branches
         // below ({@code methodCallBodyWithHeader} and the broken-after-arrow fallback) — because the oscillation it closes
         // is exactly those branches disagreeing across passes for a fan-carrying lambda body. A
         // {@code () -> admin.createTopics(...).all().get()} whose flat form does not fit could otherwise alternate between
         // break-after-{@code ->} ({@code () ->}⏎{@code admin}⏎{@code .createTopics(…)…}) and attach-root-to-{@code ->}
         // ({@code () -> admin}⏎{@code .createTopics(…)…}) depending on the body's rendered shape. Ranking two AST-derived
         // arms with {@code Doc.bestFitting} at the true rendered column makes the arrow verdict a fixpoint by construction:
-        // the U7 fan (root hugs the arrow, one selector per continuation line) is the attached arm, the same fan under an
+        // the fan (root hugs the arrow, one selector per continuation line) is the attached arm, the same fan under an
         // indented {@code ->} break is the broken arm, and {@code bestFitting} picks attach whenever the root fits after
         // {@code params -> } and break only when it overflows.
         //
@@ -352,7 +352,7 @@ final class LambdaExpressionPrinter {
         if (objectCreationBodyWithOpener.isPresent()) {
             return objectCreationBodyWithOpener.orElseThrow();
         }
-        // PR #279 review (#3/#4, arrow-hug rule): a method-call chain body whose receiver carries a BLOCK lambda
+        // PR #279 review (arrow-hug rule): a method-call chain body whose receiver carries a BLOCK lambda
         // ({@code Try.of(a, () -> { … }).getOrElseThrow(…)}, the {@code createInstance} shape) renders through the full
         // chain printer as {@code Try.of(a, () -> {}⏎ block ⏎{@code }).getOrElseThrow(…)} — a short opener head above an
         // already-multi-line block. Breaking the outer lambda after {@code ->} would orphan the arrow above that head, so
@@ -384,7 +384,7 @@ final class LambdaExpressionPrinter {
     }
 
     /**
-     * SPIKE (fan-root-true-column, #190). Makes the break-after-{@code ->} versus attach-root-to-{@code ->} verdict of a
+     * Makes the break-after-{@code ->} versus attach-root-to-{@code ->} verdict of a
      * fan-carrying expression-lambda body SOURCE-NEUTRAL by ranking two AST-derived shapes with {@link Doc#bestFitting} at
      * the true rendered column, so the two shapes cannot diverge across passes for a chain whose rendered body force-fans.
      *
@@ -393,7 +393,7 @@ final class LambdaExpressionPrinter {
      * <ul>
      *   <li><b>Attached</b> ({@code () -> admin}⏎{@code .createTopics(…)}⏎{@code .all()}⏎{@code .get()}): the header text
      *       {@code params -> } precedes the fan, so the chain root hugs the arrow line and the fan's own continuation indent
-     *       lays each selector one per line under it — byte-identical to the U7 hug shape.</li>
+     *       lays each selector one per line under it — byte-identical to the hug shape.</li>
      *   <li><b>Broken</b> ({@code () ->}⏎{@code admin}⏎{@code .createTopics(…)}…): the arrow breaks and the same fan renders
      *       under one continuation indent, byte-identical to the broken-after-arrow fallback's fanned body.</li>
      * </ul>
@@ -421,7 +421,7 @@ final class LambdaExpressionPrinter {
         }
         Doc fanDoc = fan.orElseThrow();
         Doc attached = Doc.concat(Doc.text(parameters + " -> "), fanDoc);
-        // Trivial-receiver first-selector attach (gjf/prettier-java, comment #3). When the body chain's root is a TRIVIAL
+        // Trivial-receiver first-selector attach (gjf/prettier-java). When the body chain's root is a TRIVIAL
         // RECEIVER, {@code chainFanOut} has already glued the first selector to the root ({@code orderEvent.validateOrder()}),
         // so the attached arm's opening line is just {@code params -> root.firstSelector()} — short by construction. The
         // maintainer's convention keeps such a body ANCHORED on the {@code ->} line rather than breaking after the arrow, so
@@ -1196,7 +1196,7 @@ final class LambdaExpressionPrinter {
      * ({@code params -> bodyCall(}⏎ body arguments ⏎{@code )}) — so a fanned chain selector whose sole argument is a
      * single-method-call-body expression lambda can hug its opener directly ({@code MethodCallChainPrinter}'s
      * {@code singleCallLambdaBodyOpenerHug}) when the shared {@code huggableMethodCallArguments} renderer handed back only the
-     * degenerate flat one-liner (review round 2, comment #3).
+     * degenerate flat one-liner.
      */
     Optional<Doc> expressionLambdaMethodCallBodyOpener(
             String parameters,
@@ -1225,7 +1225,7 @@ final class LambdaExpressionPrinter {
      * Exposes {@link ExpressionLambdaArgumentLayout#logicalBinaryLambdaBodyOpenerHug} — the source-neutral logical-binary
      * opener hug ({@code param -> <first operand>}⏎ each following {@code &&}/{@code ||} operand ⏎{@code )}) — so a fanned
      * chain selector whose sole argument is a logical-binary-body expression lambda can hug its opener with a dedented close
-     * ({@code MethodCallChainPrinter}'s {@code expressionBodyOpenerHug}, review round 3) instead of breaking the selector
+     * ({@code MethodCallChainPrinter}'s {@code expressionBodyOpenerHug}) instead of breaking the selector
      * parenthesis onto its own line.
      */
     Optional<Doc> expressionLambdaLogicalBinaryBodyOpenerHug(
@@ -1239,7 +1239,7 @@ final class LambdaExpressionPrinter {
     /**
      * Exposes {@link ExpressionLambdaArgumentLayout#plan} to the call and chain printers.
      *
-     * <p>D1g (#190) threads {@code layout} so the true continuation column is available to the lambda-hug admission gate.
+     * <p>D1g threads {@code layout} so the true continuation column is available to the lambda-hug admission gate.
      * It is not yet consulted (byte-identical); see the {@code plan} Javadoc for why the internal hug-renderer caller
      * keeps {@link LayoutContext#root()} while the return / assignment / initializer / single-segment-root positions
      * thread their real context.

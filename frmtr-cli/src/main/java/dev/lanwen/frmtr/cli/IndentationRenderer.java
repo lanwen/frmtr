@@ -27,7 +27,7 @@ import java.util.List;
  * level and a continuation offset are both just leading whitespace. This renderer therefore reads the per-line
  * structural signal on {@link IndentedSource} — the true indent <em>level</em> the formatter emitted at each newline,
  * which is tab-width-independent and which also flags text-block interior lines (whose leading whitespace is literal
- * program data, left untouched here save for the uniform-dot fallback of the pre-existing behavior).
+ * program data, left untouched here save for the uniform-dot fallback).
  *
  * <p>On top of that structural level signal it applies a <strong>heuristic</strong> for block-vs-continuation, because
  * the level alone does not name the construct: a line is treated as a <em>continuation</em> when its indent level rises
@@ -67,7 +67,7 @@ final class IndentationRenderer {
      * whitespace differs from {@code level} indent units (a block comment's {@code *}-alignment space) still emits one
      * glyph per character and never shifts a column. Non-structural lines (text-block interiors) and any line for which
      * no structural signal is available fall back to the uniform-dot rendering (one dot per leading whitespace
-     * character), which is the pre-existing behavior and leaves literal indentation legible without misclassifying it.
+     * character), which leaves literal indentation legible without misclassifying it.
      */
     static String render(IndentedSource source) {
         String text = source.text();
@@ -78,7 +78,7 @@ final class IndentationRenderer {
         int lineIndex = 0;
         // Block-vs-continuation is decided from the indent LEVEL (the reliable structural signal), but the glyphs are
         // laid over the ACTUAL leading-whitespace characters so the substitution never adds or drops a character — one
-        // glyph per leading whitespace char, exactly as the pre-existing behavior. previousStructuralIndentChars is the
+        // glyph per leading whitespace char. previousStructuralIndentChars is the
         // block-delta baseline (dots measure the delta vs the previous line as drawn); blockBaseline{Level,Chars} is the
         // enclosing statement a continuation aligns to; previousStructuralOpenedBlock is whether the line above ended
         // with an open brace, which opens a real block and resets the baseline even deep inside a continuation.

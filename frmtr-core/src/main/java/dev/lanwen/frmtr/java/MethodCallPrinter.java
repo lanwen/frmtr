@@ -1226,6 +1226,15 @@ final class MethodCallPrinter {
      *
      * <p>Text blocks already own their internal indentation, so grouping them like ordinary arguments makes trailing
      * comments and the closing parenthesis harder to place predictably.
+     *
+     * <p>Line/block comments in the argument gaps (a {@code // leading} before the block, a {@code // trailing} after the
+     * closing {@code """}) are preserved by {@link #textBlockArgument}, which renders them from the same source-ordered
+     * argument gaps and under the same ownership anchors as {@link CommentedExpressionListPrinter#parenthesized}, so a
+     * comment-bearing text-block call hugs the block instead of deferring to the broken argument list. The one exception
+     * is a text block that is an expression-lambda body: its placement re-derives the block's source column as raw text
+     * and has no argument-gap slot, so a comment-bearing lambda-body text block defers to the commented argument list
+     * (mirroring {@link TextBlockArgumentSourceLayout#expressionLambdaMethodCallBodyArguments}, which likewise declines
+     * the compact lambda-body path once the call carries comments).
      */
     private Optional<Doc> singleTextBlockArgument(String prefix, MethodCallExpr expression) {
         if (
@@ -1234,20 +1243,23 @@ final class MethodCallPrinter {
         ) {
             return Optional.empty();
         }
-        // A line comment sitting before or after the text-block argument (// leading / // trailing around the block)
-        // lives in the argument gaps, which this hug-the-block layout does not render. Defer to the commented argument
-        // list so the surrounding comment is preserved; without this it is dropped. The text block's own interior is
-        // string content, never a comment, so a plain text-block call still takes this compact path.
-        if (commentedExpressionLists.hasLineComments(expression, expression.getArguments())) {
-            return Optional.empty();
+        if (textBlockArguments.methodCallIsExpressionLambdaBody(expression)) {
+            if (commentedExpressionLists.hasLineComments(expression, expression.getArguments())) {
+                return Optional.empty();
+            }
+            return Optional.of(
+                Doc.concat(
+                    Doc.text(prefix + "("),
+                    textBlockArguments.expressionLambdaSourceMultilineArgument(textBlockLiteralExpr),
+                    Doc.HARD_LINE,
+                    Doc.text(")")
+                )
+            );
         }
-        Doc argument = textBlockArguments.methodCallIsExpressionLambdaBody(expression)
-            ? textBlockArguments.expressionLambdaSourceMultilineArgument(textBlockLiteralExpr)
-            : Doc.indent(Doc.concat(Doc.HARD_LINE, textBlockArgument(textBlockLiteralExpr, expression)));
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix + "("),
-                argument,
+                Doc.indent(Doc.concat(Doc.HARD_LINE, textBlockArgument(textBlockLiteralExpr, expression))),
                 Doc.HARD_LINE,
                 Doc.text(")")
             )
@@ -1537,14 +1549,33 @@ final class MethodCallPrinter {
         );
     }
 
+    /**
+     * Renders the hugged text-block argument with any argument-gap comments around it: leading gap comments each on
+     * their own line above the block, a same-line trailing comment deferred as a {@link Doc#lineSuffix} after the
+     * closing {@code """}, and any other after-block comment on its own line below.
+     *
+     * <p>The comments come from {@link CommentedExpressionListPrinter#singleArgumentHugGapComments}, which computes the
+     * gaps by source order and offers each under the same ownership anchor the parenthesized argument list uses, so the
+     * hug preserves the same comments the deferred list would — including on whitespace-perturbed shapes that float a
+     * comment off the block's own line, which the previous own-comment / same-line-orphan lookups could not see.
+     */
     private Doc textBlockArgument(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
-        Doc leading = comments.ownComment(textBlockLiteralExpr, LineComment.class::isInstance);
-        Doc literal = Doc.text(unformattedTextBlockRenderer.apply(textBlockLiteralExpr));
-        Doc trailing = textBlockSameLineTrailingComment(textBlockLiteralExpr, expression);
-        if (leading != Doc.EMPTY) {
-            return Doc.concat(leading, Doc.HARD_LINE, literal, trailing);
+        CommentedExpressionListPrinter.HugGapComments gaps =
+            commentedExpressionLists.singleArgumentHugGapComments(expression, expression.getArguments());
+        List<Doc> parts = new ArrayList<>();
+        for (Doc leading : gaps.leading()) {
+            parts.add(leading);
+            parts.add(Doc.HARD_LINE);
         }
-        return Doc.concat(literal, trailing);
+        parts.add(Doc.text(unformattedTextBlockRenderer.apply(textBlockLiteralExpr)));
+        for (Doc inlineTrailing : gaps.inlineTrailing()) {
+            parts.add(Doc.lineSuffix(Doc.concat(Doc.text(" "), inlineTrailing)));
+        }
+        for (Doc trailingLine : gaps.trailingLines()) {
+            parts.add(Doc.HARD_LINE);
+            parts.add(trailingLine);
+        }
+        return Doc.concat(parts);
     }
 
     Doc methodCallArgumentList(NodeList<Expression> arguments, Doc line) {
@@ -1779,16 +1810,6 @@ final class MethodCallPrinter {
                 ))
                 .forEach(sourceComments::add);
         return sourceComments;
-    }
-
-    private Doc textBlockSameLineTrailingComment(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
-        return expression.getOrphanComments()
-                .stream()
-                .filter(LineComment.class::isInstance)
-                .filter(comment -> CommentIndex.startsOnEndLine(textBlockLiteralExpr, comment))
-                .findFirst()
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
-                .orElse(Doc.EMPTY);
     }
 
     /**

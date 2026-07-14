@@ -117,6 +117,62 @@ final class CommentedExpressionListPrinter {
         );
     }
 
+    /**
+     * The argument-gap comments around a single argument that a specialized hug layout renders itself, already rendered
+     * to {@link Doc}s and classified for placement:
+     *
+     * <ul>
+     *   <li>{@code leading} — comments in the gap before the argument, each to be laid on its own line above it;
+     *   <li>{@code inlineTrailing} — comments that trail the argument on its own last line, each to be deferred as a
+     *       {@link Doc#lineSuffix} after it;
+     *   <li>{@code trailingLines} — the remaining after-argument comments, each on its own line below it.
+     * </ul>
+     */
+    record HugGapComments(List<Doc> leading, List<Doc> inlineTrailing, List<Doc> trailingLines) {}
+
+    /**
+     * Renders the argument-gap line and block comments around the single argument of {@code container} for a
+     * specialized hug layout that lays the argument out itself (the single text-block call), so the hug can keep those
+     * gap comments instead of deferring to the broken {@link #parenthesized} list.
+     *
+     * <p>The gaps are computed by SOURCE ORDER — not by source line — through the same {@link #argumentCommentGaps}
+     * this class's parenthesized list uses, and each comment is offered under the SAME ownership anchor: a leading gap
+     * comment (before the argument) under its own {@link OwnerSlot#INTERLEAVED} slot, a trailing gap comment (after the
+     * argument) under {@code container}'s {@link OwnerSlot#INTERLEAVED} slot. Sharing the gaps and anchors means comment
+     * ownership resolves identically whether the hug layout or the parenthesized list renders, so a whitespace
+     * perturbation that floats a comment off the block's own line cannot drop or duplicate it — the shape-dependent
+     * own-comment / same-line-orphan lookups the hug used before could not see such a moved comment, which is why the
+     * hug dropped it on collapsed/expanded shapes and had to defer to the parenthesized list.
+     *
+     * <p>Trailing comments are split exactly as {@link #parenthesized} splits them: a comment on the argument's own end
+     * line (or trailing it on that line, or contained by it) is {@code inlineTrailing}; every other trailing comment is
+     * a {@code trailingLine}. Requires {@code container} to hold a single argument.
+     */
+    HugGapComments singleArgumentHugGapComments(Node container, NodeList<Expression> arguments) {
+        List<List<JavaCommentTrivia>> commentGaps = argumentCommentGaps(container, arguments);
+        Expression argument = arguments.get(0);
+        List<Doc> leading = new ArrayList<>();
+        addCommentDocs(leading, commentGaps.getFirst());
+        List<Doc> inlineTrailing = new ArrayList<>();
+        List<Doc> trailingLines = new ArrayList<>();
+        for (JavaCommentTrivia comment : commentGaps.get(1)) {
+            Doc commentDoc = comments.comment(comment, container, OwnerSlot.INTERLEAVED);
+            if (commentDoc == Doc.EMPTY) {
+                continue;
+            }
+            if (
+                comment.startsOnEndLine(argument)
+                || comment.startsAfterNodeOnSameLine(argument)
+                || argumentContainsComment(argument, comment)
+            ) {
+                inlineTrailing.add(commentDoc);
+            } else {
+                trailingLines.add(commentDoc);
+            }
+        }
+        return new HugGapComments(leading, inlineTrailing, trailingLines);
+    }
+
     private Doc argumentLine(Expression argument, List<JavaCommentTrivia> trailingComments) {
         if (argument instanceof MethodCallExpr methodCall && hasInlineTrailingComment(argument, trailingComments)) {
             if (hasContainedCommentOutsideTrailingComments(argument, trailingComments)) {

@@ -413,7 +413,7 @@ final class BlockPrinter {
     private Optional<Doc> emptyBlockCommentContent(BlockStmt block) {
         List<JavaCommentTrivia> sourceComments =
             dedupByCommentIdentity(commentPlacement.orphanComments(block), commentPlacement.containedComments(block));
-        List<Doc> visibleComments = emptyBlockCommentDocs(sourceComments).stream()
+        List<Doc> visibleComments = emptyBlockCommentDocs(block, sourceComments).stream()
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
         return visibleComments.isEmpty() ? Optional.empty() : Optional.of(Doc.join(Doc.HARD_LINE, visibleComments));
@@ -450,17 +450,22 @@ final class BlockPrinter {
         return merged;
     }
 
-    private List<Doc> emptyBlockCommentDocs(List<JavaCommentTrivia> sourceComments) {
+    private List<Doc> emptyBlockCommentDocs(BlockStmt block, List<JavaCommentTrivia> sourceComments) {
         return sourceComments.stream()
                 .sorted((left, right) -> CommentIndex.sourceOrderComparator().compare(left.comment(), right.comment()))
                 // Under whitespace perturbation JavaParser can expose the same comment as an orphan of two adjacent empty
-                // blocks (e.g. an empty method body and an empty catch body whose ranges abut). The first empty block to
-                // render claims and places it; skip comments already printed so a neighboring empty block does not
-                // duplicate-claim them. Output is unchanged because the re-offer always lost the first-claim race and
-                // rendered empty. This is a skip of an already-claimed comment, not a speculative rollback, so it never
-                // drops the winning offer.
-                .filter(trivia -> !comments.isPrinted(trivia))
-                .map(comments::comment)
+                // blocks (e.g. an empty method body and an empty catch body whose ranges abut). Each empty block offers
+                // the comment under its own (block, INTERLEAVED) anchor — the slot that names "a comment interleaved
+                // inside this block". Anchoring to the block node rather than the comment's own node lets comment
+                // ownership disambiguate the two competing offers without a build-order isPrinted skip: the first empty
+                // block to render (in dry-run traversal order) records (thatBlock, INTERLEAVED) as the owner and places
+                // it; the neighboring empty block sees a different recorded owner, so ownsHere blocks its slot and
+                // comment(...) returns Doc.EMPTY (caught by the != Doc.EMPTY filter below). The block node is structurally
+                // distinct from the comment and from every other slot's anchor, so no other offer collides under this key.
+                // The source-comment list is already de-duplicated by comment identity in emptyBlockCommentContent, so the
+                // same comment is never offered twice under this shared key.
+                .map(trivia -> comments.comment(trivia, block, OwnerSlot.INTERLEAVED))
+                .filter(comment -> comment != Doc.EMPTY)
                 .toList();
     }
 

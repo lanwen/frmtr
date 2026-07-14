@@ -226,15 +226,24 @@ final class ChainCommentLayout {
             return Doc.EMPTY;
         }
         MethodCallExpr next = nextCall.orElseThrow();
-        // A comment that sits on the same physical line as this segment's close can also be the same-line final-trailing
-        // comment of an inner chain nested in this segment's lambda argument (the collapsed {@code .orElseThrow(...)) //
-        // note .orElseGet(...)} shape, where the inner chain's last call and this outer link share a line). That inner
-        // render runs first and already claimed it, so skip already-printed comments here to keep a single claim; output is
-        // unchanged because a re-offer of a printed comment only ever rendered empty.
+        // A between-segments gap comment is offered under the next segment's own INTERLEAVED anchor — the slot that names
+        // "a comment interleaved before this chain link". Anchoring to next rather than to the comment's own node lets
+        // comment ownership disambiguate the competing offers without a build-order isPrinted skip. A comment on the same
+        // physical line as this segment's close can also be the same-line final-trailing comment of an inner chain nested
+        // in this segment's lambda argument (the collapsed {@code .orElseThrow(...) // note .orElseGet(...)} shape, where
+        // the inner chain's last call and this outer link share a line): that inner render runs first and claims it under
+        // its own (innerFinalCall, INTERLEAVED) slot, while previous's argument-list render claims a comment inside
+        // previous's args under (previous, INTERLEAVED). Both are different keys from (next, INTERLEAVED), so ownsHere
+        // blocks this slot and comment(...) returns Doc.EMPTY here (caught by the != Doc.EMPTY filter). next is chosen as
+        // the anchor precisely because the gap comment always sits structurally before next, so no offer from next's own
+        // subtree competes for it under this key — unlike previous, whose argument-list render shares the (previous,
+        // INTERLEAVED) key and would double-render the same comment through the idempotent-by-owner re-claim branch. A pure
+        // gap comment no neighbor claimed is owned here and placed by this slot. The candidate stream is de-duplicated by
+        // comment identity inside trailingLineCommentsBeforeNextSegment, so the same comment is never offered twice under
+        // this shared key.
         List<Doc> sourceComments = trailingLineCommentsBeforeNextSegment(expression, next)
                 .stream()
-                .filter(trivia -> !comments.isPrinted(trivia))
-                .map(comments::comment)
+                .map(trivia -> comments.comment(trivia, next, OwnerSlot.INTERLEAVED))
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
         return sourceComments.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), sourceComments);

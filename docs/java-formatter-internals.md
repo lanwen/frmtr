@@ -70,6 +70,17 @@ dispatcher or printer have selected a declaration, statement, or expression cate
 AST node while callers still own pragma state, comment attachment, raw-source recovery, compact fallback policy, and
 context selection.
 
+`LayoutContext` is the immutable positional context threaded into every rule (`JavaFormatRule<N>` is
+`(node, LayoutContext) -> Doc`). It separates three concerns that would otherwise blur together: run-scoped services
+live on `JavaFormatContext`, per-node-*type* dispatch lives on the dispatchers, and the per-node *positional* facts — the
+ones the node's own IR cannot see — live here. It carries the same-line `leftEdgePrefix` ahead of the node (an
+assignment target, `return `, a declarator `name = `), the `trailingContent` a caller glues after it (a header's ` {` or
+`;`), the `enclosing` construct, and whether the line is already committed to a `leadingBreak`. So a width gate can
+measure the node's first line at its true rendered column instead of inferring the prefix from a stale source column. It
+is never stored as a field and never mutated: a descent that wants a different position derives a fresh value, and
+trying a candidate layout is just calling a rule with a derived context and discarding the result, so there is nothing
+to roll back.
+
 The main envelope and dispatcher boundaries are:
 
 - `StatementRuleEnvelope`: applies the outer statement pragma, raw, and comment gate before formatted statement content
@@ -114,133 +125,73 @@ render.
 
 ## Expression Printers
 
-Expression printers own layout decisions after `ExpressionDispatcher` selects a concrete expression kind:
+Expression printers own layout decisions after `ExpressionDispatcher` selects a concrete expression kind. The per-kind
+owner/helper enumeration is the [formatter-coverage.md](formatter-coverage.md) expression and shared-layout-helper
+tables; this section keeps only the cross-cutting rationale a table cannot express.
 
-- `AssignmentExpressionPrinter`: assignment wrapping, full-expression-statement width gates, suffixed enclosed values,
-  binary-value continuations, method-call and conditional assignment hooks, and nested assignment continuations.
-- `ReturnExpressionPrinter`: return-value wrapping after statement dispatch selects `return value;`.
-  `ReturnBinaryExpressionLayout` owns direct binary return layout, including method-call-left return continuations and
-  the choice to keep source-multiline method-call arguments with normal expression rendering. Return-specific constructor
-  source-shape policy is delegated to `ObjectCreationLayoutPolicy`.
-- `ConditionalExpressionPrinter`: ternary layout for assignment values, variable initializers, comments around `?` and
-  `:`, nested conditional branches, and binary condition wrapping.
-- `LambdaExpressionPrinter`: expression versus block bodies, parenthesized lambdas, broken logical bodies, and lambda
-  arguments that can be hugged by method calls or object creation. A single comment-carrying expression-lambda argument
-  hugs the call opener (`call(param ->` stays on one line) with the comment(s) and body indented beneath it and the call's
-  closing parenthesis collapsed onto the body's last line, rather than breaking the lambda onto its own indented line with
-  a stacked closer; `huggedGapCommentedLambdaBody` exposes the gap-comment-and-body fragment so the chain printer can reuse
-  the same hugged shape. `LambdaParameterHeaderLayout` owns the canonical
-  parameter/header rendering used by lambda and call layouts: parameter parentheses, commented parameter reconstruction,
-  width-triggered header breaks, and source-multiline parameter detection. `ExpressionLambdaArgumentLayout` owns the
-  call-argument side of expression lambdas: shared eligibility, first-line/body-opener planning, and packed method-call
-  or constructor bodies for call and chain printers. `ExpressionLambdaClosingLayout` owns source-shaped call-closing
-  placement for simple logical expression-lambda bodies, and `PackedLambdaBody` carries the selected body doc with that
-  closing placement. `SourceMultilineLambdaCallLayout` owns source-multiline expression lambda method-call bodies and
-  block-lambda parameter lists that were already multiline in source.
-- `MethodCallPrinter`: ordinary method-call argument-list rendering, empty argument comments, commented argument-gap
-  fallback lists, over-wide binary arguments, and suffixes on enclosed scopes. `TextBlockArgumentSourceLayout` owns the
-  source indentation recovery for text-block arguments that appear inside expression-lambda method-call bodies; ordinary
-  text-block literal content remains with `TextBlockPrinter`.
-  `BreakableArgumentExpressionPrinter` owns the shared break policy for method-call arguments whose expression form must
-  stay broken, including over-wide or source-multiline binary string concatenations reused by initializer and
-  try-resource opener paths. `ArgumentHeaviness` owns the structural (source-shape-free) predicate that forces a
-  call/constructor argument list to break one-per-line even when it fits — a constructor with five or more arguments, or
-  any list that both nests a call/constructor argument and reaches the nested-token threshold — which the method-call,
-  object-creation, and `super(...)`/`this(...)` printers compose with their width-driven groups (via `Doc.BREAK_PARENT`)
-  and which also suppresses the block-lambda hug when a sibling argument carries a heavy constructor root.
-  `MethodCallChainPrinter`
-  owns chain doc assembly: chain comments including same-line comments between chained calls and leading line-comment
-  clusters before chained segments, source-multiline first-segment lambda call attachment via
-  `SourceMultilineLambdaCallLayout`, source-multiline single-object-creation call statements, field-root fluent-chain
-  preservation for already-multiline statement chains, compact-root plus broken-final-segment calls, root promotion, and
-  final-segment tails. When a chain's only break-forcing comment is carried inside the final call's expression-lambda
-  argument (`manifest.routes().forEach(route -> route.parcels().forEach(parcel -> // note merge(...))))`), the head links
-  pack flat, each comment-carrying lambda hugs its selector line, and the closing parentheses collapse; an inter-link
-  comment between head links (the `Optional.of(x) // note .map(y)` shape) instead keeps the one-per-line layout with the
-  comment preserved above its segment.
-- `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
-- `EnclosedSuffixDispatcher`: the bridge used when a broken enclosed expression may need a method-call or
-  method-reference suffix preserved.
-- `TextBlockPrinter`: value-preserving text-block rendering. It reproduces the literal from its source token verbatim so
-  the JLS-computed `String` value (escapes, significant whitespace, blank lines) is never changed; it intentionally does
-  not recognize or reformat embedded languages, because that would change the literal's runtime value.
-- `ObjectCreationPrinter`: constructor-call prefixes, comments around `new` and created types, forced constructor
-  argument breaks selected by `ObjectCreationLayoutPolicy`, generic type-body breaks, huggable lambda arguments, commented
-  constructor argument gaps, and anonymous class body member sequencing.
-- `ArrayExpressionPrinter`: array access, array creation, array initializer braces, compact literal initializer
-  acceptance, array-creation type breaks, forced initializer breaks, and initializer comments.
-- `AnnotationExpressionPrinter`: marker, normal, and single-member annotation shapes, annotation member pairs, compact
-  annotation text, raw string-literal tokens inside compact annotation values, annotation array member values including
-  line comments between values, trailing line comments, and binary annotation-value continuations. An annotation that is
-  an annotation-array element leaves its trailing line comment to the array-element slot rather than baking it inline, so
-  the element-separator comma is emitted before the comment (`@Elem(...), // note`) and is not swallowed by the `//`.
-- `BinaryExpressionPrinter`: binary flattening, operator position, line comments before and between broken operands,
-  precedence parentheses, end-position method-call operand breaks, and cast-division continuation decisions.
-- `CastExpressionPrinter`: cast type layout, line-width-aware intersection and generic type-body breaks, operand rendering,
-  and nested cast depth checks.
-- `EnclosedExpressionPrinter`: parenthesized expression layout and broken enclosed scopes that keep array, method-call,
-  and method-reference suffixes attached.
-- `InstanceOfExpressionPrinter`: instance-check continuations and binary-operator-position-aware placement.
-- `FieldAccessPrinter`: dotted field access and comment-sensitive name splitting.
+`ArgumentHeaviness` is the structural (source-shape-free) predicate that forces a call/constructor argument list to break
+one-per-line **even when it fits** — a constructor with five or more arguments, or any list that both nests a
+call/constructor argument and reaches the nested-token threshold. The method-call, object-creation, and
+`super(...)`/`this(...)` printers compose it with their width-driven groups via `Doc.BREAK_PARENT`, and it also
+suppresses the block-lambda hug when a sibling argument carries a heavy constructor root. Being a structural break rather
+than a width read, the shape is a fixpoint regardless of how the author wrote the arguments.
+
+`MethodCallChainPrinter` composes the chain-split `*Layout` helpers — `ChainFanLayout` (the
+canonical-fan break-rule registries and fan builders), `ChainCommentLayout`, `ChainSelectorLambdaLayout`,
+`ChainSegmentWidthLayout`, `ChainSegmentPaddingLayout`, `PackedMethodCallChainLayout`, and
+`MixedFieldMethodCallChainLayout` — alongside `MethodCallChainSourcePlanner`, delegating chain doc assembly to them while
+keeping its own comment-claim traversal. Every fan-admission predicate is a pure function of the AST (no source-shape
+read, no width re-measure); the fan shape is built once and *ranked against* the compact/attached alternative by the
+renderer at the true column, which is what makes the fanned shape a fixpoint across passes rather than a
+source-shape-sensitive per-printer decision.
+
+`TextBlockPrinter` is value-preserving: it reproduces the literal from its source token verbatim so the JLS-computed
+`String` value (escapes, significant whitespace, blank lines) is never changed, and it intentionally does not recognize
+or reformat embedded languages, because that would change the literal's runtime value. This is the property the
+AST-equivalence check (below) leans on to compare text-block content by its JLS value.
 
 ## Declaration And Type Printers
 
 Declaration and type printers own Java declaration grammar after `BodyDeclarationDispatcher`, `StatementPrinter`, or
-`CompilationUnitPrinter` selects the declaration context:
+`CompilationUnitPrinter` selects the declaration context. The per-kind owner/helper enumeration is the
+[formatter-coverage.md](formatter-coverage.md) declaration table; two boundaries carry rationale a table cannot express.
 
-- `CompilationUnitPrinter`: whole-file layout for source-leading package comments, orphan comments, package
-  declarations, import sections, optional module declarations, formatter-pragma adjacency and separator rules between
-  top-level declarations, compact unnamed-class member expansion, and trailing orphan comments. Orphan comments before
-  the first type are split at the structural prologue boundary (the last line of the package/imports/module): comments at
-  or above it stay file-boundary content rendered before `package`, while a comment below the whole prologue and before
-  the first type is that type's detached leading documentation — a Javadoc JavaParser left unattached because a blank line
-  separated it from the type — and is rendered immediately above the first type instead of floated to the package
-  boundary. With no structural prologue the boundary collapses to the first-type line, leaving the file-boundary slot's
-  pre-existing behavior unchanged.
-- `PackageDeclarationPrinter` and `ImportDeclarationPrinter`: package and import line rendering while compilation-unit
-  ordering stays with `CompilationUnitPrinter` and import ordering stays with `ImportSortTransform`.
-  `PackageDeclarationPrinter` also renders package-level annotations (the `package-info.java` shape) through the shared
-  declaration-annotation path, stopping its raw source-leading-comment sweep before the first annotation so annotation
-  tokens are formatted structurally instead of dumped as raw text.
-- `ModuleDeclarationPrinter` and `ModuleBlockPrinter`: module headers, raw commented-module fallback selection,
-  structured directive layout, and module body sequencing.
-- `TypePrinter`: shared type-clause rendering, declaration type-parameter flat text, compact type-list joining, and
-  breakable generic type bodies.
-- `ClassOrInterfaceDeclarationPrinter`, `RecordDeclarationPrinter`, `EnumDeclarationPrinter`, and
-  `AnnotationDeclarationPrinter`: type-specific headers, record component type bodies, record full-header wrapping,
-  body starts, member sequencing handoffs, and type-specific recovery boundaries.
-- `FieldDeclarationPrinter` and `VariableDeclarationPrinter`: field and local variable declaration layout, declaration
-  prefixes, local-only declaration-prefix decisions, and handoff to `VariableInitializerLayout`.
-  `VariableInitializerLayout` owns shared initializer policy including equals-line cast type-body breaks, direct
-  block-lambda openers, object-creation-root method-call opener grouping through the canonical method-call argument-list
-  renderer, switch-expression body preservation, huggable block-lambda method-call initializers, first-statement comments
-  inside block-lambda method-call arguments, comments around `=`, and initializer-specific width fallbacks.
-- `CStyleArrayDeclarators`: the legacy C-style array declarator concern shared by the field, local-variable, and
-  initializer-layout printers. A declarator whose brackets are written after the name (`String filters[]`) is modeled by
-  JavaParser as an `ArrayType` whose token range spans the name, so the naive shared type prefix would re-emit the name
-  and produce non-compiling `String filters[] filters`. This helper instead shares only the element type as the
-  declaration prefix and re-emits each C-style declarator's brackets after its own name, keeping the brackets in their
-  original source position. That position is preserved (not normalized to `String[] filters`) because the AST-equivalence
-  guardrail's `EqualsVisitor` treats the two bracket origins as structurally different; preserving the position keeps the
-  output both valid and AST-equivalent, including mixed-array-level declarations such as `int rowSpan[], columnCount`.
-- `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
-  `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
-  callable parameter annotation prefixes, body-versus-semicolon suffixes, and initializer bodies.
-- `DeclarationPrefixPrinter`: leading annotation docs, comments between declaration-leading annotations, comments after
-  the final declaration-leading annotation before the annotated header, inline annotation text after modifiers,
-  declaration-annotation classification for member spacing, and canonical modifier ordering.
-- `MemberBlockPrinter`: already-rendered type member sequencing with orphan comments, opening-brace line comments, and
-  source-range-sensitive blank lines.
+`CompilationUnitPrinter` splits the orphan comments before the first type at the structural prologue boundary (the last
+line of the package/imports/module): comments at or above it stay file-boundary content rendered before `package`, while
+a comment below the whole prologue and before the first type is that type's detached leading documentation — a Javadoc
+JavaParser left unattached because a blank line separated it from the type — and is rendered immediately above the first
+type instead of floated to the package boundary. With no structural prologue the boundary collapses to the first-type
+line, leaving the file-boundary slot's behavior unchanged.
+
+`CStyleArrayDeclarators` is the legacy C-style array declarator concern shared by the field, local-variable, and
+initializer-layout printers. A declarator whose brackets are written after the name (`String filters[]`) is modeled by
+JavaParser as an `ArrayType` whose token range spans the name, so a naive shared type prefix would re-emit the name and
+produce non-compiling `String filters[] filters`. This helper shares only the element type as the declaration prefix and
+re-emits each declarator's brackets after its own name, keeping them in their original source position. The position is
+preserved (not normalized to `String[] filters`) because the AST-equivalence guardrail's `EqualsVisitor` treats the two
+bracket origins as structurally different; preserving it keeps the output both valid and AST-equivalent, including
+mixed-array-level declarations such as `int rowSpan[], columnCount`.
 
 ## Raw, Compact, And Comment Boundaries
 
 `SourceShapePolicy` is the single per-run home for "should the formatter respect the author's source shape here?"
-decisions, carried on `JavaFormatContext` and built once per run. It owns one canonical definition each of: whether a
-node was already multiline (`wasMultiline`, range-first with a raw-text fallback), whether the author left a blank line
-between source-adjacent nodes (`hadBlankLineBetween` / `hadBlankLineBefore`), whether a node's source-equivalent compact
-form fits on one line (`fitsOnOneLine`), whether a fluent-chain selector broke onto a later source line
-(`selectorBrokeAfter`), and whether a node carries contained comments that make a compact/source-shaped layout unsafe
-(`hasContainedComments`). The containment gate delegates to the run-indexed
+decisions, carried on `JavaFormatContext` and built once per run. It exists so a printer asks one named,
+intent-revealing question — never reconstructing source-shape logic inline against raw text or `getRange()` arithmetic —
+and so the formatter has exactly one definition, and therefore one fixpoint, per decision.
+
+frmtr's direction is **reprint from scratch** (`docs/proposals/reprint-by-default-break-rules.md`): the formatter does
+not preserve the author's line layout, so the only source-shape reads that survive are the *fixpoint-safe* ones whose
+answer the formatter's own output reproduces or canonicalizes. What remains on the policy is that small set: the
+width-fit gate (`fitsOnOneLine`), blank-line preservation (`hadBlankLineBetween` / `hadBlankLineBefore`), the
+contained-comments compact-safety gate (`hasContainedComments`), the logical control-condition shape
+(`logicalConditionExpression`), and the try-with-resources section shape (`tryResources`, returning a
+`TryResourcesShape`). The method-call / chain / object-creation / lambda hub reflows by width or by a
+structural `BreakRule`, so no "preserve the author's line breaks" read exists for it to observe. `SourceShapeException` is the
+closed enumerated registry of every permitted read (each tagged `FIXPOINT_SAFE` or `RETIREMENT_TARGET`), and
+`SourceShapeExceptionGovernanceTest` fails if an uncategorized policy method appears or if the pinned retirement-target
+count (zero) rises — an enforced "reprint by default, these exceptions only" contract.
+
+The containment gate delegates to the run-indexed
 `JavaCommentPlacementPolicy.hasContainedComments` rather than re-scanning JavaParser, so the formatter keeps one
 containment index; compact-source reconstruction that strips comments on clones (`CompactSourceText`) keeps its own
 direct `getAllContainedComments` scan, because the run index reports an unknown clone as comment-free and would change
@@ -248,11 +199,7 @@ which reconstruction path is taken. Raw recovery/fallback text generation is **n
 does not live behind the policy: printers that must emit a node's raw source for recovery or a fallback retrieve it from
 `RawSource` directly (the string forms `raw` / `rawWithoutOwnComment`), or from `RawPreservedSource` when that raw
 output also needs comment accounting. The policy deliberately does not absorb `SourceText` slicing,
-`RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them. The policy also owns the
-syntax-specific source-shape predicate surface directly (multiline argument lists, same-line starts, throws-clause and
-try-with-resources shape, method-call operand and logical-condition shape), all built on the one canonical
-`wasMultiline` definition, so a printer asks one source-shape object rather than reaching for the same "was this
-multiline?" answer two different ways.
+`RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them.
 
 `SourceShapeCouplingGuardTest` enforces the two patterns this consolidation drove to zero: no
 `rawSource....contains("\n")` multiline probe and no `previous.end.line + 1` blank-line gap arithmetic outside the
@@ -280,36 +227,35 @@ reconstruction for anonymous-class headers, generic delimiter spacing cleanup fo
 clone-before-comment-removal behavior. `LayoutWidth` centralizes the indentation baselines used for flat-width probes so
 statement, field, and chain helpers do not each recreate their own width arithmetic.
 
-`SourceShapePolicy`'s syntax-specific predicates preserve existing multiline forms when the structured formatter has an
-otherwise equivalent compact form. They use JavaParser node ranges first and bounded `SourceText` slices between
-neighboring AST-owned syntax, such as the first thrown exception line or the gap after the last try resource, rather
-than scanning an entire declaration or statement for delimiters and keywords. They cover method-call operands, nested
-source-multiline method-call arguments, and logical control-condition source shape. Printers still decide what doc to
-build after a shape predicate is true.
+The surviving syntax-specific reads (`tryResources`, `logicalConditionExpression`) use JavaParser node ranges first and
+bounded `SourceText` slices between neighboring AST-owned syntax, such as the gap after the last try resource, rather
+than scanning an entire declaration or statement for delimiters and keywords. Printers still decide what doc to build
+after a shape read is true; the read's fixpoint-safety is what lets that decision survive a reprint.
 
-A printer that consumes a source-shape predicate still owns whether preserving the author's shape is meaningful for that
-construct. The try-with-resources resource section illustrates the boundary: `StatementPrinter` keeps the
-`spansMultipleLines` predicate for a section that holds two or more resources (the author's one-resource-per-line layout
-is deliberate and stable), but for a single resource it collapses the section to flat whenever the flat `try (...) {}`
+A printer that consumes a source-shape read still owns whether preserving the author's shape is meaningful for that
+construct. The try-with-resources resource section illustrates why a surviving read is fixpoint-safe. `TryStatementLayout`
+(the try-statement cluster `StatementPrinter` delegates to) keeps the `tryResources().spansMultipleLines()` read for a
+section that holds two or more resources (the author's one-resource-per-line layout is deliberate and stable), but for a
+single resource it collapses the section to flat whenever the flat `try (...) {}`
 form fits the width. A single resource "spans multiple lines" only because its own initializer call was broken across
 lines, which is incidental to argument layout rather than a resource-section shape; honoring it would let each pass
 re-observe the prior pass's break and refuse the flat form forever, so the section flip-flops between the opener break and
 the attached-argument break (the issue #98 non-convergence). The collapse rebuilds the flat resource text through a
 comment-free declaration reconstruction (modifiers, type, and per-variable `name = compact(init)`) rather than
-token-text normalization, so a previously argument-broken declaration collapses with canonical interior spacing. Line
+token-text normalization, so an argument-broken declaration collapses with canonical interior spacing. Line
 comments that sit on the line directly above `try (` belong to the try statement, not the resource section, and the
 enclosing block already renders them before `try`; the in-section leading-comment gate filters comments that begin before
-the `try` keyword so the statement's own leading comment no longer forces the section to stay broken.
+the `try` keyword so the statement's own leading comment does not force the section to stay broken.
 
 `BinaryExpressionPrinter`'s broken-binary method-call operand break is the same boundary for argument layout (issue
 #119, the third wrap-convergence regime after #98/#117). When a binary is laid out one operator per line, whether a
 method-call operand keeps its argument list flat or explodes it is decided purely from the flat operand's width on its
 broken line — `methodCallOperandShouldBreak` and its siblings (`methodCallBinaryOperandShouldBreak`,
-`leadingOperatorMethodCallBinaryOperandShouldNest`, `shouldBreakEndPositionMethodCallOperand`) deliberately do **not**
-consult `SourceShapePolicy.methodCallArgumentsSpanMultipleLines`. A call's arguments "span multiple lines" only because
-the author broke them, which is incidental to argument layout rather than an operand-shape the binary renderer should
-preserve; honoring it let an exploded operand re-observe its own broken shape every pass, so identical operands in one
-chain rendered differently and near the width boundary the operand never settled. The width-only decision means the same
+`leadingOperatorMethodCallBinaryOperandShouldNest`, `shouldBreakEndPositionMethodCallOperand`) are width+AST-only and
+consult no source-shape read (they have no "were the call's arguments multiline?" read to reach for).
+Basing the break on whether the author broke the call's arguments would let an exploded operand re-observe its own broken
+shape every pass, so identical operands in one chain rendered differently and near the width boundary the operand never
+settled. The width-only decision means the same
 binary AST formats to one shape regardless of how the call's arguments were wrapped in source. (The comment-aware
 operand paths still route through the comment-between-operands queries, which are independent of this break decision.)
 
@@ -346,15 +292,36 @@ queries keep ordinary sibling gaps anchored to the next node's parser range and 
 only when JavaParser attaches a standalone line-comment cluster to the first child or container that visually precedes
 the code token.
 
-`CommentTracker` is the package-private per-run comment accounting helper for comments selected by
-`JavaCommentPlacementPolicy` as leading, adjacent-leading, trailing, or orphan comments. It renders comments through
-`JavaCommentTrivia`, stores raw-preserved comment marks supplied by `RawPreservedSource`, and exposes the debug-only
-end-of-compilation-unit assertion that all JavaParser-visible comments were either printed or raw-accounted.
+`CommentTracker` is the package-private per-run comment owner. Comments are trivia, not AST nodes, so more than one
+printer path can legitimately reach the same comment, and a naive build-order race can drop it or print it twice. The
+tracker settles that up front with a **record-only dry-run pre-pass**. `JavaPrinter.print(CompilationUnit)` runs the
+full print traversal once with the tracker in recording mode (`beginRecording`): each family (leading, adjacent-leading,
+trailing, own, orphan, interleaved) offers its comments, the tracker records the *first* `(node, slot)` to offer each
+comment into an identity-keyed `ownership` map, and the scratch document is discarded. It then resets the per-render
+state (`endRecordingAndReset` — keeping only the `ownership` map) and runs the real render. The `(node, slot)` key is an
+`OwnerKey`: an anchor `Node` compared by **reference identity** (not JavaParser's deep structural `equals`, so two
+syntactically identical comments stay distinct owners) paired with an `OwnerSlot` role — `LEADING`, `ADJACENT_LEADING`,
+`TRAILING` (plus the `CONTENT_TRAILING` / `ENCLOSED_TRAILING` / `UNATTACHED_TRAILING` variants that let an outer
+envelope, an inner content renderer, and an enclosing construct co-offer the same node's trailing comment without their
+keys colliding), `OWN`, `ORPHAN`, and `INTERLEAVED`. The dry-run deliberately records the *real-traversal* first
+claimant rather than a source-order approximation, because a pure source-order rule diverges from the emergent winner on
+the contested leading/own families; recording the true traversal owner is what keeps the two-pass model byte-neutral.
+
+The real render then routes every family through the **claim-neutral `ownedComment` rail**: a slot renders a comment
+only when the pre-pass recorded that exact `(node, slot)` as its owner, and every non-owner offer renders `Doc.EMPTY`.
+Because emptiness is a pure function of recorded ownership and the rail mutates no per-render "printed" state, an owner
+may emit the same comment through the rail in more than one eagerly-built ranked layout arm (`Doc.bestFitting` /
+`Doc.conditionalGroup`) without dropping or duplicating it — the renderer keeps only the arm it picks, and the losing
+arms' identical offer is harmless. Comment *text* rendering stays in one routine (`JavaFormatter.commentDoc`) keyed on
+the classified kind, so the rail decides only *whether* a comment renders in a given slot, never *how* it looks. The
+debug missed-comment guardrail is correspondingly keyed on the recorded-ownership set (plus the raw-preserved marks
+supplied by `RawPreservedSource`), because the recorded owner — not a printed flag — is now the evidence that a comment
+reached output.
 
 `JavaCommentKind` and `JavaCommentTrivia` classify JavaParser comments as line, block, Javadoc, Markdown (JEP 467 `///`
-documentation comments), or unknown trivia, expose reusable source-position queries through `CommentIndex`, and let
-`CommentTracker` preserve identity-based printed-comment claims without making printers repeat raw subclass and range
-checks. `MarkdownComment` is a JavaParser `JavadocComment` subclass, so it is classified before Javadoc and still answers
+documentation comments), or unknown trivia, expose reusable source-position queries through `CommentIndex`, and give
+`CommentTracker` the identity-based comment classification it keys ownership on without making printers repeat raw
+subclass and range checks. `MarkdownComment` is a JavaParser `JavadocComment` subclass, so it is classified before Javadoc and still answers
 `isJavadoc()` for documentation-placement decisions, but `JavaFormatter.commentDoc` renders it through the `///`
 line-comment family rather than the reflowing Javadoc path: a contiguous `///` run is one multi-line node whose
 continuation lines carry their original source indentation, so each line's leading whitespace is stripped and re-emitted
@@ -363,7 +330,7 @@ per format pass.
 
 `CommentIndex` centralizes read-only source-position classification for comments, including explicit-fallback begin/end
 line lookups, line/column comparisons, line-range containment, same-begin-line checks, source-order sorting, contained
-line-comment selection, and between-node comment gaps. It does not render comments or mutate printed-comment state.
+line-comment selection, and between-node comment gaps. It does not render comments or record comment ownership.
 
 ## Recovery Helpers
 

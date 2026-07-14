@@ -126,6 +126,13 @@ final class BinaryExpressionPrinter {
      * expression docs so precedence-sensitive parentheses remain local to the operand renderer. The nested continuation
      * form indents every line after the first; callers use it when a binary expression is already subordinate to another
      * expression, such as a ternary condition or parenthesized {@code a || (b && c)} operand.
+     *
+     * <p>Between-operand comments are interleaved by the shared {@link #brokenBinaryLines} builder rather than by a
+     * separate comment-aware preempt: once a chain carries a placement-relevant comment the builder offers each one on the
+     * operand boundary, so a binary forced to break by a lambda body, annotation member value, or method-call argument
+     * preserves its comments without a caller-side gate. The width-driven structural arms below (the wide instanceof
+     * split and the end-position method-call break) only fire for comment-free chains, matching the shapes those arms
+     * always produced.
      */
     private Doc lines(Expression expression, boolean forceBreak, boolean nestedContinuation) {
         if (!(expression instanceof BinaryExpr binaryExpr)) {
@@ -134,53 +141,43 @@ final class BinaryExpressionPrinter {
         if (!forceBreak && parenthesizedInnerWidth(compact.apply(binaryExpr)) <= options.lineWidth()) {
             return binaryExpression(binaryExpr);
         }
-        if (hasLineComments(binaryExpr)) {
-            return commentAwareLines(binaryExpr, nestedContinuation);
-        }
         List<Expression> operands = new ArrayList<>();
         flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
-        if (
-            binaryExpr.getOperator() == BinaryExpr.Operator.AND
-            && operands.size() == 2
-            && operands.getFirst() instanceof InstanceOfExpr instanceOfExpr
-            && parenthesizedInnerWidth(compact.apply(instanceOfExpr)) > options.lineWidth()
-        ) {
-            return Doc.concat(
-                rendering.render(instanceOfExpr),
-                Doc.text(" && "),
-                rendering.render(operands.getLast())
-            );
-        }
-        BinaryExpressionLine firstLine = binaryExpressionLine(binaryExpr.getOperator(), 0, operands.size());
-        if (
-            options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
-            && operands.size() == 2
-            && operands.getFirst() instanceof MethodCallExpr methodCall
-            && shouldBreakEndPositionMethodCallOperand(firstLine, methodCall)
-            && continuationStatementWidth.applyAsInt(
-                ") "
-                    + binaryExpr.getOperator().asString()
-                    + " "
-                    + compact.apply(operands.getLast())
-            ) <= options.lineWidth()
-        ) {
-            return Doc.concat(
-                brokenMethodCallRenderer.apply(methodCall),
-                Doc.text(" " + binaryExpr.getOperator().asString() + " "),
-                rendering.render(operands.getLast())
-            );
-        }
-        List<Doc> lines = new ArrayList<>();
-        for (int i = 0; i < operands.size(); i++) {
-            Expression operandExpression = operands.get(i);
-            BinaryExpressionLine binaryLine = binaryExpressionLine(binaryExpr.getOperator(), i, operands.size());
-            Doc operand = binaryExpressionLineOperand(binaryLine, operandExpression, nestedContinuation && i > 0);
-            if (shouldBreakEndPositionMethodCallOperand(binaryLine, operandExpression)) {
-                MethodCallExpr methodCall = (MethodCallExpr) operandExpression;
-                operand = brokenMethodCallRenderer.apply(methodCall);
+        boolean commentAware = hasLineComments(binaryExpr);
+        if (!commentAware) {
+            if (
+                binaryExpr.getOperator() == BinaryExpr.Operator.AND
+                && operands.size() == 2
+                && operands.getFirst() instanceof InstanceOfExpr instanceOfExpr
+                && parenthesizedInnerWidth(compact.apply(instanceOfExpr)) > options.lineWidth()
+            ) {
+                return Doc.concat(
+                    rendering.render(instanceOfExpr),
+                    Doc.text(" && "),
+                    rendering.render(operands.getLast())
+                );
             }
-            lines.add(binaryLine.format(operand));
+            BinaryExpressionLine firstLine = binaryExpressionLine(binaryExpr.getOperator(), 0, operands.size());
+            if (
+                options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
+                && operands.size() == 2
+                && operands.getFirst() instanceof MethodCallExpr methodCall
+                && shouldBreakEndPositionMethodCallOperand(firstLine, methodCall)
+                && continuationStatementWidth.applyAsInt(
+                    ") "
+                        + binaryExpr.getOperator().asString()
+                        + " "
+                        + compact.apply(operands.getLast())
+                ) <= options.lineWidth()
+            ) {
+                return Doc.concat(
+                    brokenMethodCallRenderer.apply(methodCall),
+                    Doc.text(" " + binaryExpr.getOperator().asString() + " "),
+                    rendering.render(operands.getLast())
+                );
+            }
         }
+        List<Doc> lines = brokenBinaryLines(binaryExpr, operands, nestedContinuation, commentAware);
         if (nestedContinuation) {
             List<Doc> nestedLines = new ArrayList<>();
             for (int i = 0; i < lines.size(); i++) {
@@ -583,39 +580,6 @@ final class BinaryExpressionPrinter {
     }
 
     /**
-     * Renders the comment-aware broken binary lines for the forced/nested continuation entry points, choosing the join
-     * policy that matches the comment-free {@code lines}/{@code nestedLines} shape it replaces.
-     *
-     * <p>The broken {@code lines(...)} path (taken once the fit branch is ruled out — i.e. the caller forced a break or
-     * the flat shape overflows) builds the comment-<em>stripped</em> layout: it flattens operands and emits one operand
-     * per line without ever consulting {@link #betweenOperandComments(BinaryExpr, Expression, Expression)}. Only the fit
-     * branch routes through {@link #binaryExpression(BinaryExpr)} and its comment gate, so a binary forced to break by a
-     * lambda body or annotation member value (callers that always pass {@code forceBreak}) dropped every between-operand
-     * comment. Routing the broken path through {@link #commentedBinaryLines(BinaryExpr)} here lets all such callers
-     * preserve those comments without each re-checking the gate, the same way the field-initializer and
-     * enclosed-expression callers already do via {@link #linesWithComments(BinaryExpr)}. The check sits after the fit
-     * branch so a flat-fitting binary still delegates to {@link #binaryExpression(BinaryExpr)}, which keeps the
-     * lone-immediate-left line-comment binary on its flat-with-continuation shape unchanged.
-     *
-     * <p>The two forms differ only in indentation: the top-level join ({@link #linesWithComments(BinaryExpr)}) places
-     * every line at the same column, while the nested-continuation form indents every line after the first — mirroring
-     * the comment-free {@code nestedContinuation} branch of {@code lines(...)} and the nested broken sub-chain shape in
-     * {@link #nestedMixedOperatorOperandDoc}.
-     */
-    private Doc commentAwareLines(BinaryExpr expression, boolean nestedContinuation) {
-        if (!nestedContinuation) {
-            return linesWithComments(expression);
-        }
-        List<Doc> commentedLines = commentedBinaryLines(expression);
-        List<Doc> nestedLines = new ArrayList<>();
-        for (int i = 0; i < commentedLines.size(); i++) {
-            Doc line = commentedLines.get(i);
-            nestedLines.add(i == 0 ? line : Doc.indent(Doc.concat(Doc.HARD_LINE, line)));
-        }
-        return Doc.concat(nestedLines);
-    }
-
-    /**
      * Renders a comment-bearing binary chain flat on a single line when every between-operand comment is an inline
      * {@code /* ... *}{@code /} block comment that trails its operand on the operand's own source line.
      *
@@ -697,22 +661,57 @@ final class BinaryExpressionPrinter {
     }
 
     /**
-     * Builds the comment-aware broken lines for a binary chain, in source order, with no enclosing join policy.
-     *
-     * <p>Both the top-level {@link #linesWithComments(BinaryExpr)} (which joins with {@link Doc#HARD_LINE}) and the
-     * nested-operand form {@link #nestedMixedOperatorOperandDoc} (which indents every line after the first to mirror the
-     * comment-free {@code nestedLines(binaryOperand, true)} continuation) share this builder so the operand and
-     * between-operand comment logic stays in one place.
+     * Builds the comment-aware broken lines for a binary chain, in source order, with no enclosing join policy, for the
+     * callers that always want the comment-aware operand rendering: {@link #linesWithComments(BinaryExpr)} (joins with
+     * {@link Doc#HARD_LINE}) and {@link #nestedMixedOperatorOperandDoc} (indents every line after the first to mirror the
+     * comment-free {@code nestedLines(binaryOperand, true)} continuation, and reaches this even for a comment-free but
+     * overflowing sub-chain, where the comment-offering steps are simply empty).
      */
     private List<Doc> commentedBinaryLines(BinaryExpr expression) {
         List<Expression> operands = new ArrayList<>();
         flattenBinaryExpression(expression, expression.getOperator(), operands);
+        return brokenBinaryLines(expression, operands, false, true);
+    }
+
+    /**
+     * Builds the operand-per-line docs for a broken binary chain — the single operand-per-line builder shared by the
+     * comment-free broken path and the comment-aware one the {@code hasLineComments} preempt used to reach through a
+     * separate early return.
+     *
+     * <p>When {@code commentAware} is false the chain carries no placement-relevant comments, so every comment-offering
+     * step is skipped and each operand renders through the width-breaking {@link #binaryExpressionLineOperand} (plus the
+     * end-position method-call break override) exactly as the comment-stripped broken path always did.
+     *
+     * <p>When {@code commentAware} is true the builder offers each before-first and between-operand comment through the
+     * shared ownership anchors ({@link #lineCommentsBeforeFirstOperand}, {@link #betweenOperandComments},
+     * {@link JavaCommentPlacementPolicy#commentsStartingOnEndLine}, {@link #commentDocs}) and renders operand bodies
+     * through the own-comment-stripping {@link #binaryLineOperandBody}. Stripping the operand's own comment is what keeps a
+     * between-operand block comment — which JavaParser parks as the following operand's own comment — from being emitted
+     * twice: once by the operand's own render and again on the operand boundary. The width-breaking
+     * {@link #binaryExpressionLineOperand} is intentionally not reused for this arm because its {@link #rendering} operand
+     * renders would re-emit that parked own comment, duplicating it.
+     */
+    private List<Doc> brokenBinaryLines(
+            BinaryExpr expression,
+            List<Expression> operands,
+            boolean nestedContinuation,
+            boolean commentAware
+    ) {
         List<Doc> lines = new ArrayList<>();
-        if (!operands.isEmpty()) {
+        if (commentAware && !operands.isEmpty()) {
             lines.addAll(commentDocs(lineCommentsBeforeFirstOperand(expression, operands.getFirst())));
         }
         for (int i = 0; i < operands.size(); i++) {
             Expression operand = operands.get(i);
+            if (!commentAware) {
+                BinaryExpressionLine binaryLine = binaryExpressionLine(expression.getOperator(), i, operands.size());
+                Doc operandDoc = binaryExpressionLineOperand(binaryLine, operand, nestedContinuation && i > 0);
+                if (shouldBreakEndPositionMethodCallOperand(binaryLine, operand)) {
+                    operandDoc = brokenMethodCallRenderer.apply((MethodCallExpr) operand);
+                }
+                lines.add(binaryLine.format(operandDoc));
+                continue;
+            }
             Doc operandDoc = binaryLineOperandBody(expression.getOperator(), operand);
             List<JavaCommentTrivia> between = i < operands.size() - 1
                 ? betweenOperandComments(expression, operand, operands.get(i + 1))
@@ -725,12 +724,12 @@ final class BinaryExpressionPrinter {
                 operands.size(),
                 sameLineComments
             );
-            between = between.stream()
+            List<JavaCommentTrivia> remaining = between.stream()
                     .filter(comment -> !sameLineComments.contains(comment))
                     .toList();
             lines.add(line);
             if (i < operands.size() - 1) {
-                lines.addAll(commentDocs(between));
+                lines.addAll(commentDocs(remaining));
             }
         }
         return lines;

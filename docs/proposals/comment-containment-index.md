@@ -2,6 +2,13 @@
 
 Status: Partially implemented; central `JavaCommentMap` indexing is implemented, while direct caller migration remains proposed.
 
+> **Remaining actionable work:** the performance payoff is still open — (1) replace `JavaCommentMap.from(unit)`'s
+> per-node `getAllContainedComments()` walk with a bottom-up, JavaParser-order-compatible index build, and (2) migrate
+> the direct `getAllContainedComments()` caller clusters (accounting paths, then existing-policy printers, then the
+> helpers that do not yet carry the policy) onto `JavaCommentPlacementPolicy` query methods. The boundary
+> (`JavaCommentMap` / `JavaCommentPlacementPolicy` / `CommentIndex` / `CommentTracker`) already exists; the steps below
+> are the remaining migration.
+
 ## Summary
 
 Speed up Java formatter checks by replacing repeated JavaParser recursive comment-containment scans with a

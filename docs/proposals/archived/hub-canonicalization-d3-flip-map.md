@@ -1,6 +1,8 @@
+> **Status: Implemented (consumed).** This per-read execution map was consumed by the D3 atomic flip (#279); all six `RETIREMENT_TARGET` source reads it catalogs are retired and the governance ratchet is terminal. Archived 2026-07-14; retained as a provenance record of the flip.
+
 # Hub Canonicalization: the D3 Atomic-Flip Map
 
-Status: 🔵 Execution guide for **D3** (the atomic flip) in
+Status: ✅ Implemented (consumed by #279) — execution guide for **D3** (the atomic flip) in
 [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md). This is the concrete,
 line-cited map of every remaining `RETIREMENT_TARGET` source read, its consumers, and the structural /
 renderer-measured replacement each needs — the input the D3 executor works from so the flip does not

@@ -18,11 +18,20 @@ investigation link out to a focused proposal in this directory.
 | ✅ Done | Landed on `main`. |
 | ⚪ Deferred | Intentionally parked. |
 
-**Overall status:** Active roadmap — several focused slices are implemented (**S3**, **S5**,
-**M2**, **M2a**, and **B2**'s Doc-IR primitives), **B3** and **M3** are in progress, and the
-remaining items stay proposed, investigating, accepted, or deferred as marked below. Focused
-investigation docs (linked below) continue to de-risk the highest-leverage items before broader
-implementation.
+**Overall status:** The big architectural arc has largely **landed**. The source-shape coupling was centralized
+(**B1**) and then inverted to reprint-by-default behind a closed, ratchet-guarded exception set (**B4**); the Doc IR
+was enriched (**B2**); the ranked-layout engine (`Doc.bestFitting`) shipped and the whole method-call / chain /
+object-creation / lambda **hub** was flipped to pure-AST + true-column measurement (the layout-decision-model,
+convergence-redesign, chain-path-unification, hub-canonicalization, and leftEdgePrefix-foundation efforts — now
+archived as implemented). **S3**, **S5**, **S6**, **S7**, **S8**, **S9**, and **M2/M2a** are done. The archived
+provenance records live in [`archived/`](archived/).
+
+What remains active: **B3** Layer 3 (real-world corpus harness), **M3**'s optional Gradle-native progress follow-up,
+**M4** (LSP), **M1** (benchmark discipline), the [printer-contract-inversion](printer-contract-inversion.md) Stage-3
+per-construct generalization (= the layout-decision-model's **LDM-4**), the
+[comment-containment-index](comment-containment-index.md) caller migration, the
+[cli-discovery](cli-discovery-lazy-ignore.md) ignored-directory pruning, and the still-proposed smalls (**S1**, **S2**,
+**S4**).
 
 ### Relationship to existing proposals in this directory
 
@@ -30,12 +39,13 @@ This roadmap sits alongside proposals the maintainer already started; several ma
 roadmap items and are cross-linked from the relevant sections:
 
 - [`formatter-owned-syntax-view.md`](formatter-owned-syntax-view.md) (held for architecture review)
-  — the broad version of **B1**; B1's `SourceShapePolicy` is proposed as its concrete first slice.
-- [`comment-containment-index.md`](comment-containment-index.md) (partially implemented) — a perf +
-  comment-handling effort that touches the same surface as **B1/B2**.
-- [`cli-discovery-lazy-ignore.md`](cli-discovery-lazy-ignore.md) (implemented) — already delivered
-  part of the discovery speed-up that **M3** builds on.
-- [`implemented/`](implemented/) — landed proposals (e.g. the native-image companion task).
+  — the broad version of **B1**; B1's `SourceShapePolicy` shipped as its concrete first slice.
+- [`comment-containment-index.md`](comment-containment-index.md) (partially implemented — the index
+  boundary landed; caller migration remains) — a perf + comment-handling effort on the **B1/B2** surface.
+- [`cli-discovery-lazy-ignore.md`](cli-discovery-lazy-ignore.md) (implemented; one guarded follow-up —
+  ignored-directory pruning) — already delivered part of the discovery speed-up that **M3** builds on.
+- [`archived/`](archived/) — implemented and superseded proposals retained as provenance records (e.g. the
+  native-image companion task, the S6–S9 audit smalls, B1/B2/B4, and the layout-engine cluster).
 
 ## Where frmtr stands today
 
@@ -48,23 +58,26 @@ The architecture is already strong:
 - A GraalVM native image, a Picocli CLI, and a Gradle plugin.
 - A glob-discovered, golden-file fixture suite.
 
-The biggest opportunities are therefore not "rewrite," but targeted leverage:
+The opportunities that framed this roadmap were targeted leverage, not a rewrite. Three of the four are now
+**largely addressed**:
 
-1. The **amount of original-source peeking** (`SourceShape`, `RawSource`, `CompactSourceText`,
-   "source-multiline" predicates) that makes output input-dependent and the code fragile.
-2. An **IR that cannot express** several things printers hand-roll today (trailing comments,
-   fill-wrapping, "break parent if any child breaks", conditional layouts).
-3. **No correctness safety net** beyond hand-written golden files — semantic-preservation is not
-   independently verified.
-4. **No performance or distribution story** to back a "fastest, everywhere" claim (no benchmarks,
-   sequential file processing, no editor integration).
+1. ~~The **amount of original-source peeking**~~ — **addressed.** Consolidated behind `SourceShapePolicy` (B1) and
+   then retired: the hub reprints by width behind a closed `SourceShapeException` set (B4); `SourceShapePolicy.wasMultiline`
+   is gone.
+2. ~~An **IR that cannot express** trailing comments, fill-wrapping, break-parent, conditional/ranked layouts~~ —
+   **addressed.** `LineSuffix`, `Fill`, `BreakParent`, `ConditionalGroup`, and `BestFitting` all landed (B2 + the
+   ranked-layout engine).
+3. ~~**No correctness safety net**~~ — **largely addressed.** AST-equivalence verify + an idempotence property test
+   over a perturbed corpus landed (B3 Layers 1–2); the real-world corpus harness (Layer 3) is the remaining piece.
+4. **The performance / distribution story is the main open frontier.** Multi-file parallelism + Gradle caching landed
+   (M3), but there is still no benchmark discipline (M1) and no editor integration (M4).
 
 ---
 
 ## 🟥 Big — architectural, high-leverage
 
 ### B1. Centralize source-shape coupling into one explicit policy
-**Status:** ✅ Done — `SourceShapePolicy` consolidation + shape-independent comment ownership landed; the comment-drop backlog is drained (`CommentPresenceDiagnosticTest.KNOWN_DROPS` empty). One residual, reassigned to B2 and now **underway**: the `strict-claims` guardrail stays off. B2's ownership consolidation has begun — Stage 1 migrated the trailing-line-comment family to an explicit pre-claim ownership pre-pass + `ownsHere` filter (output-neutral; the trailing family is the unique one a source-order rule reproduces byte-for-byte). The residual that still keeps strict-claims off is the not-yet-migrated traversal-order families (leading/adjacent/own/interleaved/orphan, where a pure source-order rule diverges ~12% on contested leading/own comments — the parent-interleaver-beats-child cases) plus the eager `Optional<Doc>` candidate-ladder probe re-claims; enabling strict-claims needs both all families migrated and claim-free probe rendering (the B2 conditionalGroup/lineSuffix migration). · _focused proposal:_ [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md) · _successor:_ [B4 / reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
+**Status:** ✅ Done (archived) — `SourceShapePolicy` consolidation + shape-independent comment ownership landed, and the residual `strict-claims` guardrail is now enabled by default as a CI gate (`strict-claims=true` in `frmtr-core/build.gradle.kts`) after the comment-ownership consolidation completed via the claim-neutral `ownedComment` rail (printer-contract-inversion Phases A–D). Successor **B4** then closed and retired the source-shape read set (`wasMultiline` grep = 0). · _focused proposal:_ [archived/source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) · _successor:_ [B4 / archived/reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md)
 
 > **Investigation finding:** ~115 distinct source-peeking call sites (26 `sourceShape.*`, 41
 > `rawSource.*`, 43 `compactSource.*`, 5 hand-rolled blank-line probes) answer the same few
@@ -72,14 +85,11 @@ The biggest opportunities are therefore not "rewrite," but targeted leverage:
 > slice = unify the "was this multiline?" definition. Positioned as the concrete first step of the
 > held `formatter-owned-syntax-view` proposal.
 >
-> **Closing note:** the consolidation is delivered — `SourceShapePolicy` and shape-independent
-> comment ownership landed, draining the comment-drop backlog. The only residual is enabling the
-> `strict-claims` guardrail, reassigned to B2, where the **ownership consolidation is now underway**:
-> Stage 1 migrated the trailing family to an explicit pre-claim ownership pre-pass + `ownsHere` filter
-> (output-neutral). strict-claims stays off until the remaining traversal-order families migrate (a
-> pure source-order rule reproduces trailing exactly but diverges on contested leading/own comments)
-> and the eager `Optional<Doc>` candidate-ladder probes render claim-free. See
-> `FormatterGuardrails.STRICT_CLAIMS_PROPERTY` and [comment-handling-findings.md](comment-handling-findings.md) bucket C.
+> **Closing note:** delivered end to end. `SourceShapePolicy` and shape-independent comment ownership landed; the
+> comment-ownership consolidation then completed via the claim-neutral `ownedComment` rail, so the `strict-claims`
+> guardrail (`FormatterGuardrails.STRICT_CLAIMS_PROPERTY`) is now enabled by default as a CI gate. Successor **B4**
+> carried the reads further — closing them into a ratchet-guarded `SourceShapeException` set and retiring the
+> `wasMultiline` family entirely.
 
 Formatting decisions currently read the original token layout in many places (`SourceShape`,
 `RawSource`, `CompactSourceText`, source-multiline predicates threaded through printers). Output
@@ -93,7 +103,7 @@ from reaching into raw source directly.
 - **Effort:** large, phased. Unblocks B2 and B3.
 
 ### B2. Enrich the Doc IR with the combinators printers are faking today
-**Status:** ✅ Doc-IR primitives done — all four primitives + group identity landed; consumer migration is limited (see outcomes). 🟢 Ownership consolidation underway — Stage 1 (trailing-comment family) landed via an explicit pre-claim ownership pre-pass + `ownsHere` filter (output-neutral); remaining families and probe-claim decoupling are the path to enabling `strict-claims`. · _focused proposal:_ [doc-ir-combinators.md](doc-ir-combinators.md)
+**Status:** ✅ Done (archived) — all four Doc-IR primitives + group identity landed (`LineSuffix`, `BreakParent`, `Fill`, `ConditionalGroup`, plus `BestFitting`); the chain-collapse goal was documented as not achievable/expressible (see outcomes). The separate ownership consolidation also completed — every comment family moved to the claim-neutral `ownedComment` rail and `strict-claims` is now a CI gate. · _focused proposal:_ [archived/doc-ir-combinators.md](archived/doc-ir-combinators.md)
 
 > **Outcome:** all four primitives — `LineSuffix`, `BreakParent`, `Fill`, `ConditionalGroup` — plus
 > the optional `Group`/`IfBreak` `groupId` landed on `main`, with renderer, width, debug, and
@@ -181,26 +191,23 @@ is why an earlier change silently dropped enum separators undetected. Add three 
 ---
 
 ### B4. Reprint by default: structural break rules + a closed source-shape exception set
-**Status:** 🔵 Proposed — successor to B1, sibling to the layout decision model. Flip the default from
-preserve-the-author's-shape to reprint-from-scratch: keep source-shape reads only as a closed,
-justified, ratchet-guarded `SourceShapeException` set; retire the `wasMultiline` family behind named
-structural `BreakRule`s (a pure-AST predicate + a source-neutral layout ranked at the true output
-column — the canonical fan #256 is the landed precedent); and attribute every break via `--explain`.
-Scopes out AST-changing rewrites; keeps the data-driven config surface reachable via a closed
-combinator vocabulary. · _focused proposal:_ [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
-· _execution plan for the hub:_ [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md)
-· _D3 atomic-flip map (per-read consumer/replacement guide):_ [hub-canonicalization-d3-flip-map.md](hub-canonicalization-d3-flip-map.md)
-· _post-flip true-column foundation (the residual `leftEdgePrefix` work; decisions ratified):_ [left-edge-prefix-foundation.md](left-edge-prefix-foundation.md)
+**Status:** ✅ Done (archived) — the default flipped from preserve-the-author's-shape to reprint-from-scratch: a closed,
+ratchet-guarded `SourceShapeException` set (terminal after #291/#293), the `wasMultiline` family retired behind named
+structural `BreakRule`s (#259/#260/#281), and the satellite + hub reads retired (#262–#266, hub atomic flip #279).
+· _focused proposal:_ [archived/reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md)
+· _execution plan for the hub:_ [archived/hub-canonicalization-atomic-rewrite.md](archived/hub-canonicalization-atomic-rewrite.md)
+· _D3 atomic-flip map (per-read consumer/replacement guide):_ [archived/hub-canonicalization-d3-flip-map.md](archived/hub-canonicalization-d3-flip-map.md)
+· _post-flip true-column foundation (leftEdgePrefix; F1–F8 landed):_ [archived/left-edge-prefix-foundation.md](archived/left-edge-prefix-foundation.md)
 
 The satellite constructs (params, throws, control-condition, ternary, enclosed-binary-operand,
-try-resource) landed as small verified commits. The method-call / chain / object-creation / lambda
-**hub** cannot — four corpus-proven attempts showed every partial retirement either oscillates (a
-width-driven level under a source-gated level) or over-widths (an approximate-column probe). The hub is a
-single **atomic** conversion to pure-AST + true-column, and
-[hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md) is the non-reverting
-plan for it: build the renderer-measured measurement substrate and structural residue gates
-byte-identically first, then flip the source-read gates all at once, validated against golden-independent
-corpus invariants (idempotence, AST-equivalence, comment parity, over-width) rather than goldens.
+try-resource) landed as small verified commits (#262–#266). The method-call / chain / object-creation / lambda
+**hub** could not be retired incrementally — four corpus-proven attempts each oscillated or over-widthed — so it was
+converted in a single **atomic** flip to pure-AST + true-column (#279), following
+[archived/hub-canonicalization-atomic-rewrite.md](archived/hub-canonicalization-atomic-rewrite.md): the
+renderer-measured substrate and structural residue gates were built byte-identically first, then the source-read gates
+were removed all at once, validated against golden-independent corpus invariants (idempotence, AST-equivalence, comment
+parity, over-width). The post-flip true-column foundation (leftEdgePrefix, LineBudget/widthBudget retirement) then
+landed as [archived/left-edge-prefix-foundation.md](archived/left-edge-prefix-foundation.md)'s F1–F8 slices.
 
 ---
 
@@ -229,7 +236,7 @@ or rendering dominates, which directs further optimization.
 - **Effort:** medium. Methodology-heavy, low risk.
 
 ### M2. Linear-time renderer (width memoization + bounded `fits`)
-**Status:** 🟢 Implemented · _focused proposal:_ [linear-time-doc-renderer.md](linear-time-doc-renderer.md)
+**Status:** ✅ Done (archived) · _focused proposal:_ [archived/linear-time-doc-renderer.md](archived/linear-time-doc-renderer.md)
 
 > **Investigation finding:** `render`'s `Group` case fires one `fits` per group, and `fits` calls
 > the unbounded `flatWidth` on every `Concat` child → overlapping subtrees re-measured with no
@@ -365,7 +372,7 @@ width authority with a `NO_FIT` sentinel (replacing the dual `-1`/`false` hard-l
 - **Serves:** maintainer-friendly. Landed as ~30 lines (net −10).
 
 ### S6. Atomic in-place writes for `--write` / `frmtrFormat`
-**Status:** ✅ Done — landed on `main` · _focused proposal:_ [atomic-in-place-writes.md](atomic-in-place-writes.md)
+**Status:** ✅ Done — landed on `main` · _focused proposal (archived):_ [archived/atomic-in-place-writes.md](archived/atomic-in-place-writes.md)
 
 `--write`/`frmtrFormat` overwrote source in place via a non-atomic truncate-then-write, so an interrupted write could
 leave a truncated or empty source file. **Now crash-safe:** `BestEffortAtomicFileWriter` writes a sibling `*.frmtr.tmp`,
@@ -376,7 +383,7 @@ means "replace failed, original intact."
 - **Serves:** correctness / data-loss. Isolated to `frmtr-tooling`.
 
 ### S7. Comment guardrail split + output-level comment-drop net in CI
-**Status:** ✅ Done — landed on `main` · _focused proposal:_ [comment-accounting-in-ci.md](comment-accounting-in-ci.md) · _evidence:_ [comment-handling-findings.md](comment-handling-findings.md)
+**Status:** ✅ Done — landed on `main` · _focused proposal (archived):_ [archived/comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md) · _evidence:_ [comment-handling-findings.md](comment-handling-findings.md)
 
 The single `debug.guardrails` toggle conflated an unreliable dup-claim fail-fast with the accounting checks; it was
 **split** so the dup-claim invariant sits behind an off-by-default `FormatterGuardrails.STRICT_CLAIMS_PROPERTY`. The
@@ -387,7 +394,7 @@ collapsed/expanded perturbations, with the S9 backlog as a documented `KNOWN_DRO
 - **Serves:** correctness, test discipline. Enables S9.
 
 ### S8. Opt-in `--verify` safety valve: refuse to overwrite non-equivalent output
-**Status:** ✅ Done — landed on `main` · _focused proposal:_ [verify-on-write-safety-valve.md](verify-on-write-safety-valve.md)
+**Status:** ✅ Done — landed on `main` · _focused proposal (archived):_ [archived/verify-on-write-safety-valve.md](archived/verify-on-write-safety-valve.md)
 
 The AST-equivalence check existed only as a debug toggle whose failure was mislabeled as an internal crash. **Now an
 opt-in valve:** `--write --verify` (CLI) → public `Frmtr.formatVerified` → `JavaFormatter.formatVerified` (seam `assertOutputEquivalentOrThrow`)
@@ -398,15 +405,16 @@ deferred. Pairs with S6 so `--write` is fully safe.
 - **Serves:** correctness / UX. Partially overlaps B3's surface.
 
 ### S9. Fix comment data loss
-**Status:** ✅ Done — all comment-drop cases fixed; `KNOWN_DROPS` empty · _focused proposal:_ [comment-data-loss.md](comment-data-loss.md)
+**Status:** ✅ Done — the ~42-case backlog is drained, each fix fixture-pinned · _focused proposal (archived):_ [archived/comment-data-loss.md](archived/comment-data-loss.md)
 
 The S7 net surfaced ~42 `(fixture, shape)` real comment drops. **All are now fixed** — concrete preservation fixes
 landed in `CompilationUnitPrinter` (file-orphan ordering), `SwitchPrinter` (orphan interleaving), and
 `CommentedExpressionListPrinter` (`lineSuffix` routing), plus the shape-dependent ownership recoveries across the
 control-condition/if, labeled-statement, try-resource, method-argument, switch, records/enums/conditionals, and
 member/interface-body clusters, pinned by fixtures like `block-orphan-method-call-comments`.
-`CommentPresenceDiagnosticTest.KNOWN_DROPS` is now **empty**: the S7 net is green over the full corpus plus every
-collapsed/expanded perturbation and bites on any new or stale entry.
+The S7 net is green over the full corpus plus every collapsed/expanded perturbation and bites on any new or stale
+entry. (`CommentPresenceDiagnosticTest.KNOWN_DROPS` now parks two later, unrelated D3-flip perturbation drops from the
+reprint-by-default hub flip — a different lineage, byte-identical to pre-flip behavior — not S9's original backlog.)
 
 - **Serves:** correctness / data-loss. Iterative; folds into B1/B2.
 
@@ -414,53 +422,64 @@ collapsed/expanded perturbation and bites on any new or stale entry.
 
 ## Suggested sequencing
 
-1. **S5 → M2** (cheap cleanup that unlocks the renderer speedup) and **B3 layer 1**
-   (AST-equivalence check — small, catches real bugs now). _S5 is done (`6e4f600a`); M2 is unblocked._
-2. **B2** — ✅ primitives landed. `lineSuffix` retired the comment machinery as planned (and pulled
-   **B1** along where the two intersect); `fill` adopted by the throws-clause printer.
-   `conditionalGroup`/`breakParent` landed too, but the method-chain `Optional<Doc>` collapse proved
-   not byte-identical or expressible, so `MethodCallChainPrinter`/`LayoutWidth` stay.
-3. **M1** in parallel (numbers are needed before/after B2/M2), then **M3 / M4** for the adoption and
-   speed story.
-4. Smalls (**S1–S4**) slot in anywhere; **S2 / S4** are quick user-facing wins.
+The original B1→B2→B3 / S5→M2 spine is **done**: B1/B2 landed, the ranked-layout engine + reprint-by-default hub flip
+retired the source-shape coupling and `LayoutWidth`, and B3 Layers 1–2 + M2/M2a shipped. What's left, roughly in
+priority order:
 
-The throughline: **B2 + B1 shrink the code and the bug surface, B3 lets you make those changes
-fearlessly, and M1–M4 turn a good formatter into the fastest one, everywhere.**
+1. **B3 Layer 3** — the real-world OSS corpus harness (the last correctness-net layer; the property test already runs
+   over perturbed fixtures).
+2. **M1** — a benchmark discipline (JMH + macro + competitive diff); the prerequisite for any "fastest" claim and for
+   validating M2/M3.
+3. **Printer-contract Stage 3 / LDM-4** — generalize the ranked output seam per construct (context→enum) so the
+   remaining mega-printers decompose. Enablers all landed.
+4. **M4** (LSP / editor integration) for adoption; the thin partial follow-ups (M3 Gradle progress, cli-discovery
+   pruning, comment-containment caller migration); and the still-proposed smalls **S1** (display width), **S2**
+   (`.editorconfig`), **S4** (pre-commit/Action/changed-hunks) — **S2 / S4** are quick user-facing wins.
+
+The throughline held: **B1/B2 shrank the code and bug surface, B4 inverted the source-shape coupling behind a closed
+exception set, B3 made those changes safe, and the remaining M-items turn a correct formatter into a fast, widely
+adopted one.**
 
 ---
 
 ## Focused proposals in this directory
 
-Drafted for this roadmap:
+### Active (in this directory) — proposed / investigating / partial
+
+| ID | Topic | Doc | Remaining work |
+| --- | --- | --- | --- |
+| B3 | Correctness safety net | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) | Layer 3 (real-world corpus harness) |
+| M1 | Performance follow-ups from JFR sampling | [performance-followups-from-jfr.md](performance-followups-from-jfr.md) | benchmark discipline (investigating) |
+| M3 | Parallelism + caching | [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md) | optional Gradle-native progress |
+| M4 | LSP / editor integration | [lsp-editor-integration.md](lsp-editor-integration.md) | whole feature (unimplemented) |
+| — | Printer-contract inversion (dissolve the callback mesh) | [printer-contract-inversion.md](printer-contract-inversion.md) | Stage 3 per-construct generalization |
+| B2/B3 | Layout decision model (LDM-1…LDM-5) | [layout-decision-model.md](layout-decision-model.md) | LDM-4 context→enum (LDM-5 mostly moot) |
+| — | Formatter-owned syntax view | [formatter-owned-syntax-view.md](formatter-owned-syntax-view.md) | held for architecture review |
+| — | Comment containment index | [comment-containment-index.md](comment-containment-index.md) | bottom-up index + caller migration |
+| — | Lazy `.gitignore` discovery | [cli-discovery-lazy-ignore.md](cli-discovery-lazy-ignore.md) | guarded ignored-directory pruning |
+| S7/S9 | Comment-handling findings (evidence record) | [comment-handling-findings.md](comment-handling-findings.md) | — (reference) |
+
+### Archived (implemented / superseded) — see [`archived/`](archived/)
 
 | ID | Topic | Doc |
 | --- | --- | --- |
-| B1 | Centralize source-shape coupling | [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md) |
-| B2 | Enrich the Doc IR | [doc-ir-combinators.md](doc-ir-combinators.md) |
-| B3 | Correctness safety net | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) |
-| M1 / M2a follow-up | Performance follow-ups from JFR sampling | [performance-followups-from-jfr.md](performance-followups-from-jfr.md) |
-| M2 | Linear-time renderer | [linear-time-doc-renderer.md](linear-time-doc-renderer.md) |
-| M3 | Parallelism + caching | [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md) |
-| M4 | LSP / editor integration | [lsp-editor-integration.md](lsp-editor-integration.md) |
-| S6 | Atomic in-place writes (implemented) | [atomic-in-place-writes.md](atomic-in-place-writes.md) |
-| S7 | Comment guardrail split + drop net (implemented) | [comment-accounting-in-ci.md](comment-accounting-in-ci.md) |
-| S8 | `--verify` safety valve (implemented) | [verify-on-write-safety-valve.md](verify-on-write-safety-valve.md) |
-| S9 | Fix comment data loss (implemented) | [comment-data-loss.md](comment-data-loss.md) |
-| S7/S9 | Comment-handling findings → B-work map | [comment-handling-findings.md](comment-handling-findings.md) |
-| B2/B3 | Context-dependent layout decision model (rank broken layouts; LDM-1…LDM-5) | [layout-decision-model.md](layout-decision-model.md) |
-| LDM-3 follow-up | Convergence redesign: source-neutral fan-out + opener-attachment ranking (unblocks #191/#221/#220) | [convergence-redesign.md](convergence-redesign.md) |
-| B4 | Reprint by default: structural break rules + closed source-shape exception set | [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md) |
+| B1 | Centralize source-shape coupling | [archived/source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) |
+| B2 | Enrich the Doc IR | [archived/doc-ir-combinators.md](archived/doc-ir-combinators.md) |
+| B4 | Reprint by default: structural break rules + closed exception set | [archived/reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md) |
+| — | Layout hub: atomic-rewrite plan | [archived/hub-canonicalization-atomic-rewrite.md](archived/hub-canonicalization-atomic-rewrite.md) |
+| — | Layout hub: D3 atomic-flip map | [archived/hub-canonicalization-d3-flip-map.md](archived/hub-canonicalization-d3-flip-map.md) |
+| — | leftEdgePrefix true-column foundation | [archived/left-edge-prefix-foundation.md](archived/left-edge-prefix-foundation.md) |
+| — | Convergence redesign (fan-out + opener-attachment ranking) | [archived/convergence-redesign.md](archived/convergence-redesign.md) |
+| — | Chain-path unification | [archived/chain-path-unification.md](archived/chain-path-unification.md) |
+| — | F2 / #190 object-creation-root column | [archived/f2-object-creation-root-column.md](archived/f2-object-creation-root-column.md) |
+| M2 | Linear-time renderer | [archived/linear-time-doc-renderer.md](archived/linear-time-doc-renderer.md) |
+| S6 | Atomic in-place writes | [archived/atomic-in-place-writes.md](archived/atomic-in-place-writes.md) |
+| S7 | Comment guardrail split + drop net | [archived/comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md) |
+| S8 | `--verify` safety valve | [archived/verify-on-write-safety-valve.md](archived/verify-on-write-safety-valve.md) |
+| S9 | Fix comment data loss | [archived/comment-data-loss.md](archived/comment-data-loss.md) |
+| — | GraalVM native-image companion task | [archived/frmtr-native-image-companion-task.md](archived/frmtr-native-image-companion-task.md) |
 
-Pre-existing, related:
-
-| Topic | Doc | Maps to |
-| --- | --- | --- |
-| Formatter-owned syntax view | [formatter-owned-syntax-view.md](formatter-owned-syntax-view.md) | B1 (broad form) |
-| Comment containment index | [comment-containment-index.md](comment-containment-index.md) | B1/B2 surface, perf |
-| Lazy `.gitignore` discovery | [cli-discovery-lazy-ignore.md](cli-discovery-lazy-ignore.md) | M3 (delivered part) |
-
-> Items without a dedicated doc — the smalls **S1–S5** (self-contained) — are specified inline above
-> and can be picked up directly. The audit-correctness smalls **S6–S9** each carry a dedicated doc (listed in the
-> "Drafted for this roadmap" table above), preserved as provenance records of already-shipped work.
-> **S5** (the recommended prerequisite for **M2** and **B2**) is ✅ **done** — landed on `main` in
-> `6e4f600a`.
+> Items without a dedicated doc — the smalls **S1–S5** (self-contained) — are specified inline above.
+> **S1**, **S2**, and **S4** are still 🔵 Proposed and can be picked up directly; **S3** and **S5** are ✅ done
+> (S5 landed on `main` in `6e4f600a`). The audit-correctness smalls **S6–S9** each carry a dedicated doc, now moved to
+> [`archived/`](archived/) (see the "Archived" table above) and preserved as provenance records of already-shipped work.

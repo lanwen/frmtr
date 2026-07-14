@@ -1,3 +1,5 @@
+> **Status: Implemented.** Landed on `main` (commit `76e0d704`) as `BestEffortAtomicFileWriter`, used by `FormatterRunner.writeFile`. Archived 2026-07-14; retained as a provenance record. The executor scaffolding (steps, drift/STOP conditions, done criteria) below is historical; see [Outcome](#outcome) for what shipped.
+
 # Atomic In-Place Writes for `--write` / `frmtrFormat`
 
 **Status:** Implemented (roadmap S6) — atomic temp-file + rename write-out in `BestEffortAtomicFileWriter`, used by `FormatterRunner.writeFile`; see [Outcome](#outcome) · Category: correctness / data-loss · Effort: S · Risk: LOW

@@ -1,6 +1,16 @@
 # Semantic-Preservation Safety Net: AST-Equivalence, Idempotence, and a Real-World Corpus
 
-Status: Layers 1-2 implemented; Layer 3 proposed
+Status: Layers 1-2 implemented; Layer 3 proposed — the live remaining work is Layer 3 only.
+
+> **Already landed (see the per-layer notes below for detail):**
+> - **Layer 1 — AST-equivalence verify** (`AstEquivalence` + `FormatterGuardrails.assertAstEquivalent`, gated by
+>   `dev.lanwen.frmtr.debug.verify`, on across the `frmtr-core` suite).
+> - **Layer 2 — idempotence property test** (`IdempotencePropertyTest` over the fixture inputs + whitespace
+>   perturbations + hand-written snippets; asserts idempotence + AST-equivalence + parse-stability).
+>
+> **Remaining actionable work: Layer 3 — the real-world OSS corpus harness** (a pinned, cached, opt-in CI job that
+> formats large external Java corpora and asserts parse-stability + idempotence + AST-equivalence per file). Everything
+> below Layer 3 is retained as the design record of the shipped layers.
 
 ## Summary
 
@@ -127,74 +137,10 @@ and must be sensitive to everything else: identifiers, literals (including their
 `0x1p-1` vs `0.5` is not silently "normalized"), operators, modifiers, type arguments, **the
 presence and count of enum constants and their separators**, statement order, etc.
 
-### Approach options
-
-**Option A — normalized re-print comparison (recommended).** JavaParser's `Node.equals` is a
-structural equality that already ignores `Range`/position and tokens but is sensitive to comments
-and to child ordering, so it cannot be used directly. Rather than fight it, normalize both trees and
-compare a canonical string:
-
-1. Parse input → `unitA`; parse output → `unitB` (same `ParserConfiguration` the formatter used).
-2. Clone both, strip all comments (`Node.getAllContainedComments()` + `removeComment`, or
-   `node.setComment(null)` while walking), and for imports, sort both unit's import lists with the
-   same comparator the formatter uses (`ImportSortTransform.FORMATTER_IMPORT_ORDER`) so the
-   deliberate reorder cancels out.
-3. Render each normalized tree with JavaParser's own concrete-syntax printer
-   (`LexicalPreservingPrinter` is *not* wanted here — use the default
-   `DefaultPrettyPrinter`/`node.toString()` with comments disabled), producing a canonical,
-   trivia-free string.
-4. Assert the two canonical strings are equal. On mismatch, emit a minimized diff for the failure
-   message.
-
-This is robust, easy to reason about, and reuses JavaParser's own structural notion. It is the same
-*technique* the existing fixture test already trusts for parse-stability (`FrmtrTest.latestJavaParses`
-re-parses output with a `JavaParser` at a fixed language level), extended from "does it parse" to
-"does it parse to the *same thing*."
-
-**Option B — recursive structural walk.** Write a dedicated comparator that walks both ASTs in
-lockstep, comparing node type + scalar properties, skipping comment children and treating import
-lists as sets. More precise control over which differences are "trivia," but more code to maintain
-and more places to get a new JavaParser node type wrong. Recommended only if Option A produces
-false-positives that cannot be normalized away.
-
-**Recommendation:** start with Option A. It is the smallest change that catches the enum class of
-bug, and its normalization steps (comment strip, import sort) are exactly the two known legitimate
-transforms.
-
-### Where to hook it
-
-Two hook points, serving different audiences:
-
-- **Inside the formatter, as a new opt-in verify mode in `Frmtr` / `JavaFormatter`** (recommended
-  primary hook). Add a system-property toggle parallel to the existing guardrail one — proposed
-  name `dev.lanwen.frmtr.debug.verify` (mirroring `FormatterGuardrails.ENABLED_PROPERTY =
-  "dev.lanwen.frmtr.debug.guardrails"`). When enabled, `JavaFormatter.format` would, after
-  `DocRenderer.render`, re-parse the result and run the Option-A comparison against the input tree it
-  already parsed (`parseResult.compilationUnit()` in `JavaFormatter.printDoc`, lines 65-84). On
-  mismatch, throw an `AssertionError` routed through the existing
-  `Frmtr.format` catch (`Frmtr.java:17`) so it surfaces as a `FormatterException.internal(...)` —
-  consistent with how guardrail `AssertionError`s already surface.
-
-  This belongs near `FormatterGuardrails` conceptually. Recommendation: add the check as a new method
-  on `FormatterGuardrails` (e.g. `assertAstEquivalent(CompilationUnit input, String output,
-  FormatterOptions options)`) so all "debug-only correctness invariants" live behind one boundary and
-  one enablement story, even though it needs its own toggle because re-parsing has real cost.
-
-- **As a test-only harness** for Layer 2 and Layer 3, so the corpus and property tests can call the
-  comparator directly without round-tripping a system property. Extract the Option-A normalization
-  into a small package-private/`testFixtures` class (proposed `AstEquivalence` in `frmtr-core`) that
-  both the runtime verify mode and the tests use.
-
-### Performance / when on
-
-Re-parsing doubles parse cost and adds a normalized re-print per file, so it must be **opt-in, never
-on by default** in `Frmtr.format`. Intended usage:
-
-- always on in `frmtr-core` unit/fixture tests (cheap at fixture scale; turn it on for
-  `FrmtrTest.formatsDiscoveredFixtureAndIsIdempotent` so every golden fixture is also AST-checked);
-- on in the Layer 3 corpus CI job;
-- available to developers via `-Ddev.lanwen.frmtr.debug.verify=true` while iterating on a printer;
-- off in the shipped CLI / Gradle plugin hot path.
+_The design detail that once specified how to build Layer 1 — Option A vs. B, the hook point, and the
+performance/when-on policy — is omitted here as historical; the shipped implementation (see the
+"Implemented" note above) took the structural `EqualsVisitor` comparison behind
+`dev.lanwen.frmtr.debug.verify`, on across the `frmtr-core` suite and off in the shipped hot path._
 
 ## Layer 2 — idempotence property test (implemented)
 

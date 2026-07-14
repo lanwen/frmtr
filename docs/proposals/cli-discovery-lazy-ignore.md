@@ -2,6 +2,12 @@
 
 Status: Implemented for CLI discovery; ignored-directory pruning remains a guarded follow-up.
 
+> **Remaining actionable work:** only the **guarded ignored-directory pruning** optimization (skip walking a directory
+> whose ignore rules cannot re-include descendants, when the CLI mode does not require exact ignored-file counts) —
+> deliberately deferred behind negation/summary-count tests. The headline lazy `.gitignore` loading shipped (commits
+> `47d2a1db`, `91318dfe`, `175a3cb8`); everything below is the design record for it, kept because the pruning follow-up
+> depends on it.
+
 ## Summary
 
 `frmtr-cli --check` currently pays a fixed project-root scan before it knows which selectors will be checked. On a large

@@ -1,7 +1,9 @@
+> **Status: Implemented.** Landed on `main`: the `BreakRule` model (#259/#260), the closed `SourceShapeException` set + ratchet (#261, terminal after #291/#293), the `MethodCallChainPrinter` split (#281), and the reprint-by-default read retirement (satellites #262–#266, hub atomic flip #279). `SourceShapePolicy.wasMultiline` is gone (grep = 0). Archived 2026-07-14; retained as a provenance record. The data-driven-path evolvability (§5) is a deliberate, unstarted future option, not pending work.
+
 # Reprint by Default: Structural Break Rules, a Closed Source-Shape Exception Set, and Layout Provenance
 
-Status: 🔵 Proposed — architectural direction. Successor to [B1](source-shape-policy-consolidation.md)
-(landed) and sibling to [the layout decision model](layout-decision-model.md). B1 centralized every
+Status: ✅ Implemented — architectural direction now realized (see banner). Successor to [B1](source-shape-policy-consolidation.md)
+(landed) and sibling to [the layout decision model](../layout-decision-model.md). B1 centralized every
 "respect the source shape here?" read into one `SourceShapePolicy`. This proposal takes the next step:
 **flip the default from preserve-the-author's-shape to reprint-from-scratch**, keep only a *closed,
 enumerated, justified* set of source-shape exceptions, and give the formatter a first-class way to
@@ -80,7 +82,7 @@ rewrite.
   `Doc.conditionalGroup` **at the true output column** (`DocRenderer` measures fit at the live
   `column`, not a fixed probe). Net idempotence-positive on kafka + camel. This is the recipe every
   `BreakRule` follows.
-- **The ranking mechanism ([layout-decision-model.md](layout-decision-model.md)).** That doc names the
+- **The ranking mechanism ([layout-decision-model.md](../layout-decision-model.md)).** That doc names the
   one gap: `ConditionalGroup` offers N flat candidates + one broken fallback chosen by flat fit and
   **cannot rank two *broken* layouts against each other**. The break-rule model sits *above* the
   ranking mechanism and depends on it for the hardest rules (those whose alternatives are all broken).
@@ -227,7 +229,7 @@ closed combinator vocabulary from the start. The dividing line:
   1. **Is the vocabulary total** (every rule must be expressible in it) **or is a code escape hatch
      allowed?** A hatch is pragmatic but permanently downgrades the future surface.
   2. **Route predicate AST access through a formatter-owned view** (the held
-     [`formatter-owned-syntax-view.md`](formatter-owned-syntax-view.md)) so the eventual config language
+     [`formatter-owned-syntax-view.md`](../formatter-owned-syntax-view.md)) so the eventual config language
      names frmtr's concepts, not JavaParser's version-locked types.
 
 What evolvability does **not** buy: the idempotence *guarantee* intrinsically weakens at L2 —
@@ -255,35 +257,13 @@ Why the model stays a fixpoint, and how it is enforced:
   `AstEquivalence` verify, `CommentPresenceDiagnosticTest`, and the kafka+camel idempotence sweep.
   `--verify` is blind to comment drops, so `CommentPresenceDiagnosticTest` remains the comment gate.
 
-## Migration plan
+## Migration plan (all stages landed)
 
-Staged, low-risk, output-neutral until the last stages.
-
-0. **Introduce the model, extract one real rule (output-neutral).** Add `BreakRule` and
-   `BreakRuleRegistry`. The `RuleContext` the sketch above named already exists as `LayoutContext` (the
-   LDM positional-context record), so it is reused rather than re-introduced; and `BreakRule` is generic
-   over a construct-specific *candidate* (for the chain, a small `ChainFanRequest` record carrying the
-   chain plus the caller's final-segment suffix and context) so the one abstraction hosts a construct
-   whose layout needs more than a bare node. Extract the *existing* canonical-fan chain decision
-   (`MethodCallChainPrinter.canonicalFanChain`) into the first named rule (`canonical-fan`) and prove
-   byte-identical output on the whole fixture suite + corpus. This validates the model can host a real,
-   shipped rule without moving output. _(As built: layered on the existing `JavaFormatRule` /
-   `LayoutContext` substrate from LDM-2f/LDM-3; the `chainFanOut` fan sub-shapes are the Stage-1 targets
-   below.)_
-1. **Extract the remaining implicit chain/argument rules** into named `BreakRule`s, each extraction
-   byte-identical and each with a fixture. `MethodCallChainPrinter` shrinks as rules move out.
-2. **Close the exception set + ratchet + provenance (output-neutral).** Introduce
-   `SourceShapeException`, tag every `SourceShapePolicy` method, land the ratchet test, and add
-   decision attribution to `--explain`. No output change; the philosophy flip is now enforced.
-3. **Retire fragile reads, one construct at a time (output-changing).** For each `wasMultiline`-driven
-   read, land its structural `BreakRule` replacement and delete the read — each a corpus-gated cutover
-   with the End-state A decision (bigger diffs accepted) made per construct. Chains are done;
-   `selectorBrokeAfter` deletes first; then arguments, parameters, ternaries, binary operands, lambda
-   bodies.
-
-Stages 0–2 are safe to land immediately and independently. Stage 3 is the long tail and should be
-sequenced behind the ranking mechanism from `layout-decision-model.md` for constructs whose
-alternatives are all broken.
+_Historical._ The staged rollout completed: Stage 0 `BreakRule`/`BreakRuleRegistry` + canonical-fan rule
+(#259/#260); Stage 1 extraction of the implicit chain/argument rules (the `MethodCallChainPrinter` split,
+#281); Stage 2 closed `SourceShapeException` set + ratchet + provenance (#261); Stage 3 fragile-read
+retirement one construct at a time (satellites #262–#266, hub atomic flip #279, governance #291/#293).
+`SourceShapePolicy.wasMultiline` is retired (grep = 0) and the ratchet is at its terminal state.
 
 ## Risks and non-goals
 
@@ -302,7 +282,7 @@ Non-goals:
   native-image closed world and makes idempotence unprovable. Config-selected variants (L1) are a small,
   compatible add-on that can land later using the existing option-variant fixtures if desired.
 - **Not a re-solve of ranking.** The mechanism for ranking multiple broken layouts is
-  [layout-decision-model.md](layout-decision-model.md)'s job; this proposal consumes it.
+  [layout-decision-model.md](../layout-decision-model.md)'s job; this proposal consumes it.
 - **Not a change to blank-line, comment, or raw-recovery behavior.**
 
 Risks:
@@ -338,15 +318,15 @@ Risks:
   is its successor. B1 centralized the reads into `SourceShapePolicy`; this closes the set, flips the
   default, and adds provenance. B1's "What stays source-aware on purpose" section (features that "live"
   in the policy) is narrowed here to "the fixpoint-safe ones live; the fragile ones are retired."
-- **[layout-decision-model.md](layout-decision-model.md)** — the ranking substrate. That doc closes the
+- **[layout-decision-model.md](../layout-decision-model.md)** — the ranking substrate. That doc closes the
   "rank two broken layouts" gap; the break-rule model is the authoring layer above it. Explicit
   dependency for stage 3 constructs whose alternatives are all broken.
 - **[doc-ir-combinators.md](doc-ir-combinators.md) (B2, landed)** — supplies `bestFitting`,
   `conditionalGroup`, `lineSuffix`, `breakParent`, `fill`, the primitives a `BreakRule`'s `layout`
   emits.
-- **[semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) (B3, landed)** — the
+- **[semantic-preservation-safety-net.md](../semantic-preservation-safety-net.md) (B3, landed)** — the
   verify + idempotence + corpus gates every retirement runs through.
-- **[formatter-owned-syntax-view.md](formatter-owned-syntax-view.md) (held)** — the broad metadata-owner
+- **[formatter-owned-syntax-view.md](../formatter-owned-syntax-view.md) (held)** — the broad metadata-owner
   vision; the provenance/decision-attribution here is a concrete consumer of it.
 
 ### Relationship to the sanctioned-rewrite set

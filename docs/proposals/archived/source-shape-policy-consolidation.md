@@ -1,6 +1,8 @@
+> **Status: Implemented.** Landed on `main`: the `SourceShapePolicy` consolidation. The residual strict-claims guardrail is now a CI gate (`strict-claims=true` in `frmtr-core/build.gradle.kts`), and successor B4 ([reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)) closed and retired the source-shape read set. Archived 2026-07-14; retained as a provenance record.
+
 # Centralize Source-Shape Coupling Into One Explicit Policy
 
-Status: Implemented (consolidation landed; strict-claims enablement deferred to B2, where the ownership consolidation is now underway — Stage 1 migrated the trailing-comment family to an explicit pre-claim ownership pre-pass + `ownsHere` filter, output-neutral; remaining traversal-order families + probe-claim decoupling are the path to enabling strict-claims)
+Status: ✅ Implemented (consolidation landed; the residual strict-claims guardrail is now enabled by default as a CI gate — `strict-claims=true` in `frmtr-core/build.gradle.kts` — after the comment-ownership consolidation completed via the claim-neutral `ownedComment` rail; see the banner above)
 
 ## Summary
 
@@ -193,46 +195,13 @@ These are intended features and must be preserved bit-for-bit; the policy is whe
 
 The goal is one documented home for these, not their removal.
 
-## Migration plan
+## Migration plan (executed, then extended by B4)
 
-Staged, low-risk, output-preserving. Each stage is independently shippable and golden-fixture-verified.
-
-1. **Rename and widen the seed.** Promote `SourceShape` into `SourceShapePolicy` (or add the new type and have
-   `SourceShape` delegate). Keep methods identical first; pure rename, no behavior change. Wire it on
-   `JavaFormatContext` alongside the existing `sourceShape` field.
-
-2. **Unify the multiline definition.** Add `wasMultiline(Node)` as the canonical method (the existing
-   `spansMultipleLines` body). Migrate the ~17 raw `rawSource.rawWithoutOwnComment(x).contains("\n")` probes in
-   `ExpressionLambdaArgumentLayout`, `VariableInitializerLayout`, `MethodCallChainPrinter`, `ControlConditionPrinter`,
-   and `ConditionalExpressionPrinter` to call it. This is the highest-value idempotence step. Verify no fixture moves;
-   any fixture that *does* move reveals a pre-existing divergence to be decided explicitly.
-
-3. **Centralize blank-line preservation.** Add `hadBlankLineBetween(previous, next)` and route
-   `BlockPrinter:118`, `MemberBlockPrinter:491-516`, `ModuleBlockPrinter:112`, `EnumDeclarationPrinter:343`, and
-   `RecordDeclarationPrinter:217` through it. Pure de-duplication of identical arithmetic.
-
-4. **Centralize the width-fit gate.** Add `fitsOnOneLine(node, indentedWidth)` and migrate the
-   `compactSource.compact(x)` + `lineWidth()` comparisons in `MethodCallPrinter`, `MethodCallChainPrinter`,
-   `ConditionalExpressionPrinter`, and `MethodCallChainSourcePlanner:347`. Compact text generation stays in
-   `CompactSourceText`; only the decision wrapper moves.
-
-5. **Fold the chain source planner's shape probes.** Replace `MethodCallChainSourcePlanner`'s direct
-   `selectorStartsAfterPreviousSegmentLine` range arithmetic (`:242-267`) and `sourceMultilineChain` with policy calls
-   (`selectorBrokeAfter`, `wasMultiline`).
-
-6. **Move source-shaped containment gates behind the policy + comment policy.** The
-   `getAllContainedComments().isEmpty()` gates in `CompactSourceText` and the planner become policy questions that
-   internally delegate containment to `JavaCommentPlacementPolicy`. Coordinate ordering with
-   `comment-containment-index.md` so the two migrations do not fight over the same call sites.
-
-7. **Quarantine raw recovery.** Leave `rawSource.raw(...)` recovery/fallback calls as-is but funnel them through
-   `SourceShapePolicy.rawText` / `rawTextWithoutOwnComment` (or keep them on `RawPreservedSource` where accounting is
-   needed) so printers no longer hold a bare `RawSource` for layout reasons. Recovery text generation itself does not
-   change.
-
-8. **Close the door.** Remove `RawSource`/`SourceShape` fields from printers that now only use the policy, and add the
-   grep/review guard against new direct source peeks. Update `ARCHITECTURE.md`, `docs/java-formatter-internals.md`, and
-   `docs/formatter-coverage.md` in the implementation PR.
+_Historical._ The staged consolidation landed: `SourceShapePolicy` on `JavaFormatContext`, the unified
+"was multiline" definition, centralized blank-line and width-fit gates, and the folded chain-planner probes.
+Successor B4 ([reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)) then closed the read set
+into a ratchet-guarded `SourceShapeException` enumeration and retired the fragile reads entirely
+(`wasMultiline` grep = 0), and the strict-claims guardrail is now a CI gate.
 
 ## Risks & non-goals
 

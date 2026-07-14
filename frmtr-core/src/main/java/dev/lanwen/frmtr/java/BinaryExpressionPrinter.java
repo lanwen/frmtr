@@ -297,8 +297,9 @@ final class BinaryExpressionPrinter {
      * <p>Sub-fan-threshold chains (a plain-receiver 1–2-link operand such as {@code rx.fileLabelName().equals(...)}, the
      * #119 {@code binary-chain-wrap-converge} guard) and expression-lambda / comment-bearing chains are all withheld
      * inside {@code canonicalFanChain}, so they keep the pre-existing forced-chain / broken-call delegate byte-for-byte;
-     * expression-lambda-bodied operand chains are the deferred lambda-arrow seam. The fan attempt runs
-     * {@linkplain CommentTracker#speculatively speculatively} so a withheld chain never leaves a half-claimed comment.
+     * expression-lambda-bodied operand chains are the deferred lambda-arrow seam. A withheld chain returns empty without
+     * committing any comment claim — comment rendering is claim-neutral, so building the fan candidate mutates no claim
+     * state — leaving no half-claimed comment behind.
      */
     private Doc brokenMethodCallChainOperand(MethodCallExpr methodCall) {
         // The operand sits on a binary continuation line; its extra offset is pure continuation indentation the
@@ -314,9 +315,7 @@ final class BinaryExpressionPrinter {
             "",
             false
         );
-        Optional<Doc> canonicalFan = comments.speculatively(
-            () -> canonicalFanChainRenderer.apply(methodCall, operandLayout)
-        );
+        Optional<Doc> canonicalFan = canonicalFanChainRenderer.apply(methodCall, operandLayout);
         if (canonicalFan.isPresent()) {
             return canonicalFan.orElseThrow();
         }

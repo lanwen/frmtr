@@ -16,8 +16,9 @@ tasks.withType<Test>().configureEach {
 
     // Roadmap B2 (comment-ownership consolidation, Stage 4): enforce the "each comment is claimed at most once"
     // invariant for every test. The candidate-ladder probes that used to double-claim comments are now claim-free —
-    // discarded probes roll back their claims through CommentTracker.speculatively, and the few reused-Doc neighbor
-    // offers are gated by ownership / skipped when already printed — so this invariant now holds across the whole
-    // suite and is a CI gate. Tests that toggle this property directly save/restore it themselves.
+    // every comment family renders through the claim-neutral ownership rail (CommentTracker.ownedComment), so a
+    // discarded probe commits no claim and re-offering an owned comment across eager arms neither drops nor duplicates
+    // it — so this invariant now holds across the whole suite and is a CI gate. Tests that toggle this property
+    // directly save/restore it themselves.
     systemProperty("dev.lanwen.frmtr.debug.guardrails.strict-claims", "true")
 }

@@ -63,30 +63,4 @@ final class LayoutDecisionLog {
     void reset() {
         wraps.clear();
     }
-
-    /**
-     * Returns the number of width decisions recorded so far.
-     *
-     * <p>Paired with {@link #truncateTo(int)} so the speculative scope in {@link CommentTracker#speculatively} can
-     * snapshot the log length on entry and roll back to it when a discarded probe is abandoned. A probe that measures a
-     * width-breaking construct appends a wrap as a side effect; if its candidate loses, that wrap describes a layout the
-     * renderer never emits and must be dropped so {@code --explain} stays free of phantom decisions.
-     */
-    int size() {
-        return wraps.size();
-    }
-
-    /**
-     * Drops every width decision recorded after {@code size}, restoring the log to a length captured earlier by
-     * {@link #size()}.
-     *
-     * <p>The log only ever grows by appending, so truncating from the tail removes exactly the decisions a discarded
-     * probe added and leaves the decisions that preceded the speculative scope intact. {@code size} must come from a
-     * prior {@link #size()} on this same log; a value at or past the current length is a no-op.
-     */
-    void truncateTo(int size) {
-        if (size < wraps.size()) {
-            wraps.subList(size, wraps.size()).clear();
-        }
-    }
 }

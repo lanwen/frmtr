@@ -73,7 +73,10 @@ Body-level raw routing:
 `StatementRuleEnvelope` owns statement-level formatter pragma state, raw statement recovery, leading comments, trailing
 line comments, and `TryStmt` comment exceptions. Formatted statement content then routes to `StatementPrinter`, which
 owns the statement-kind branch. Switch statements are selected there with the other statements, then delegate reusable
-switch-entry layout to `SwitchPrinter`.
+switch-entry layout to `SwitchPrinter`. The large, comment-heavy `if`, `try`, and loop clusters are extracted from
+`StatementPrinter` into `IfStatementLayout`, `TryStatementLayout`, and `LoopStatementLayout` (see
+[Shared Layout Helpers](#shared-layout-helpers)); `StatementPrinter` still owns statement-kind dispatch and injects the
+shared per-kind renderers into them.
 
 | JavaParser AST kind | Primary owner | Notes |
 | --- | --- | --- |
@@ -129,17 +132,19 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `AnnotationExpr` and subclasses | `AnnotationExpressionPrinter` | Covers marker, normal, and single-member annotations plus annotation member values, including line comments inside annotation array values. |
 | `BinaryExpr` | `BinaryExpressionPrinter` | Owns binary flattening, operator position, line comments between operands, precedence parentheses, and cast-division continuation policy. |
 | `CastExpr` | `CastExpressionPrinter` | Owns cast type layout, including breakable generic and intersection cast types, and nested cast depth checks. |
+| `ClassExpr` | `ClassExpressionPrinter` | Owns `Type.class` literals: compact type text plus a width-driven wrap of a long qualified type name at its dots. The part before `.class` follows type syntax rather than field-access syntax, so `Outer.Inner.class` breaks at its dots without being treated as a method-call chain. |
 | `ConditionalExpr` | `ConditionalExpressionPrinter` | Owns ternary layout for assignments, initializers, comments around `?` and `:`, nested branches, and binary condition wrapping. |
 | `EnclosedExpr` | `EnclosedExpressionPrinter` | Owns parenthesized expression layout and suffix preservation for array, method-call, and method-reference suffixes. |
 | `FieldAccessExpr` | `FieldAccessPrinter` | Owns dotted field access and comment-sensitive name splitting. Compact field-access text is also reconstructed by `CompactSourceText`. |
 | `InstanceOfExpr` | `InstanceOfExpressionPrinter` | Owns `instanceof` continuations and binary-operator-position-aware placement. |
 | `LambdaExpr` | `LambdaExpressionPrinter`, `LambdaParameterHeaderLayout`, `ExpressionLambdaArgumentLayout`, `ExpressionLambdaClosingLayout`, `PackedLambdaBody`, `SourceMultilineLambdaCallLayout` | `LambdaExpressionPrinter` owns expression/block bodies, parenthesized lambdas, broken logical bodies, and huggable lambda argument shapes. `LambdaParameterHeaderLayout` owns parameter parentheses policy, commented parameter reconstruction, width-triggered header breaks, and source-multiline parameter detection. `ExpressionLambdaArgumentLayout` owns expression-lambda call-argument planning. `ExpressionLambdaClosingLayout` owns source-shaped call-closing placement for simple logical lambda bodies, and `PackedLambdaBody` carries the selected body doc with that closing placement. `SourceMultilineLambdaCallLayout` owns source-multiline expression-lambda method-call bodies and block-lambda parameter lists that were already multiline in source. |
-| `MethodCallExpr` | `MethodCallPrinter`, `BreakableArgumentExpressionPrinter`, `MethodCallChainPrinter`, `SourceMultilineLambdaCallLayout`, `TextBlockArgumentSourceLayout` | `MethodCallPrinter` owns ordinary calls, canonical argument-list rendering, method-call suffixes, and lambda arguments; `BreakableArgumentExpressionPrinter` owns reusable broken argument-expression policy for over-wide or source-multiline binary arguments; `MethodCallChainPrinter` owns call chains, chain comments, same-line chained-call comment ownership, leading line-comment clusters before chained segments, source-shaped chain planning/root promotion via `MethodCallChainSourcePlanner`, source-multiline field-root fluent-chain statements, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, final-segment tails, and broken chain roots. `SourceMultilineLambdaCallLayout` supplies shared source-multiline lambda call-body attachment for call and chain contexts. `TextBlockArgumentSourceLayout` recovers source indentation for text-block arguments inside expression-lambda method-call bodies while text-block literal content remains with `TextBlockPrinter`. |
+| `MethodCallExpr` | `MethodCallPrinter`, `BreakableArgumentExpressionPrinter`, `MethodCallChainPrinter`, `SourceMultilineLambdaCallLayout`, `TextBlockArgumentSourceLayout` | `MethodCallPrinter` owns ordinary calls, canonical argument-list rendering, method-call suffixes, and lambda arguments; `BreakableArgumentExpressionPrinter` owns reusable broken argument-expression policy for over-wide or source-multiline binary arguments; `MethodCallChainPrinter` owns call chains, chain comments, same-line chained-call comment ownership, leading line-comment clusters before chained segments, source-shaped chain planning/root promotion via `MethodCallChainSourcePlanner`, source-multiline field-root fluent-chain statements, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, final-segment tails, and broken chain roots. `MethodCallChainPrinter` composes the chain-split `*Layout` helpers (see [Shared Layout Helpers](#shared-layout-helpers)) alongside `MethodCallChainSourcePlanner`. `SourceMultilineLambdaCallLayout` supplies shared source-multiline lambda call-body attachment for call and chain contexts. `TextBlockArgumentSourceLayout` recovers source indentation for text-block arguments inside expression-lambda method-call bodies while text-block literal content remains with `TextBlockPrinter`. |
 | `MethodReferenceExpr` | `MethodReferencePrinter` | Owns method references, type-argument suffix text, and parenthesized-scope suffixes. |
 | `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks selected by `ObjectCreationLayoutPolicy`, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
 | `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Uses the same reusable switch label, guard, entry, and block layout as `SwitchStmt` without owning statement dispatch; declaration printers preserve switch-expression initializer bodies on the equals line. |
 | `TextBlockLiteralExpr` | `TextBlockPrinter` | Owns narrow fixture-backed content probes and raw source-derived fallback rendering for unrecognized text blocks. |
-| Other `Expression` subtypes | `ExpressionRuleEnvelope` then `ExpressionDispatcher` compact fallback | Emits `Doc.text(CompactSourceText.compact(expression))`. This covers simple names, literals, `this`, `super`, class literals, unary/postfix forms, pattern nodes outside switch-label paths, and any JavaParser expression kind without a dedicated branch. |
+| `UnaryExpr` | `UnaryExpressionPrinter` | Owns only unary shapes that should not fall back to raw compact text — chiefly logical complement around a parenthesized binary (`!(a && b)`), where `!` stays attached and the binary tree breaks inside its existing parentheses. General unary/postfix spelling and operand dispatch still defer to compact source text, expression dispatch, and `EnclosedExpressionPrinter`. |
+| Other `Expression` subtypes | `ExpressionRuleEnvelope` then `ExpressionDispatcher` compact fallback | Emits `Doc.text(CompactSourceText.compact(expression))`. This covers simple names, literals, `this`, `super`, pattern nodes outside switch-label paths, and any JavaParser expression kind without a dedicated branch (`ClassExpr` and `UnaryExpr` now have dedicated branches). |
 
 Expression-adjacent owners that are selected by statement or declaration context rather than direct expression dispatch:
 
@@ -167,12 +172,11 @@ These helpers define the fallback and comment-accounting boundaries used by the 
 | `JavaCommentTrivia` and `JavaCommentKind` | Comment classification and reusable range checks for comment accounting and layout rules. |
 | `FormatterPragmas` | Formatter off/on and ignore state used by declaration dispatch and the statement rule envelope. |
 | `FormatterGuardrails` | Debug-only transform and comment-accounting checks enabled by `dev.lanwen.frmtr.debug.guardrails`. |
-| `SourceShapePolicy` | Single per-run home for "respect the author's source shape here?" decisions: canonical `wasMultiline`, `hadBlankLineBetween`/`hadBlankLineBefore`, `fitsOnOneLine`, `selectorBrokeAfter`, the `hasContainedComments` compact-safety gate (delegating containment to `JavaCommentPlacementPolicy`), and `rawText`/`rawTextWithoutOwnComment` layout/fallback recovery (delegating to `RawSource`). Printers ask it instead of re-deriving reads from raw text or `getRange()` arithmetic; it does not own slicing, raw-output accounting, or recovery boundaries. |
+| `SourceShapePolicy` | Single per-run home for the surviving "respect the author's source shape here?" reads, all *fixpoint-safe* (the formatter's own output reproduces or canonicalizes them): the width-fit gate (`fitsOnOneLine`), blank-line preservation (`hadBlankLineBetween`/`hadBlankLineBefore`), the `hasContainedComments` compact-safety gate (delegating containment to `JavaCommentPlacementPolicy`), logical control-condition shape (`logicalConditionExpression`), and try-with-resources section shape (`tryResources` returning `TryResourcesShape`). A `SourceShapeException` ratchet (enforced by `SourceShapeExceptionGovernanceTest`) keeps these reads to the fixpoint-safe set; the method-call/chain/object-creation/lambda hub reflows by width or by structural break rules. Printers ask it instead of re-deriving reads from raw text or `getRange()` arithmetic; it does not own slicing, raw-output accounting, or recovery boundaries (it calls `SourceText`/`RawSource` for those). |
 | `RawSource` | Token-range recovery, raw-without-own-comment text, line-by-line trailing whitespace stripping, and single-line whitespace normalization. |
 | `RawPreservedSource` | The canonical raw-output boundary. It wraps raw or source-derived text in `Doc.Text` and records contained comments as deliberately raw-preserved. |
 | `CompactSourceText` | Source-equivalent compact text for width gates and compact fallbacks, including raw string-literal spelling, reconstructed field accesses, comment-free expressions for anonymous-class headers, type-like generic spacing cleanup, and clone-before-comment-removal variants. |
 | `LayoutWidth` | Shared indentation baselines for flat-width probes used by statement, field initializer, method-chain, and declaration helpers. |
-| `SourceShape` | Source-line-shape predicates that let printers preserve existing multiline forms without scanning whole declarations or owning the resulting doc layout, including method-call operands, nested source-multiline method-call arguments, and logical control-condition shape. It delegates its canonical "was multiline" check to `SourceShapePolicy`. |
 | `BreakableArgumentExpressionPrinter` | Shared method-call argument-expression break policy used by direct method calls, initializer method-call openers, and try-resource method-call openers. |
 | `ObjectCreationLayoutPolicy` | Shared constructor-call source-shape policy for preserving multiline constructor arguments, return-object-creation multiline arguments, and compact constructor roots across direct object creation, return expressions, and method-call chains. |
 | `ControlConditionMethodCallLayout` | Method-call operand layout inside parenthesized control conditions, including source-multiline method-call operands in logical terms and control-context width measurement for broken method-call conditions. |
@@ -187,6 +191,32 @@ These helpers define the fallback and comment-accounting boundaries used by the 
 | `CommentedModulePrinter` | Raw-source reconstruction for commented `module-info.java` headers and directives selected by `ModuleDeclarationPrinter`. |
 | `CommentedInterfacePrinter` | Raw-source reconstruction for interface headers and abstract method signatures with comments inside declaration syntax. |
 | `CommentedMethodSignaturePrinter` | Raw-source reconstruction for method signatures with comments when the body is small enough that the fallback does not become a second statement formatter. |
+
+## Shared Layout Helpers
+
+Complex break decisions are extracted from the entry printers into focused `*Layout` helpers, each a constructor-injected
+collaborator that owns one cohesive shape while the entry printer keeps its grammar and comment-claim traversal. The
+method-call chain family and the control-flow statement family are the largest such splits; `MethodCallChainPrinter` and
+`StatementPrinter` compose these helpers rather than carrying the clusters inline.
+
+| Helper | Composed by | Boundary owned |
+| --- | --- | --- |
+| `ChainFanLayout` | `MethodCallChainPrinter` | Hosts the two `BreakRuleRegistry` that drive the canonical chain fan (fan-position and fan-shape), the AST-only fan-admission predicates, and the source-neutral promoted-root builders. Every predicate is a pure function of the AST, so the fanned shape is a fixpoint across passes. |
+| `ChainCommentLayout` | `MethodCallChainPrinter` | Chain- and selector-comment detection predicates plus the matching comment `Doc` slots, so a fan/stay-flat withhold verdict and its render read the same comment sets and stay in lockstep. |
+| `ChainSelectorLambdaLayout` | `MethodCallChainPrinter` | The source-neutral expression-lambda selector (`.map(entry -> body)`) as a flat/hug `conditionalGroup`, plus the comment-carrying lambda-hug family. |
+| `ChainSegmentWidthLayout` | `MethodCallChainPrinter` | Segment-level width arithmetic: whether a segment's argument list must break and how wide it renders on its continuation line. |
+| `ChainSegmentPaddingLayout` | `MethodCallChainPrinter` | Threads a short-root alignment padding string into every line-start of a segment's `Doc` tree (a pure `Doc`-tree rewrite). |
+| `PackedMethodCallChainLayout` | `MethodCallChainPrinter` | The greedy first-line chain packer and its object-creation-root and expression-lambda-body variants. |
+| `MixedFieldMethodCallChainLayout` | `MethodCallChainPrinter` | Chains that alternate method calls and field accesses (`root.method().field.method()`) treated as one structural chain. |
+| `LambdaBodyChainFanLayout` | `ExpressionLambdaArgumentLayout` | The hugged lambda-body method-call-chain fan and its true-column overflow/fit gates. |
+| `IfStatementLayout` | `StatementPrinter` | The if/else-chain family: condition header, then/else branches, empty-body shapes, and the branch-to-branch comment handoffs. |
+| `TryStatementLayout` | `StatementPrinter` | The try/catch/finally and try-with-resources family, including resource-section layout and inter-clause comment recovery. |
+| `LoopStatementLayout` | `StatementPrinter` | The `for`/enhanced-`for`/`while`/`do`-`while` family: header layout, empty and braceless bodies, and their comment recovery. |
+| `MemberBlockBraceLayout` | `MemberBlockPrinter` | The raw-source geometry of a type body's `{ ... }` braces and the `//` comment trailing the opening brace. |
+
+`MethodCallChainSourcePlanner` and the lambda-call helpers (`LambdaParameterHeaderLayout`, `ExpressionLambdaClosingLayout`,
+`SourceMultilineLambdaCallLayout`, and the rest) are cataloged in the boundary table above because they are shared across
+more than one entry printer.
 
 ## Known Intentional Fallbacks
 

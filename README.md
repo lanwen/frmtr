@@ -265,6 +265,7 @@ Exclude generated or fixture sources from a broad selector:
 | `--write` | Formats files in place and prints a processed summary. |
 | `--write --verify` | Like `--write`, but re-parses each formatted file and refuses to overwrite it when the result is not AST-equivalent to the input. |
 | `--check --verify` | Like `--check`, but also re-parses each in-memory formatted result and asserts AST-equivalence. Read-only: it reports would-change and writes nothing, exiting 3 if any file's output is not AST-equivalent. Additionally emits informational stderr warnings for breakable output lines that still exceed the configured line width (does not affect the exit code). |
+| `<selector>` (no `--check`/`--write`) | Prints formatted output to stdout without changing files. With multiple matched files, each is preceded by a `==> path <==` header (stdout aggregate mode). |
 | `--stdin` | Reads Java source from stdin and writes formatted source to stdout. |
 | `--stdin --check` | Compares piped source against formatter output. |
 | `--stdin --diff` | Prints a unified diff between piped source and formatter output. |
@@ -366,6 +367,10 @@ Use `--stacktrace` when debugging formatter or I/O failures.
 Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses JavaParser's
 bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or
 `JAVA_25` when you need a strict release gate.
+
+Use `--parse-error-behavior` to control how the formatter handles JavaParser parse problems. The default is `RECOVER`,
+which formats the valid parts of a partially-parseable file while preserving the broken regions; use `FAIL` for strict,
+all-or-nothing behavior that aborts as soon as JavaParser reports any parse problem.
 
 The formatter-wide default line width is 120 columns. Use `--line-width` in the CLI or
 `frmtr { java { lineWidth = ... } }` in Gradle to override it.

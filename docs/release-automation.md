@@ -106,11 +106,16 @@ snapshot bump.
   target. `release.yml` also calls it as a reusable workflow to open the post-release next-snapshot PR.
 - `snapshot-version-guard.yml`: fails PRs whose merged result has a non-`-SNAPSHOT` version unless the PR is labeled
   `release`.
+- `snapshots.yml`: on every `main` push that touches build sources (Gradle files, Java sources, wrapper, or
+  `gradle.properties`) and by manual dispatch, publishes Maven Central snapshot artifacts when the current
+  `gradle.properties` version ends with `-SNAPSHOT`.
 - `corpus.yml`: runs on generated `release` PRs and by manual dispatch, so the release PR carries the corpus check
   before merge without rerunning after publication.
 - `release.yml`: runs when `gradle.properties` changes on `main`; if the version is final, it builds native archives,
-  publishes GitHub/Maven Central, publishes the Gradle plugin, publishes Homebrew, and calls the reusable snapshot PR
-  workflow.
+  publishes GitHub/Maven Central, publishes the Gradle plugin, delegates Homebrew tap publication to the reusable
+  `publish-homebrew.yml` workflow, and calls the reusable snapshot PR workflow.
+- `publish-homebrew.yml`: reusable workflow (also manually dispatchable) that takes a released `version` input and
+  publishes it to the Homebrew tap. `release.yml` calls it after the GitHub/Maven Central and Gradle plugin publishes.
 
 Automation-created PRs use `peter-evans/create-pull-request` with `sign-commits: true` and a GitHub App token so
 regular PR workflows run without the approval prompt that applies to PRs created with the repository `GITHUB_TOKEN`.

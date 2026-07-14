@@ -136,7 +136,6 @@ final class FormatterGuardrailsTest {
 
             assertThat(firstArm).isNotEqualTo(Doc.EMPTY);
             assertThat(secondArm).isEqualTo(firstArm);
-            assertThat(comments.isPrinted(trivia)).isFalse();
         });
     }
 
@@ -164,7 +163,6 @@ final class FormatterGuardrailsTest {
 
             assertThat(first).isNotEqualTo(Doc.EMPTY);
             assertThat(second).isEqualTo(first);
-            assertThat(comments.isPrinted(trivia)).isFalse();
         });
     }
 
@@ -196,7 +194,6 @@ final class FormatterGuardrailsTest {
 
             assertThat(firstArm).isNotEqualTo(Doc.EMPTY);
             assertThat(secondArm).isEqualTo(firstArm);
-            assertThat(comments.isPrinted(trivia)).isFalse();
         });
     }
 
@@ -281,10 +278,9 @@ final class FormatterGuardrailsTest {
 
     @Test
     void ownershipAccountedSetCoversOwnedCommentsThatWereNeverClaimed() {
-        // The dormant end-state accounting path counts a comment as accounted once the pre-pass recorded an owner for
-        // it, even though the pure rail never claimed it into printed. That is the accounting move the end-state makes:
-        // from "was it claimed" to "does it have a recorded owner". Nothing consumes this set yet, so the current
-        // printed-based drop guardrail (assertAllCommentsAccounted) is unaffected.
+        // ownershipAccountedComments() counts a comment as accounted once the pre-pass recorded an owner for it, even
+        // though the pure rail never mutates any claim state: "accounted" means "has a recorded owner", not "was
+        // claimed" — the same basis assertAllCommentsAccounted feeds to the drop guardrail.
         CommentTracker comments = commentTracker();
         Node field = parse(
             """
@@ -300,7 +296,6 @@ final class FormatterGuardrailsTest {
         comments.endRecordingAndReset(new LayoutDecisionLog(), new FormatterPragmas());
         comments.ownedComment(trivia, field, OwnerSlot.TRAILING);
 
-        assertThat(comments.isPrinted(trivia)).isFalse();
         assertThat(comments.ownershipAccountedComments()).contains(trivia.comment());
     }
 

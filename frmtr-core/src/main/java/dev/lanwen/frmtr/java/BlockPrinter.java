@@ -425,10 +425,11 @@ final class BlockPrinter {
      *
      * <p>JavaParser parks an empty block's comments on either the block's orphan pool or its contained-comment set, and
      * the two buckets overlap: a comment can appear in both. Rendering each bucket independently would offer a comment
-     * in the overlap to {@link CommentTracker#comment} twice — harmless under first-claim-wins (the second offer renders
-     * {@link Doc#EMPTY}) but a duplicate claim once that invariant is enforced. De-duplicating by JavaParser comment
-     * identity before any claim is made offers each comment exactly once; {@link #emptyBlockCommentDocs} then restores
-     * source order so the rendered sequence is byte-identical to the source-ordered union of both buckets.
+     * in the overlap to {@link CommentTracker#comment} twice under the identical {@code (block, INTERLEAVED)} key; the
+     * claim-neutral rail renders the same non-empty Doc for both offers, so without de-duplication the comment's text
+     * would appear twice in the output. De-duplicating by JavaParser comment identity before either bucket is offered
+     * keeps each comment offered exactly once; {@link #emptyBlockCommentDocs} then restores source order so the
+     * rendered sequence is byte-identical to the source-ordered union of both buckets.
      */
     private static List<JavaCommentTrivia> dedupByCommentIdentity(
             List<JavaCommentTrivia> orphan,

@@ -395,16 +395,17 @@ owner is exactly the emergent first claimant of the forward print traversal — 
 diverges from on the contested families, so the traversal is reproduced rather than approximated. The pre-pass records,
 and `CommentTracker.ownsHere` then gates, *every* family (trailing, leading, adjacent, own, orphan, interleaved), so a
 comment renders only from the slot recorded as its owner. `endRecordingAndReset` clears exactly the state that
-accumulates during the traversal — `CommentTracker.printed`/`rawRendered`, the `LayoutDecisionLog`, and the
+accumulates during the traversal — `CommentTracker.rawRendered`, the `LayoutDecisionLog`, and the
 `FormatterPragmas` enabled/disabled range state — while keeping the `JavaCommentPlacementPolicy` comment map and its pure
 AST-derived caches, so the dry-run costs roughly a second print but never a second parse.
 
 All comment rendering then flows through the claim-neutral `CommentTracker.ownedComment` rail: a comment renders iff the
 dry-run recorded *this* `(node, slot)` as its owner (`ownsHere`), and every non-owner slot renders `Doc.EMPTY`. Emptiness
-is a pure function of the recorded ownership, not of a build-time `printed`-set mutation — the real render never claims a
-comment into `printed`, so the old `.filter(ownsHere).filter(claim)` render pattern and its `printed` claim side-effect
-are gone, and `CommentTracker.claim()` / `isPrinted()` are left orphaned. Because the rail mutates no claim state, an
-owner may emit the same comment Doc in more than one eagerly-built ranked layout arm (a `Doc.bestFitting` /
+is a pure function of the recorded ownership, not of a build-time claim-set mutation — the real render never claims a
+comment into any per-render claim state, so the old `.filter(ownsHere).filter(claim)` render pattern and its claim
+side-effect are gone; `CommentTracker.claim()`, `isPrinted()`, and the `printed` set they used have since been deleted
+as unreachable. Because the rail mutates no claim state, an owner may emit the same comment Doc in more than one
+eagerly-built ranked layout arm (a `Doc.bestFitting` /
 `Doc.conditionalGroup` alternative) without dropping or duplicating it; the renderer keeps only the arm it picks. Two
 paths that legitimately co-offer the same comment are kept claim-once by giving each a distinct `OwnerSlot` on a shared
 anchor node (or by anchoring to the container rather than an element node that may coincide with an inner render's

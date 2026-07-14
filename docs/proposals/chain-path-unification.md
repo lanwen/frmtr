@@ -89,8 +89,10 @@ This is the single most important file region. It is an `Optional<Doc>` cascade 
 
 - **Stay-flat gate** (`:623`–`:652`): returns empty (leave flat) unless forced / has comments / source-multiline /
   over-width at `firstLineWidth` — this is where AUTO-mode argument chains (pos 5) and ternary chains (pos 7) decide.
-- **`speculatively` comment-rollback probes** (`:671`, `:695`, `:779`, `:901`, `:908`, `:938`, `:951`, `:959`) —
-  first-builder-wins comment claim; the reason comment-bearing chains **cannot** use the eager two-arm `bestFitting`.
+- **`speculatively` comment-rollback probes** (`:671`, `:695`, `:779`, `:901`, `:908`, `:938`, `:951`, `:959` at the
+  time of writing — `speculatively` itself has since been retired as redundant post-claim-neutrality, and these line
+  numbers have since drifted after the later file split) — first-builder-wins comment claim; the reason comment-bearing
+  chains **could not** use the eager two-arm `bestFitting`.
 - **Single-segment method-root branch** (`:872`–`:982`): tries `compactRootWithBrokenFinalSegment` speculatively, then
   `expressionLambdaRootWithSingleSegment`, then **`rankedSingleSegmentChain` (X, `:920`)**, then imperative fallbacks
   (`brokenRootWithAttachedFinalSegment`, `sourceMultilineArguments`, grouped-promoted).

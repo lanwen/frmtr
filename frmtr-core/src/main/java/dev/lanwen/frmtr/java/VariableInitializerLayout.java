@@ -783,7 +783,8 @@ final class VariableInitializerLayout {
      *       {@code expression.apply}; only the enclosing attach verdict needs stabilizing.</li>
      * </ul>
      * Comment-bearing and block-lambda-bearing values are excluded (they carry their own comment/hug shape and stay on the
-     * imperative cascade, where first-claim-wins comment safety is preserved).
+     * imperative cascade, which renders the value exactly once so no comment's recorded owner can disagree with the
+     * width-picked arm).
      */
     private Optional<Doc> variableInitializerFanBestFitting(
             VariableDeclarator variable,

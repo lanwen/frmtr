@@ -362,9 +362,8 @@ final class CommentTracker {
         return Doc.concat(
             commentPlacement.trailingLineCommentsAfter(owner, body, nextStructural)
                     .stream()
-                    .filter(t -> ownsHere(t, owner, OwnerSlot.TRAILING))
-                    .filter(t -> claim(t, owner, OwnerSlot.TRAILING))
-                    .map(JavaFormatter::commentDoc)
+                    .map(t -> ownedComment(t, owner, OwnerSlot.TRAILING))
+                    .filter(doc -> doc != Doc.EMPTY)
                     .toList()
         );
     }
@@ -387,9 +386,8 @@ final class CommentTracker {
             Doc.HARD_LINE,
             commentPlacement.trailingLineCommentsAfter(owner, body, nextStructural)
                     .stream()
-                    .filter(t -> ownsHere(t, owner, OwnerSlot.TRAILING))
-                    .filter(t -> claim(t, owner, OwnerSlot.TRAILING))
-                    .map(JavaFormatter::commentDoc)
+                    .map(t -> ownedComment(t, owner, OwnerSlot.TRAILING))
+                    .filter(doc -> doc != Doc.EMPTY)
                     .toList()
         );
     }
@@ -408,9 +406,8 @@ final class CommentTracker {
     List<Doc> trailingInitializerCommentsBeforeSemicolon(Node semicolonOwner, Node initializer) {
         return commentPlacement.trailingInitializerCommentsBeforeSemicolon(semicolonOwner, initializer)
                 .stream()
-                .filter(t -> ownsHere(t, semicolonOwner, OwnerSlot.TRAILING))
-                .filter(t -> claim(t, semicolonOwner, OwnerSlot.TRAILING))
-                .map(JavaFormatter::commentDoc)
+                .map(t -> ownedComment(t, semicolonOwner, OwnerSlot.TRAILING))
+                .filter(doc -> doc != Doc.EMPTY)
                 .toList();
     }
 
@@ -426,9 +423,8 @@ final class CommentTracker {
     List<Doc> gapLineCommentsBefore(Node afterNode, Node body, Collection<? extends Node> attachmentBuckets) {
         return commentPlacement.gapLineCommentsBefore(afterNode, body, attachmentBuckets)
                 .stream()
-                .filter(t -> ownsHere(t, body, OwnerSlot.LEADING))
-                .filter(t -> claim(t, body, OwnerSlot.LEADING))
-                .map(JavaFormatter::commentDoc)
+                .map(t -> ownedComment(t, body, OwnerSlot.LEADING))
+                .filter(doc -> doc != Doc.EMPTY)
                 .toList();
     }
 
@@ -479,11 +475,12 @@ final class CommentTracker {
             if (upperBound.map(position -> !CommentIndex.startsBefore(trivia.comment(), position)).orElse(false)) {
                 continue;
             }
-            if (ownsHere(trivia, anchor, OwnerSlot.LEADING) && claim(trivia, anchor, OwnerSlot.LEADING)) {
+            Doc doc = ownedComment(trivia, anchor, OwnerSlot.LEADING);
+            if (doc != Doc.EMPTY) {
                 if (!rendered.isEmpty()) {
                     rendered.add(Doc.HARD_LINE);
                 }
-                rendered.add(JavaFormatter.commentDoc(trivia));
+                rendered.add(doc);
             }
         }
         return Doc.concat(rendered);
@@ -505,9 +502,8 @@ final class CommentTracker {
     List<Doc> blockCommentsBefore(Collection<? extends Node> attachmentBuckets, Node boundary) {
         return commentPlacement.blockCommentsBefore(attachmentBuckets, boundary)
                 .stream()
-                .filter(t -> ownsHere(t, boundary, OwnerSlot.ORPHAN))
-                .filter(t -> claim(t, boundary, OwnerSlot.ORPHAN))
-                .map(JavaFormatter::commentDoc)
+                .map(t -> ownedComment(t, boundary, OwnerSlot.ORPHAN))
+                .filter(doc -> doc != Doc.EMPTY)
                 .toList();
     }
 
@@ -516,9 +512,9 @@ final class CommentTracker {
             commentPlacement.orphanComments(node)
                     .stream()
                     .filter(trivia -> predicate.test(trivia.comment()))
-                    .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
-                    .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
-                    .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
+                    .map(t -> ownedComment(t, node, OwnerSlot.ORPHAN))
+                    .filter(doc -> doc != Doc.EMPTY)
+                    .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .toList()
         );
     }
@@ -531,9 +527,8 @@ final class CommentTracker {
         return commentPlacement.orphanComments(node)
                 .stream()
                 .filter(trivia -> predicate.test(trivia.comment()))
-                .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
-                .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
-                .map(JavaFormatter::commentDoc)
+                .map(t -> ownedComment(t, node, OwnerSlot.ORPHAN))
+                .filter(doc -> doc != Doc.EMPTY)
                 .toList();
     }
 
@@ -548,9 +543,9 @@ final class CommentTracker {
     private Doc orphanComments(Node node, List<JavaCommentTrivia> comments) {
         return Doc.concat(
             comments.stream()
-                    .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
-                    .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
-                    .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
+                    .map(t -> ownedComment(t, node, OwnerSlot.ORPHAN))
+                    .filter(doc -> doc != Doc.EMPTY)
+                    .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .toList()
         );
     }

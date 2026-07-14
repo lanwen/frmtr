@@ -230,9 +230,8 @@ final class CommentTracker {
 
     Doc leading(Node node) {
         return commentPlacement.leadingComment(node)
-                .filter(t -> ownsHere(t, node, OwnerSlot.LEADING))
-                .filter(t -> claim(t, node, OwnerSlot.LEADING))
-                .map(JavaFormatter::commentDoc)
+                .map(t -> ownedComment(t, node, OwnerSlot.LEADING))
+                .filter(doc -> doc != Doc.EMPTY)
                 .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                 .orElse(Doc.EMPTY);
     }
@@ -241,9 +240,8 @@ final class CommentTracker {
         return Doc.concat(
             commentPlacement.adjacentLeadingLineComments(node)
                     .stream()
-                    .filter(t -> ownsHere(t, node, OwnerSlot.ADJACENT_LEADING))
-                    .filter(t -> claim(t, node, OwnerSlot.ADJACENT_LEADING))
-                    .map(JavaFormatter::commentDoc)
+                    .map(t -> ownedComment(t, node, OwnerSlot.ADJACENT_LEADING))
+                    .filter(doc -> doc != Doc.EMPTY)
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .toList()
         );
@@ -253,11 +251,58 @@ final class CommentTracker {
         return Doc.concat(adjacentLeadingLineComments(node), leading(node));
     }
 
+    /**
+     * Renders {@code node}'s own trailing {@code //} line comment, anchored to the outer {@link OwnerSlot#TRAILING} slot
+     * and routed through the claim-neutral {@link #ownedComment} rail.
+     *
+     * <p>Emptiness is decided by the ownership pre-pass, not by a build-time claim: this returns the comment's Doc when
+     * {@code (node, TRAILING)} is the recorded owner and {@link Doc#EMPTY} otherwise, and it never mutates {@link #printed}
+     * in the real pass. That is what lets a co-offering content path ({@link #contentTrailingLineComment}) or an enclosing
+     * construct disambiguate by ownership instead of reading {@link #isPrinted}: whichever path the dry-run recorded as the
+     * first offerer owns the comment, and every other slot renders empty. Because it is claim-neutral, an owner may emit
+     * this same Doc in more than one eagerly-built ranked layout arm without dropping or duplicating the comment.
+     */
     Doc trailingLineComment(Node node) {
         return commentPlacement.trailingLineComment(node)
-                .filter(t -> ownsHere(t, node, OwnerSlot.TRAILING))
-                .filter(t -> claim(t, node, OwnerSlot.TRAILING))
-                .map(JavaFormatter::commentDoc)
+                .map(trivia -> ownedComment(trivia, node, OwnerSlot.TRAILING))
+                .orElse(Doc.EMPTY);
+    }
+
+    /**
+     * Renders {@code node}'s own trailing {@code //} line comment under the distinct {@link OwnerSlot#CONTENT_TRAILING}
+     * slot, for a content renderer that must position the comment itself rather than let the outer
+     * {@link StatementRuleEnvelope} append it.
+     *
+     * <p>Same comment, same claim-neutral rail as {@link #trailingLineComment(Node)}, but a different {@link OwnerKey} on
+     * the same anchor node so the two paths never collide. An {@code if}/{@code else} layout that renders a nested body's
+     * trailing comment before the {@code else} keyword offers here first (before the nested statement's own envelope
+     * offers under {@link OwnerSlot#TRAILING}), so the dry-run records this slot as the owner and the envelope offer
+     * renders empty. For a plain expression statement the envelope offers first, so this content offer renders empty and
+     * the envelope keeps the comment — reproducing today's first-claim-wins winner in both shapes without an
+     * {@link #isPrinted} read.
+     */
+    Doc contentTrailingLineComment(Node node) {
+        return commentPlacement.trailingLineComment(node)
+                .map(trivia -> ownedComment(trivia, node, OwnerSlot.CONTENT_TRAILING))
+                .orElse(Doc.EMPTY);
+    }
+
+    /**
+     * Renders {@code node}'s own trailing {@code //} line comment under the distinct {@link OwnerSlot#ENCLOSED_TRAILING}
+     * slot, for an <em>enclosing construct</em> that positions the nested statement's comment in a spot only it controls
+     * (an {@code if}/{@code else} chain placing the then-body's comment before the {@code else} keyword).
+     *
+     * <p>Same comment, same claim-neutral rail as {@link #trailingLineComment(Node)} and
+     * {@link #contentTrailingLineComment(Node)}, but a third {@link OwnerKey} on the same anchor node so all three paths
+     * stay distinct when a branch body is an expression statement and all three fire for it. The enclosing construct
+     * offers here first (before the nested body is rendered), so the dry-run records this slot as the owner and both the
+     * nested statement's own envelope ({@link OwnerSlot#TRAILING}) and its own content offer
+     * ({@link OwnerSlot#CONTENT_TRAILING}) render empty by ownership — reproducing today's first-claim-wins winner (the
+     * enclosing layout) without an {@link #isPrinted} read.
+     */
+    Doc enclosedTrailingLineComment(Node node) {
+        return commentPlacement.trailingLineComment(node)
+                .map(trivia -> ownedComment(trivia, node, OwnerSlot.ENCLOSED_TRAILING))
                 .orElse(Doc.EMPTY);
     }
 
@@ -513,18 +558,16 @@ final class CommentTracker {
     Doc ownComment(Node node, Predicate<Comment> predicate) {
         return commentPlacement.ownComment(node)
                 .filter(trivia -> predicate.test(trivia.comment()))
-                .filter(t -> ownsHere(t, node, OwnerSlot.OWN))
-                .filter(t -> claim(t, node, OwnerSlot.OWN))
-                .map(JavaFormatter::commentDoc)
+                .map(t -> ownedComment(t, node, OwnerSlot.OWN))
+                .filter(doc -> doc != Doc.EMPTY)
                 .orElse(Doc.EMPTY);
     }
 
     Doc ownTriviaComment(Node node, Predicate<JavaCommentTrivia> predicate) {
         return commentPlacement.ownComment(node)
                 .filter(predicate)
-                .filter(t -> ownsHere(t, node, OwnerSlot.OWN))
-                .filter(t -> claim(t, node, OwnerSlot.OWN))
-                .map(JavaFormatter::commentDoc)
+                .map(t -> ownedComment(t, node, OwnerSlot.OWN))
+                .filter(doc -> doc != Doc.EMPTY)
                 .orElse(Doc.EMPTY);
     }
 

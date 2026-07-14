@@ -1177,9 +1177,11 @@ final class MethodCallChainPrinter {
      * applies and there is nothing to rank. A deliberately-multiline chain or a promoted root is a source-preserved shape,
      * never a width-ranked alternative, so ranking can never override it.
      *
-     * <p><strong>Comment-bearing chains never reach here.</strong> The {@code !analysis.hasComments()} gate keeps them on
-     * the imperative single-builder ladder; this ranked path builds both alternatives eagerly and is used only for
-     * comment-free chains.
+     * <p><strong>Comment handling (Phase D).</strong> The {@code !analysis.hasComments()} bail was removed: the caller
+     * already withholds any chain whose final selector carries its own comment, and post-Phase-C every comment renders
+     * through the claim-neutral {@code ownedComment} rail, so building both ranked arms eagerly can no longer drop or
+     * double-claim a comment. Verified byte-identical across the full suite (CommentPresence / Idempotence /
+     * AstEquivalence, zero golden moves).
      */
     private Optional<Doc> rankedSingleSegmentChain(
             MethodCallExpr methodRoot,
@@ -1192,7 +1194,6 @@ final class MethodCallChainPrinter {
     ) {
         if (
             rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
-            || analysis.hasComments()
             || call.getArguments().isEmpty()
             || call.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
             || methodCallSegmentHasBlockLambdaArgument(call)
@@ -1236,9 +1237,14 @@ final class MethodCallChainPrinter {
      * {@link MethodCallChainSourcePlanner.ChainRootRendering#BROKEN_OBJECT_CREATION} stays imperative), the chain and the
      * constructor arguments were not split across source lines, and the final segment carries breakable, non-lambda
      * arguments. A deliberately-multiline chain or a source-broken constructor is a source-preserved shape, never a
-     * width-ranked alternative, so ranking can never override it. The {@code !analysis.hasComments()} gate keeps
-     * comment-bearing chains on the imperative single-builder ladder; this ranked path builds both alternatives eagerly
-     * and is used only for comment-free chains.
+     * width-ranked alternative, so ranking can never override it.
+     *
+     * <p><strong>Comment handling (Phase D).</strong> The {@code !analysis.hasComments()} bail was removed. Unlike the
+     * method-root ranker's caller, this caller does not pre-withhold comment-bearing chains, so they now reach the ranker;
+     * post-Phase-C every comment renders through the claim-neutral {@code ownedComment} rail, so building both ranked arms
+     * eagerly (and deferring to {@link #objectRootSingleSegmentChain} otherwise) can no longer drop or double-claim a
+     * comment. Verified byte-identical across the full suite (CommentPresence / Idempotence / AstEquivalence, zero golden
+     * moves).
      */
     private Optional<Doc> rankedObjectRootSingleSegmentChain(
             ObjectCreationExpr objectCreation,
@@ -1252,7 +1258,6 @@ final class MethodCallChainPrinter {
     ) {
         if (
             rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
-            || analysis.hasComments()
             // The object-creation-root argument list is width-driven, so a source-multiline constructor root is a
             // ranking candidate like any other; no source-shape bail here.
             || objectCreation.getAnonymousClassBody().isPresent()

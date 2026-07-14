@@ -451,14 +451,17 @@ rendered line count at the real output column. Two invariants keep the emission 
 runs before ranking** — the ranker fires only for the width-driven, source-neutral case (root rendered through ordinary
 expression dispatch, chain and root arguments not split across source lines, a final segment with breakable non-lambda
 arguments); a promoted/builder/broken-object-creation root or a deliberately-multiline chain is a source-preserved shape
-selected by the gates above and is never a width-ranked alternative, so ranking cannot override it. Second, the emission
-is gated on the chain being **comment-free** (`!MethodCallChainAnalysis.hasComments()`): a comment-bearing chain stays on
-the imperative `speculatively` ladder whose first-builder-wins rollback owns the comment claim, because building both
-`bestFitting` alternatives eagerly would double-claim comments and trip the strict-claims guardrail. Because the ranking
-agrees with the retained probe at the real column, the fixture corpus is byte-identical. Milestone LDM-3g (#210) adds the
+selected by the gates above and is never a width-ranked alternative, so ranking cannot override it. Second, both ranked
+arms render the root and selector through the same shared renderers the imperative deferral uses, so a comment an admitted
+chain carries is preserved identically whichever arm the renderer keeps (guarded by `CommentPresenceDiagnosticTest`); the
+`!MethodCallChainAnalysis.hasComments()` bail these rankers once carried — added when a discarded eager candidate could
+double-claim comments — became redundant once every comment moved onto the claim-neutral rail and was lifted (comment-claim
+enabler, Phase D), so a comment-bearing single-segment chain now ranks like any other. Because the ranking agrees with the
+retained probe at the real column, the fixture corpus is byte-identical. Milestone LDM-3g (#210) adds the
 object-creation-rooted sibling `MethodCallChainPrinter.rankedObjectRootSingleSegmentChain`, which ranks the same two
 broken shapes for a source-compact constructor root (`new Type(args).selector(...)`) under the identical
-source-shape + `!hasComments` gates and reuses the same `compactRootWithBrokenFinalSegment` for the compact alternative
+source-shape gates (its `!hasComments` bail lifted alongside the method-root ranker's) and reuses the same
+`compactRootWithBrokenFinalSegment` for the compact alternative
 (it already builds that shape for object-creation roots). It is reached in the forced-chain single-segment branch, so
 `ReturnExpressionPrinter` drops the object-creation-rooted-chain pre-empt from `preemptedReturnValue`: an
 object-creation-rooted return chain now falls through to the return's flat-versus-broken `conditionalGroup`, whose broken

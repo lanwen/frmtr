@@ -7,6 +7,158 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-14
+
+### Merged Pull Requests
+
+- `docs` docs(proposals): convergence redesign — source-neutral fan-out + opener-attachment ranking ([#238](https://github.com/lanwen/frmtr/pull/238))
+- `feat` feat(doc): add opener-attachment priority to BestFitting ranking (convergence slice 1) ([#239](https://github.com/lanwen/frmtr/pull/239))
+- `refactor` refactor(core): extract a source-neutral chainFanOut builder (convergence slice 2) ([#240](https://github.com/lanwen/frmtr/pull/240))
+- `feat` feat(core): route the initializer fan-out convergence through the ranked engine (#191) ([#241](https://github.com/lanwen/frmtr/pull/241))
+- `feat` feat(core): dot-split an initializer single-simple-arg tail instead of opening it (#221) ([#242](https://github.com/lanwen/frmtr/pull/242))
+- `feat` feat(core): fan an over-width lambda-body chain by dots, dedenting the close (#221 Case A) ([#243](https://github.com/lanwen/frmtr/pull/243))
+- `feat` feat(cli): add --render-indentation to render indentation as middle-dots (#201) ([#244](https://github.com/lanwen/frmtr/pull/244))
+- `docs` docs(proposals): chain-path unification plan (route all chain layout through the ranked engine) ([#245](https://github.com/lanwen/frmtr/pull/245))
+- `refactor` refactor(core): retire transitional ternary/unary/return width closures (#200) ([#246](https://github.com/lanwen/frmtr/pull/246))
+- `refactor` refactor(core): route the multi-segment chain fan-out through chainFanOut (chain-unify U1) ([#247](https://github.com/lanwen/frmtr/pull/247))
+- `feat` feat(cli): render-indentation delta dots + continuation ellipsis ([#249](https://github.com/lanwen/frmtr/pull/249))
+- `refactor` refactor(core): route the return multi-segment chain through bestFitting (chain-unify U2) ([#250](https://github.com/lanwen/frmtr/pull/250))
+- `refactor` refactor(core): activate leftEdgePrefix for statement and argument chain callers (chain-unify U3) ([#252](https://github.com/lanwen/frmtr/pull/252))
+- `feat` feat(core): canonical fan for multi-link method chains (End-state A) ([#256](https://github.com/lanwen/frmtr/pull/256))
+- `docs` docs: propose reprint-by-default with structural break rules ([#258](https://github.com/lanwen/frmtr/pull/258))
+- `refactor` refactor(core): BreakRule model + canonical fan as the first named rule (break-rules Stage 0) ([#259](https://github.com/lanwen/frmtr/pull/259))
+- `refactor` refactor(core): extract chainFanOut sub-shapes into named BreakRules (break-rules Stage 1a) ([#260](https://github.com/lanwen/frmtr/pull/260))
+- `feat` feat(core): closed SourceShapeException set + ratchet (break-rules Stage 2) ([#261](https://github.com/lanwen/frmtr/pull/261))
+- `feat` feat(core): parameter lists and throws clauses reflow by width, not source shape (reprint-by-default) ([#262](https://github.com/lanwen/frmtr/pull/262))
+- `feat` feat(core): control conditions reflow logical breaks by width, not source shape (retire sourceMultilineLogicalCondition + methodCallOperandSpansMultipleLines) ([#263](https://github.com/lanwen/frmtr/pull/263))
+  Control-condition logical breaks are now width-driven and source-shape-independent: a `&&`/`||` `if`/`while`/`do`/`switch` condition that fits collapses to one line, and an overflowing one breaks in the standard precedence-grouped binary shape. Retires two `SourceShapePolicy` reads (`sourceMultilineLogicalCondition`, `methodCallOperandSpansMultipleLines`).
+- `feat` feat(core): multi-arg if-condition arguments reflow by width, not source shape (retire methodCallFirstArgumentStartsAfterName) ([#264](https://github.com/lanwen/frmtr/pull/264))
+  Multi-argument method-call `if` conditions now break their argument list by rendered width (overflow, or a complex argument near the budget) rather than by whether the author wrapped the arguments across source lines. A near-boundary condition with only simple arguments collapses to one line. Retires the `methodCallFirstArgumentStartsAfterName` `SourceShapePolicy` read.
+- `feat` feat(core): return binary/string-concat continuations reflow by width, not source shape (retire containsSourceMultilineMethodCallArgument) ([#265](https://github.com/lanwen/frmtr/pull/265))
+  Direct binary and `+` string-concatenation `return` continuations now reflow by rendered width rather than preserving the author's source line breaks around a wrapped method call. A concatenation that opened one argument mid-line now breaks operand-per-line; a source-multiline binary return that was pushed into `return (...)` grouping now stays un-parenthesized. Retires the `containsSourceMultilineMethodCallArgument` `SourceShapePolicy` read.
+- `feat` feat(core): ternary, enclosed-binary-operand and try-resource layouts reflow by width, not source shape ([#266](https://github.com/lanwen/frmtr/pull/266))
+  Ternary, enclosed-binary-operand, and try-resource layout now reflow by rendered width instead of preserving the author's source line breaks: a fitting multiline ternary/operand/resource collapses to one line; a wide one breaks by width. Comment-bearing ternaries still break to keep their line comments.
+- `docs` docs(proposals): non-reverting atomic-rewrite plan for the canonicalization hub ([#267](https://github.com/lanwen/frmtr/pull/267))
+- `chore` chore(tooling): corpus-check harness and source-read tripwire (D0) ([#268](https://github.com/lanwen/frmtr/pull/268))
+- `refactor` refactor(core): inter-segment-comment fan gate as comment-safety residue (D2a, byte-identical) ([#269](https://github.com/lanwen/frmtr/pull/269))
+- `refactor` refactor(core): thread LayoutContext into statement/field single-segment chain flat-gates (D1e plumbing, byte-identical) ([#270](https://github.com/lanwen/frmtr/pull/270))
+- `refactor` refactor(core): thread LayoutContext into the breakable-argument seam (D1a plumbing, byte-identical) ([#271](https://github.com/lanwen/frmtr/pull/271))
+- `refactor` refactor(core): thread LayoutContext into the expression-lambda hug admission plan (D1g plumbing, byte-identical) ([#272](https://github.com/lanwen/frmtr/pull/272))
+- `docs` docs(proposals): D3 atomic-flip map — per-read consumer/replacement guide for the hub ([#273](https://github.com/lanwen/frmtr/pull/273))
+- `refactor` refactor(core): address thermo-nuclear review of hub-canonicalization scaffolding (byte-identical) ([#274](https://github.com/lanwen/frmtr/pull/274))
+- `docs` docs(proposals): record D3 first-attempt empirical findings + refined worklist ([#275](https://github.com/lanwen/frmtr/pull/275))
+- `refactor` refactor(core): thread the true segment column into expression-lambda hug seams (D3 keystone, byte-identical) ([#276](https://github.com/lanwen/frmtr/pull/276))
+- `docs` docs(proposals): record validated D2b/c width-driven fan design + prototype evidence ([#277](https://github.com/lanwen/frmtr/pull/277))
+- `fix` fix(scripts): harden sign-prs timeout handling and preserve signed commits ([#278](https://github.com/lanwen/frmtr/pull/278))
+- `feat` feat(core): retire the method-call/chain/object-creation/lambda hub source-shape reads (D3 atomic flip) ([#279](https://github.com/lanwen/frmtr/pull/279))
+- `chore` chore(scripts): cool down between sign-prs signatures to dodge the macOS Touch-ID throttle ([#280](https://github.com/lanwen/frmtr/pull/280))
+- `refactor` refactor(core): split MethodCallChainPrinter into break-rules Stage 1b helper classes ([#281](https://github.com/lanwen/frmtr/pull/281))
+- `feat` feat(core): width-driven wrap for type-use annotations and class literals (retire satellite source-shape reads) ([#282](https://github.com/lanwen/frmtr/pull/282))
+- `fix` fix(scripts): make sign-prs.sh portable to macOS bash 3.2 (replace mapfile) ([#283](https://github.com/lanwen/frmtr/pull/283))
+- `fix` fix(core): fan lambda-body chains by width, not source arrow shape (#190 keystone) ([#284](https://github.com/lanwen/frmtr/pull/284))
+- `refactor` refactor(core): measure statement/argument chain roots at the rendered column (U3 floor-drop) ([#285](https://github.com/lanwen/frmtr/pull/285))
+- `fix` fix(core): render comment-bearing object-root chains at their stable exploded shape (D4) ([#286](https://github.com/lanwen/frmtr/pull/286))
+- `refactor` refactor(core): retire the transitional LayoutContext.widthBudget field (U9 field-retire) ([#287](https://github.com/lanwen/frmtr/pull/287))
+- `refactor` refactor(core): retire the LayoutWidth.LineBudget enum — measure width at the true rendered column (C10) ([#288](https://github.com/lanwen/frmtr/pull/288))
+- `fix` fix(core): converge single-selector fan tail to one-pass idempotence (testcontainers RegistryAuthLocator regression) ([#289](https://github.com/lanwen/frmtr/pull/289))
+- `refactor` refactor(core): sweep dead source-shape stubs and the inert lambda-attach subsystem (byte-identical) ([#290](https://github.com/lanwen/frmtr/pull/290))
+- `refactor` refactor(core): retire sourceMultilineChain and enforce the closed source-shape exception set (governance G2) ([#291](https://github.com/lanwen/frmtr/pull/291))
+- `fix` fix(core): align fanned nested-lambda closers and hug bare-name-receiver lambda selectors (#279 review follow-ups) ([#292](https://github.com/lanwen/frmtr/pull/292))
+- `refactor` refactor(core): retire 5 of the 7 enumerated inline source-shape reads (governance G3) ([#293](https://github.com/lanwen/frmtr/pull/293))
+- `refactor` refactor(core): extract the try-statement family from StatementPrinter into TryStatementLayout ([#296](https://github.com/lanwen/frmtr/pull/296))
+- `refactor` refactor(core): extract the if- and loop-statement families from StatementPrinter ([#297](https://github.com/lanwen/frmtr/pull/297))
+- `fix` fix(core): hug the opener when a fanned lambda body call takes a bare object-creation argument ([#298](https://github.com/lanwen/frmtr/pull/298))
+  Fixes an over-width layout where a fanned chain selector's expression-lambda body — a call whose argument is a freshly-constructed object — dropped the lambda flat onto one continuation line instead of hugging the call opener and fanning its arguments. Object-creation-rooted-chain and multi-selector-chain arguments are unaffected (they still route through the chain fan).
+- `fix` fix(core): hug the constructor opener for a fanned lambda body that is a bare object creation ([#299](https://github.com/lanwen/frmtr/pull/299))
+  Fixes an over-width layout where a fanned chain selector's expression-lambda body — a bare `new Type(args)` object creation — dropped the lambda flat onto one continuation line instead of hugging the constructor opener and fanning its arguments. Object-creation-rooted-chain and multi-selector-chain constructor arguments still route through the chain fan.
+- `docs` docs(proposals): printer-contract-inversion — ranked candidate sets to dissolve the callback mesh ([#300](https://github.com/lanwen/frmtr/pull/300))
+- `refactor` refactor(core): bundle nested child-expression render callbacks into one facade ([#301](https://github.com/lanwen/frmtr/pull/301))
+  Internal refactor only; no formatting behavior change.
+- `refactor` refactor(core): make an owner's comment re-claim idempotent ([#302](https://github.com/lanwen/frmtr/pull/302))
+  Internal enabler; no formatting behavior change.
+- `refactor` refactor(core): add inert comments-as-pure-content primitives ([#303](https://github.com/lanwen/frmtr/pull/303))
+  Internal scaffolding; inert, no formatting behavior change.
+- `refactor` refactor(core): re-anchor the do-while trailing comment onto the layout-independent anchor ([#304](https://github.com/lanwen/frmtr/pull/304))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): re-anchor the local var-decl trailing comment onto the anchor ([#305](https://github.com/lanwen/frmtr/pull/305))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): collapse return-chain shape-selection into the chain printer ([#306](https://github.com/lanwen/frmtr/pull/306))
+  Internal refactor; no formatting behavior change. Consumer printers stop taking method-call/chain shape callbacks; the chain printer owns shape selection keyed by context.
+- `refactor` refactor(core): source FieldDeclarationPrinter's own services from JavaFormatContext ([#307](https://github.com/lanwen/frmtr/pull/307))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): convert order-independent if-cascades to switch expressions ([#308](https://github.com/lanwen/frmtr/pull/308))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract ChainCommentLayout + ChainSegmentWidthLayout from the chain printer ([#309](https://github.com/lanwen/frmtr/pull/309))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract ChainSegmentPaddingLayout from the chain printer ([#310](https://github.com/lanwen/frmtr/pull/310))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract InitializerObjectCreationLayout from the initializer printer ([#311](https://github.com/lanwen/frmtr/pull/311))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract SwitchCaseLabelLayout from SwitchPrinter ([#312](https://github.com/lanwen/frmtr/pull/312))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract NestedBinaryParenthesesLayout from BinaryExpressionPrinter ([#313](https://github.com/lanwen/frmtr/pull/313))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract LambdaBodyChainFanLayout from ExpressionLambdaArgumentLayout ([#314](https://github.com/lanwen/frmtr/pull/314))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract BlockLambdaArgumentLayout from LambdaExpressionPrinter ([#315](https://github.com/lanwen/frmtr/pull/315))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract EnumConstantLayout from EnumDeclarationPrinter ([#316](https://github.com/lanwen/frmtr/pull/316))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract ConditionalCommentLayout from ConditionalExpressionPrinter ([#317](https://github.com/lanwen/frmtr/pull/317))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract ParameterTrailingBlockCommentLayout from CallableSignaturePrinter ([#318](https://github.com/lanwen/frmtr/pull/318))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract ControlConditionCommentLayout from ControlConditionPrinter ([#319](https://github.com/lanwen/frmtr/pull/319))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract TopLevelDeclarationLayout from CompilationUnitPrinter ([#320](https://github.com/lanwen/frmtr/pull/320))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract AssignmentStatementCommentLayout from AssignmentExpressionPrinter ([#321](https://github.com/lanwen/frmtr/pull/321))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract MemberBlockBraceLayout from MemberBlockPrinter ([#322](https://github.com/lanwen/frmtr/pull/322))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): extract InitializerTrailingCommentLayout from VariableInitializerLayout ([#323](https://github.com/lanwen/frmtr/pull/323))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): account comments by recorded ownership, not build-time printed set ([#324](https://github.com/lanwen/frmtr/pull/324))
+  Internal refactor; no formatting behavior change. First step of the comment-ownership cutover that unblocks ranking comment-bearing layouts.
+- `refactor` refactor(core): anchor array-element trailing comments by ownership, not isPrinted ([#325](https://github.com/lanwen/frmtr/pull/325))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): anchor detached-condition line comments by ownership, not isPrinted ([#326](https://github.com/lanwen/frmtr/pull/326))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): anchor assignment value-tail line comment by ownership, not isPrinted ([#327](https://github.com/lanwen/frmtr/pull/327))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): anchor chain final-trailing line comment by ownership, not isPrinted ([#328](https://github.com/lanwen/frmtr/pull/328))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): anchor try-resource opener line comments by ownership, not isPrinted ([#329](https://github.com/lanwen/frmtr/pull/329))
+  Internal refactor; no formatting behavior change.
+- `fix` fix(core): repair chain-array-element trailing-comment double-render; anchor gap comments to container ([#330](https://github.com/lanwen/frmtr/pull/330))
+  Fixes a non-idempotent double-render of an inline trailing comment on a method-chain array element, introduced by the interaction of two earlier comment-ownership re-keys.
+- `refactor` refactor(core): migrate leading/adjacent/own/trailing comment families to the claim-neutral ownedComment rail (Phase B core) ([#331](https://github.com/lanwen/frmtr/pull/331))
+  Internal refactor; no formatting behavior change. Migrates the core comment families to ownership-pure rendering.
+- `refactor` refactor(core): complete Phase A comment re-keys (chain-before-segment, empty-block, list shape-predicate) ([#332](https://github.com/lanwen/frmtr/pull/332))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): migrate orphan/gap/trailing-recovery comment families to the ownedComment rail (Phase B families) ([#333](https://github.com/lanwen/frmtr/pull/333))
+  Internal refactor; no formatting behavior change.
+- `refactor` refactor(core): migrate comment() interleaved family to ownedComment — complete Phase B claim-neutrality ([#334](https://github.com/lanwen/frmtr/pull/334))
+  Internal refactor; no formatting behavior change. Completes the migration of all comment rendering onto the claim-neutral ownership rail.
+- `refactor` refactor(core): retire CommentTracker.speculatively — redundant post-claim-neutrality (Phase C) ([#335](https://github.com/lanwen/frmtr/pull/335))
+  Internal refactor; no formatting behavior change. Removes the speculative comment-claim rollback machinery, now dead after comment rendering became ownership-pure.
+- `feat` feat(core): comment-bearing method-call chains rank via bestFitting (Phase D) ([#336](https://github.com/lanwen/frmtr/pull/336))
+  Comment-bearing method-call chains now participate in width ranking; one shape improves (a trivial-receiver two-selector chain with a trailing comment now attaches its first selector to the receiver line, matching the comment-free shape).
+- `docs` docs(architecture): reflect the comment-claim enabler (Phases A-D) ([#337](https://github.com/lanwen/frmtr/pull/337))
+  Documentation only.
+- `test` test(core): lock comment-bearing non-overflowing nested logical sub-chain parens (Phase D boundary) ([#338](https://github.com/lanwen/frmtr/pull/338))
+  Test-only: adds a regression fixture; no formatting behavior change.
+- `chore` chore(core): retire orphaned comment-claim machinery + refresh enabler docs ([#339](https://github.com/lanwen/frmtr/pull/339))
+  Internal cleanup + docs; no formatting behavior change.
+- `fix` fix(core): preserve text-block argument gap comments in the hug layout (remove hasLineComments bail) ([#340](https://github.com/lanwen/frmtr/pull/340))
+  Fixes a dropped `//` comment adjacent to a text-block method-call argument under whitespace-perturbed input; such calls now keep the compact hug layout with their comments preserved.
+- `refactor` refactor(core): unify the broken-binary operand builder; drop the :137 comment preempt ([#341](https://github.com/lanwen/frmtr/pull/341))
+  Internal refactor; no formatting behavior change. Removes a comment-bearing-binary special-case by unifying the broken-binary line builder.
+- `docs` docs(architecture): rewrite ARCHITECTURE.md as a high-level overview ([#342](https://github.com/lanwen/frmtr/pull/342))
+- `docs` docs(proposals): archive shipped proposals and rebuild the roadmap ([#343](https://github.com/lanwen/frmtr/pull/343))
+- `docs` docs: refresh formatter internals/coverage/recovery maps and add a docs index ([#344](https://github.com/lanwen/frmtr/pull/344))
+- `refactor` refactor(core): tighten source comments and apply small code cleanups ([#345](https://github.com/lanwen/frmtr/pull/345))
+
 ## [0.1.0] - 2026-06-30
 
 ### Merged Pull Requests
@@ -365,5 +517,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument-list path.
 - Preserved broken wrapping for over-wide nested string-concatenation arguments in method calls.
 
-[Unreleased]: https://github.com/lanwen/frmtr/compare/v0.1.0...main
+[Unreleased]: https://github.com/lanwen/frmtr/compare/v0.2.0...main
+[0.2.0]: https://github.com/lanwen/frmtr/releases/tag/v0.2.0
 [0.1.0]: https://github.com/lanwen/frmtr/releases/tag/v0.1.0

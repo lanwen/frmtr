@@ -612,13 +612,16 @@ final class MethodCallChainPrinter {
         // Route a fan-threshold chain straight to the source-neutral `chainFanOut` builder rather than the
         // source-shape-sensitive imperative ladder below. `chainFanOut` is a pure function of the AST (root + each
         // selector on its own dotted line, root rendered through ordinary expression dispatch), so both passes see the
-        // identical AST and rebuild the identical fan — idempotent by construction. Gated comment-free / block-lambda-free:
-        // `chainFanOut` re-renders the root once, and a comment-bearing root re-render would double-claim its comments (the
-        // same guard the single-segment rankers use for their `chainFanOut` arm). Comment/lambda chains fall through to the
-        // imperative ladder.
+        // identical AST and rebuild the identical fan — idempotent by construction. `chainFanOut` re-renders the root and
+        // each selector once. Admitted comment-free, OR when the chain's only comment is a last-selector trailing line
+        // comment ({@code chainCommentsAreOnlyTrailingLine}) — the one shape the fan provably preserves (its
+        // `methodCallChainSegments` re-emits that slot), the same relaxation `chainFansByCanonicalRuleAdmittingTrailingComment`
+        // admits at the fan position. Every other comment family (root / segment / between-selector) would be dropped or
+        // destabilized by the plain-dispatch root re-render, so those and block-lambda chains fall through to the
+        // comment-preserving imperative ladder.
         if (
             chainBreaksByRule(analysis)
-            && !analysis.hasComments()
+            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && !analysis.hasBlockLambdaArgument()
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
@@ -633,18 +636,28 @@ final class MethodCallChainPrinter {
         // is ALWAYS-FAN, not bestFitting: its {@code fanRootDoc} renders the enclosed/cast root at {@code root()} (column
         // zero), so a flat arm measured at the real column would flip flat<->fan against the fan arm's column-zero render
         // and oscillate; an enclosed fanning root also already spans lines, so the flat arm can never win. Carries the
-        // SAME comment/lambda carve-out as the early canonical route above — {@code chainFanOut} re-renders the root once
-        // and must not double-claim a comment. Comment-bearing chains stay on the caller's comment-aware routing (kept
-        // engaged for an inter-segment line comment by {@link #methodCallChainIsSourceMultiline}) and never reach this arm.
+        // SAME comment/lambda carve-out as the early canonical route above, with the same last-selector-trailing-line
+        // relaxation ({@code chainCommentsAreOnlyTrailingLine}): such a chain is admitted but FORCED to fan below, never
+        // ranked against the {@code flat} arm — that arm is {@code compactSource.compact(expression)}, whose
+        // {@code compactTokenText} would de-indent / merge its {@code //} comment. Every other comment family stays on the
+        // caller's comment-aware routing (kept engaged for an inter-segment line comment by
+        // {@link #methodCallChainIsSourceMultiline}) and never reaches this arm.
         if (
             chainIsWidthDrivenTwoSelectorFan(analysis)
-            && !analysis.hasComments()
+            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && !analysis.hasBlockLambdaArgument()
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
             chainWidthBreakExplain.record(expression, analysis, layout);
             Doc fanOut = chainFanOut(root, calls, finalSegmentSuffix, layout);
             if (rootIsEnclosedFanningChain(root)) {
+                return Optional.of(fanOut);
+            }
+            // A chain admitted only via the trailing-line-comment relaxation ({@code chainCommentsAreOnlyTrailingLine})
+            // must fan: the {@code flat} arm built below is {@code compactSource.compact(expression)}, whose
+            // {@code compactTokenText} de-indents / merges the last selector's {@code //} comment. {@code chainFanOut}
+            // preserves it — {@code methodCallChainSegments} re-emits the last selector's trailing-comment slot.
+            if (analysis.hasComments()) {
                 return Optional.of(fanOut);
             }
             Doc flat = appendFinalSegmentSuffix(Doc.text(compactSource.compact(expression)), finalSegmentSuffix);
@@ -798,14 +811,16 @@ final class MethodCallChainPrinter {
         // broken-method-call shape; a promoted/grouped/broken-object-creation root, a first-segment-attached root, or a
         // root-trailing-comment-wrapped root produces a different {@code rootDoc} and stays on the inline construction.
         //
-        // The comment-free gate is load-bearing: the fall-through routing through {@code chainFanOut} re-renders the root a
-        // second time (the {@code rootDoc} built here is discarded in that path), and re-rendering a comment-bearing root
-        // would re-claim its already-{@code printed} comments and trip the strict-claims guardrail — the same reason the
-        // landed single-segment rankers gate their {@code chainFanOut} arm comment-free. A comment-free root re-renders to a
-        // byte-identical {@code Doc}; a comment-bearing chain keeps the unchanged inline construction (rendered once).
+        // The comment gate is load-bearing: the fall-through routing through {@code chainFanOut} re-renders the root a
+        // second time (the {@code rootDoc} built here is discarded in that path). Admitted comment-free, OR when the chain's
+        // only comment is a last-selector trailing line comment ({@code chainCommentsAreOnlyTrailingLine}) — that relaxation
+        // requires {@code !rootHasComments}, so the root re-renders to a byte-identical {@code Doc} and {@code chainFanOut}'s
+        // {@code methodCallChainSegments} re-emits the last selector's trailing slot. Every other comment family keeps the
+        // unchanged inline construction (rendered once); re-rendering the root through the fan would drop or destabilize a
+        // root / segment / between-selector comment.
         boolean rootDocIsPlainExpressionRenderRoot =
             chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
-            && !analysis.hasComments()
+            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && !expressionRenderedChainRootBreaksMethodCall(chainPlan.root(), firstLineWidth);
         boolean firstSegmentAttachedToRoot = false;
         if (canAttachFirstSegmentToSimpleRoot(expression, chainPlan, calls, analysis)) {
@@ -1015,16 +1030,18 @@ final class MethodCallChainPrinter {
         // {@code chainFanOut} through the early canonical-fan route: both passes now render the root through the same
         // width-driven group, so a constructor line that fits stays flat on every pass instead of flipping to the
         // {@code brokenObjectCreationRenderer} force-break shape once a non-final selector's arguments span source lines.
-        // Comment-free / block-lambda-free is required because {@code chainFanOut} re-renders the root and every selector a
-        // second time (discarding {@code rootDoc}); a comment-bearing chain would re-claim its already-printed comments, so
-        // it keeps the inline construction below (rendered once). The selectors render identically either way — the fan's
-        // multi-segment tail is byte-for-byte the {@code chainContinuation(root, methodCallChainSegments(...))} the inline
-        // construction builds — so only the root doc changes.
+        // Admitted comment-free, OR when the chain's only comment is a last-selector trailing line comment
+        // ({@code chainCommentsAreOnlyTrailingLine}, which requires {@code !rootHasComments}): {@code chainFanOut} re-renders
+        // the comment-free object-creation root through its width-driven promotion and {@code methodCallChainSegments}
+        // re-emits the last selector's trailing slot, so no comment is dropped. Every other comment family (and block-lambda
+        // chains) keep the inline construction below (rendered once), where re-rendering the root through the fan would drop
+        // its comment. The selectors render identically either way — the fan's multi-segment tail is byte-for-byte the
+        // {@code chainContinuation(root, methodCallChainSegments(...))} the inline construction builds — so only the root doc changes.
         if (
             objectCreationRootIsWidthDrivenFanEligible(root)
             && chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION
             && !firstSegmentAttachedToRoot
-            && !analysis.hasComments()
+            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && !analysis.hasBlockLambdaArgument()
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
@@ -1312,6 +1329,16 @@ final class MethodCallChainPrinter {
      */
     private boolean objectCreationRootIsWidthDrivenFanEligible(Expression root) {
         return chainFan.objectCreationRootIsWidthDrivenFanEligible(root);
+    }
+
+    /**
+     * Reports whether a chain's only comment is a single trailing line comment on its last selector — the one shape the
+     * source-neutral {@link #chainFanOut} provably preserves (see {@link ChainFanLayout#chainCommentsAreOnlyTrailingLine}).
+     * The comment-bearing fan-route gates use this to admit exactly that shape to the fan while still withholding every
+     * other comment family. Delegates to {@link ChainFanLayout}.
+     */
+    private boolean chainCommentsAreOnlyTrailingLine(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+        return chainFan.chainCommentsAreOnlyTrailingLine(analysis);
     }
 
     private boolean methodCallSegmentHasNoOwnContainedComments(MethodCallExpr expression) {

@@ -250,12 +250,12 @@ final class BinaryExpressionPrinter {
             operand instanceof UnaryExpr unaryOperand
             && unaryOperand.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
             && unaryOperand.getExpression() instanceof MethodCallExpr complementedCall
-            && operand.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(operand)
             && methodCallOperandShouldBreak(binaryLine, complementedCall, nestedContinuationLine)
         ) {
             return Doc.concat(Doc.text("!"), brokenMethodCallChainOperand(complementedCall));
         }
-        if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
+        if (operand instanceof MethodCallExpr && !sourceShapePolicy.hasContainedComments(operand)) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
             if (methodCallOperandShouldBreak(binaryLine, methodCall, nestedContinuationLine)) {
                 return brokenMethodCallChainOperand(methodCall);
@@ -340,8 +340,8 @@ final class BinaryExpressionPrinter {
             !binaryLine.hasLeadingOperator()
             || !(operand instanceof BinaryExpr binaryOperand)
             || !(binaryOperand.getLeft() instanceof MethodCallExpr methodCall)
-            || !methodCall.getAllContainedComments().isEmpty()
-            || !binaryOperand.getRight().getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodCall)
+            || sourceShapePolicy.hasContainedComments(binaryOperand.getRight())
             || !methodCallBinaryOperandShouldBreak(binaryLine, binaryOperand)
         ) {
             return false;

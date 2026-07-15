@@ -326,6 +326,7 @@ final class VariableInitializerLayout {
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.lambdaExpression = lambdaExpression;
         this.objectCreationLayout = new InitializerObjectCreationLayout(
+            context.sourceShapePolicy,
             this.options,
             this.layoutWidth,
             this.compact,
@@ -755,7 +756,7 @@ final class VariableInitializerLayout {
     private boolean canMeasureInitializerAtRenderedColumn(Expression initializer, Doc groupTerminator) {
         return groupTerminator != Doc.EMPTY
             && initializer.getComment().isEmpty()
-            && initializer.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(initializer)
             && !initializerHasOwnBreak(initializer)
             && !(initializer instanceof CastExpr);
     }
@@ -794,7 +795,7 @@ final class VariableInitializerLayout {
             String flat,
             Doc groupTerminator
     ) {
-        if (!initializer.getAllContainedComments().isEmpty() || initializer.getComment().isPresent()) {
+        if (sourceShapePolicy.hasContainedComments(initializer) || initializer.getComment().isPresent()) {
             return Optional.empty();
         }
         String flatName = declarationPrefix + variable.getNameAsString();
@@ -1439,7 +1440,7 @@ final class VariableInitializerLayout {
         );
         if (
             !chainShape.canUseCompactObjectCreationInitializer(chainSpansMultipleSourceLines)
-            || !methodCall.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodCall)
             || commentPlacement.trailingLineComment(variable).isPresent()
             || layoutWidth.continuationStatement(compact.apply(methodCall) + ";") > options.lineWidth()
         ) {
@@ -1551,7 +1552,7 @@ final class VariableInitializerLayout {
         if (
             arrayCreation.getInitializer().isEmpty()
             || arrayCreationTypeBreaks.test(arrayCreation, continuationPrefixWidth)
-            || !arrayCreation.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(arrayCreation)
         ) {
             return Optional.empty();
         }
@@ -1589,7 +1590,7 @@ final class VariableInitializerLayout {
      */
     private Optional<String> compactObjectCreationArrayInitializer(ArrayInitializerExpr initializer) {
         if (
-            !initializer.getAllContainedComments().isEmpty()
+            sourceShapePolicy.hasContainedComments(initializer)
             || initializer.getValues().isEmpty()
             || initializer.getValues().stream().anyMatch(value -> !compactObjectCreationArrayValue(value))
         ) {
@@ -1624,7 +1625,7 @@ final class VariableInitializerLayout {
         if (
             methodCall.getArguments().isEmpty()
             || methodCallHasOwnComment(methodCall)
-            || (!allowNestedComments && !methodCall.getAllContainedComments().isEmpty())
+            || (!allowNestedComments && sourceShapePolicy.hasContainedComments(methodCall))
             || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
         ) {
             return Optional.empty();
@@ -1668,7 +1669,7 @@ final class VariableInitializerLayout {
         if (blockLambdaCall.isPresent()) {
             return blockLambdaCall;
         }
-        if (!methodCall.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(methodCall)) {
             return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
         }
         return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
@@ -1725,7 +1726,7 @@ final class VariableInitializerLayout {
             || methodCall.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
             || methodCallHasBlockLambdaArgument(methodCall)
             || methodCallHasOwnComment(methodCall)
-            || !methodCall.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodCall)
             || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
         ) {
             return Optional.empty();
@@ -1771,7 +1772,7 @@ final class VariableInitializerLayout {
             !chainShape.chainBreaksByRule()
             || chainShape.rootIsObjectCreation()
             || methodCallHasOwnComment(methodCall)
-            || !methodCall.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodCall)
             || methodCallHasBlockLambdaArgument(methodCall)
         ) {
             return Optional.empty();
@@ -1999,7 +2000,7 @@ final class VariableInitializerLayout {
                         || scope.isThisExpr()
                         || scope.isSuperExpr()
                         || (scope instanceof MethodCallExpr scopedCall
-                            && scopedCall.getAllContainedComments().isEmpty()
+                            && !sourceShapePolicy.hasContainedComments(scopedCall)
                             && methodCallScopeEndsOnNameLine(scopedCall, methodCall))
                 )
                 .isPresent();
@@ -2063,7 +2064,7 @@ final class VariableInitializerLayout {
             && methodCallChainInitializerShape.apply(methodCall).singleCall()
             && methodCallHasBlockLambdaArgument(methodCall)
             && !methodCallHasOwnComment(methodCall)
-            && !methodCall.getAllContainedComments().isEmpty();
+            && sourceShapePolicy.hasContainedComments(methodCall);
     }
 
     /**
@@ -2134,7 +2135,7 @@ final class VariableInitializerLayout {
         if (
             scope.isEmpty()
             || scope.filter(Expression::isMethodCallExpr).isPresent()
-            || scope.filter(expression -> !expression.getAllContainedComments().isEmpty()).isPresent()
+            || scope.filter(sourceShapePolicy::hasContainedComments).isPresent()
             || scope.filter(shouldPrintScopeAsDoc).isPresent()
         ) {
             return Optional.empty();

@@ -37,6 +37,8 @@ import java.util.function.ToIntFunction;
  */
 final class LambdaBodyChainFanLayout {
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final Function<Node, String> compact;
 
     private final Function<List<? extends Node>, String> compactJoin;
@@ -50,6 +52,7 @@ final class LambdaBodyChainFanLayout {
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> huggedLambdaBodyChainRenderer;
 
     LambdaBodyChainFanLayout(
+            SourceShapePolicy sourceShapePolicy,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
             Function<MethodCallExpr, String> methodCallSelector,
@@ -57,6 +60,7 @@ final class LambdaBodyChainFanLayout {
             FormatterOptions options,
             BiFunction<String, MethodCallExpr, Optional<Doc>> huggedLambdaBodyChainRenderer
     ) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.compact = compact;
         this.compactJoin = compactJoin;
         this.methodCallSelector = methodCallSelector;
@@ -268,6 +272,6 @@ final class LambdaBodyChainFanLayout {
         return methodCall.getArguments()
                 .stream()
                 .noneMatch(argument -> argument instanceof LambdaExpr
-                        || !argument.getAllContainedComments().isEmpty());
+                        || sourceShapePolicy.hasContainedComments(argument));
     }
 }

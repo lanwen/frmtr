@@ -153,10 +153,9 @@ Sub-questions:
 
 ### Signal
 
-JFR repeatedly showed `Node.getAllContainedComments`, `lineCommentsInRange`, trailing argument
-comment queries, and argument-gap comment checks. The existing comment-containment proposal already
-inventoried 61 direct `getAllContainedComments` call sites before partial indexing work, and the
-samples confirm that the remaining query surface is still worth attacking.
+JFR repeatedly shows `Node.getAllContainedComments`, `lineCommentsInRange`, trailing argument comment queries, and argument-gap comment checks.
+`JavaCommentMap` computes recursive containment bottom-up, and original-tree boolean gates read the index.
+Remaining direct calls need filtered lists, identity accounting, compatibility checks, or clone-local facts.
 
 ### Question
 
@@ -165,8 +164,8 @@ recursive JavaParser scans and repeated stream filtering?
 
 Sub-questions:
 
-- Which remaining direct `getAllContainedComments()` calls are on the hot print path?
-- Which call sites only need a boolean (`hasContainedComments`) instead of the full list?
+- Which remaining full-list and identity callers are on the hot print path?
+- Which repeated filter shapes deserve intent-specific policy queries?
 - Can `JavaCommentPlacementPolicy` expose source-line indexes for common range queries without
   turning into a service locator?
 
@@ -176,13 +175,13 @@ Sub-questions:
 - `JavaCommentPlacementPolicy`
 - `CommentIndex`
 - `CommentedExpressionListPrinter`
-- method-call and variable-initializer comment gates that still ask JavaParser directly
+- full-list filtering and identity-accounting callers that still ask JavaParser directly
 
 ### Proposed experiment
 
 1. Add temporary counters for comment queries per formatted file:
    - contained-comments full-list reads,
-   - boolean containment gates,
+   - indexed boolean containment gates,
    - line-range queries,
    - stream filters over contained comments.
 2. Pick one narrow family first: argument-list trailing/gap comments.

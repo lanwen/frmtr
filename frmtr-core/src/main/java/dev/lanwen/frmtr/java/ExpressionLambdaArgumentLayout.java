@@ -118,8 +118,14 @@ final class ExpressionLambdaArgumentLayout {
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
-        this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, rawSource::raw);
+        this.textBlockArguments = new TextBlockArgumentSourceLayout(
+            sourceShapePolicy,
+            sourceText,
+            options,
+            rawSource::raw
+        );
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
+            sourceShapePolicy,
             options,
             expressionRenderer,
             compactJoin,
@@ -130,6 +136,7 @@ final class ExpressionLambdaArgumentLayout {
             this::expressionFirstLineWidth
         );
         this.chainFan = new LambdaBodyChainFanLayout(
+            sourceShapePolicy,
             compact,
             compactJoin,
             this::methodCallSelector,
@@ -597,7 +604,7 @@ final class ExpressionLambdaArgumentLayout {
                 .map(LambdaExpr.class::cast);
         if (
             body.isEmpty()
-            || !lambdaExpr.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(lambdaExpr)
         ) {
             return Optional.empty();
         }
@@ -608,7 +615,7 @@ final class ExpressionLambdaArgumentLayout {
         if (nestedLambda.isPresent()) {
             LambdaExpr nested = nestedLambda.orElseThrow();
             if (
-                !nested.getAllContainedComments().isEmpty()
+                sourceShapePolicy.hasContainedComments(nested)
                 || lambdaParametersShouldBreak.test(nested, lambdaParameters.apply(nested))
             ) {
                 return Optional.empty();
@@ -708,7 +715,7 @@ final class ExpressionLambdaArgumentLayout {
     private boolean brokenMethodCallReceiverCompactsCleanly(MethodCallExpr methodCall) {
         Expression receiver = methodCall.getScope().orElseThrow();
         return receiver.findAll(LambdaExpr.class).stream().noneMatch(lambda -> lambda.getBody().isBlockStmt())
-            && receiver.getAllContainedComments().isEmpty();
+            && !sourceShapePolicy.hasContainedComments(receiver);
     }
 
     private Optional<Doc> compactBodyWithClosingLine(
@@ -774,7 +781,7 @@ final class ExpressionLambdaArgumentLayout {
     private Optional<Doc> packedConditionalBody(String firstLine, Expression bodyExpression) {
         if (
             !(bodyExpression instanceof ConditionalExpr conditionalExpr)
-            || !conditionalExpr.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(conditionalExpr)
         ) {
             return Optional.empty();
         }
@@ -837,7 +844,7 @@ final class ExpressionLambdaArgumentLayout {
             methodCall.getArguments().size() != 1
             || !(methodCall.getArguments().getFirst().orElseThrow() instanceof LambdaExpr lambdaExpr)
             || !lambdaExpr.getBody().isBlockStmt()
-            || !lambdaExpr.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(lambdaExpr)
         ) {
             return Optional.empty();
         }
@@ -1059,12 +1066,12 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         Optional<Expression> body = lambdaExpr.getExpressionBody();
-        if (body.isEmpty() || !lambdaExpr.getAllContainedComments().isEmpty()) {
+        if (body.isEmpty() || sourceShapePolicy.hasContainedComments(lambdaExpr)) {
             return Optional.empty();
         }
         Expression bodyExpression = body.orElseThrow();
         Optional<BinaryExpr> logicalBody = logicalBinaryBody(bodyExpression);
-        if (logicalBody.isEmpty() || !bodyExpression.getAllContainedComments().isEmpty()) {
+        if (logicalBody.isEmpty() || sourceShapePolicy.hasContainedComments(bodyExpression)) {
             return Optional.empty();
         }
         Optional<Doc> bodyLines = logicalBinaryBodyDoc(bodyExpression);
@@ -1331,7 +1338,7 @@ final class ExpressionLambdaArgumentLayout {
         if (
             !(body instanceof BinaryExpr binaryExpr)
             || !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
-            || !binaryExpr.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(binaryExpr)
             || methodCall.getArguments().isEmpty()
         ) {
             return Optional.empty();

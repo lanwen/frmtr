@@ -172,4 +172,11 @@ final class JavaCommentMap {
     List<JavaCommentTrivia> containedComments(Node node) {
         return containedComments.getOrDefault(node, List.of());
     }
+
+    /**
+     * Reports whether this run snapshot contains {@code node}.
+     */
+    boolean contains(Node node) {
+        return containedComments.containsKey(node);
+    }
 }

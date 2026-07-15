@@ -47,6 +47,8 @@ final class LambdaExpressionPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final SourceText sourceText;
 
     private final FormatterOptions options;
@@ -121,6 +123,7 @@ final class LambdaExpressionPrinter {
     ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.sourceText = sourceText;
         this.options = options;
         this.layoutWidth = layoutWidth;
@@ -140,6 +143,7 @@ final class LambdaExpressionPrinter {
         this.lambdaBodyCanonicalFanChain = lambdaBodyCanonicalFanChain;
         this.lambdaBodyChainRootIsTrivialReceiver = lambdaBodyChainRootIsTrivialReceiver;
         this.lambdaParameterHeaders = new LambdaParameterHeaderLayout(
+            sourceShapePolicy,
             rawSource,
             options,
             compact,
@@ -593,7 +597,7 @@ final class LambdaExpressionPrinter {
                 .map(receiver -> receiver.findAll(LambdaExpr.class)
                         .stream()
                         .noneMatch(lambda -> lambda.getBody().isBlockStmt())
-                    && receiver.getAllContainedComments().isEmpty())
+                    && !sourceShapePolicy.hasContainedComments(receiver))
                 .orElse(true);
     }
 

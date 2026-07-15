@@ -74,7 +74,7 @@ final class ReturnBinaryExpressionLayout {
             LayoutContext layout,
             boolean allowSourceMultilineOverflowContinuation
     ) {
-        if (!binaryExpr.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(binaryExpr)) {
             return Optional.empty();
         }
         if (directBinaryReturnLineFits(binaryExpr, widthAnchor, layout)) {
@@ -110,8 +110,8 @@ final class ReturnBinaryExpressionLayout {
             !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
             || methodCall.getArguments().isEmpty()
             || methodCall.getArguments().size() == 1
-            || !methodCall.getAllContainedComments().isEmpty()
-            || !binaryExpr.getRight().getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodCall)
+            || sourceShapePolicy.hasContainedComments(binaryExpr.getRight())
             || !directBinaryReturnMethodCallFirstLineFits(methodCall, layout)
             || !directBinaryReturnMethodCallClosingLineFits(binaryExpr)
         ) {
@@ -165,8 +165,8 @@ final class ReturnBinaryExpressionLayout {
         if (
             !(lastOperand instanceof BinaryExpr binaryOperand)
             || !(binaryOperand.getLeft() instanceof MethodCallExpr methodCall)
-            || !methodCall.getAllContainedComments().isEmpty()
-            || !binaryOperand.getRight().getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodCall)
+            || sourceShapePolicy.hasContainedComments(binaryOperand.getRight())
             || methodCall.getArguments().isEmpty()
         ) {
             return false;

@@ -56,6 +56,8 @@ final class ChainFanLayout {
 
     private final FormatterOptions options;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final CompactSourceText compactSource;
 
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -124,6 +126,7 @@ final class ChainFanLayout {
 
     ChainFanLayout(
             FormatterOptions options,
+            SourceShapePolicy sourceShapePolicy,
             CompactSourceText compactSource,
             JavaFormatRule<Expression> expressionRenderer,
             ChainWidthBreakExplain chainWidthBreakExplain,
@@ -148,6 +151,7 @@ final class ChainFanLayout {
             Function<Expression, Optional<String>> compactSingleLineRoot
     ) {
         this.options = options;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.compactSource = compactSource;
         this.expressionRenderer = expressionRenderer;
         this.chainWidthBreakExplain = chainWidthBreakExplain;
@@ -825,7 +829,7 @@ final class ChainFanLayout {
         if (firstSelector.getTypeArguments().isPresent()) {
             return false;
         }
-        if (methodCallSegmentHasComment.test(firstSelector) || !firstSelector.getAllContainedComments().isEmpty()) {
+        if (methodCallSegmentHasComment.test(firstSelector) || sourceShapePolicy.hasContainedComments(firstSelector)) {
             return false;
         }
         if (!finalTrailingLineComments.apply(firstSelector).isEmpty()) {
@@ -907,20 +911,20 @@ final class ChainFanLayout {
         if (
             factoryCall.getArguments().size() == 1
             && factoryCall.getArgument(0) instanceof MethodCallExpr chainArgument
-            && factoryCall.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(factoryCall)
         ) {
             Optional<Doc> singleChainArg = singleChainArgFactoryRootDoc(factoryCall, chainArgument);
             if (singleChainArg.isPresent()) {
                 return singleChainArg.orElseThrow();
             }
         }
-        if (factoryCall.getArguments().isEmpty() && factoryCall.getAllContainedComments().isEmpty()) {
+        if (factoryCall.getArguments().isEmpty() && !sourceShapePolicy.hasContainedComments(factoryCall)) {
             return zeroArgFactoryRootDoc(factoryCall);
         }
         if (factoryCall.getArguments().size() <= 1) {
             return groupedPromotedMethodCall.apply(factoryCall);
         }
-        if (!factoryCall.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(factoryCall)) {
             return expressionRenderer.format(factoryCall, LayoutContext.root());
         }
         return multiArgFactoryRootDoc(factoryCall);
@@ -1018,7 +1022,7 @@ final class ChainFanLayout {
     private boolean expressionLambdaFactoryCallPromotesFlat(MethodCallExpr factoryCall) {
         if (
             methodCallSegmentHasBlockLambdaArgument.test(factoryCall)
-            || !factoryCall.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(factoryCall)
         ) {
             return false;
         }
@@ -1026,7 +1030,7 @@ final class ChainFanLayout {
                 .filter(LambdaExpr.class::isInstance)
                 .map(LambdaExpr.class::cast)
                 .allMatch(lambda -> lambda.getExpressionBody().isPresent()
-                    && lambda.getAllContainedComments().isEmpty());
+                    && !sourceShapePolicy.hasContainedComments(lambda));
         return lambdasAreCompactExpressionBodies
             && rootLineWidth.measure(factoryCall, compactSource.compact(factoryCall), LayoutContext.root()) <= options.lineWidth();
     }
@@ -1053,7 +1057,7 @@ final class ChainFanLayout {
         if (
             factoryCall.getArguments().size() < 2
             || methodCallSegmentHasBlockLambdaArgument.test(factoryCall)
-            || !factoryCall.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(factoryCall)
         ) {
             return false;
         }
@@ -1061,7 +1065,7 @@ final class ChainFanLayout {
                 .filter(LambdaExpr.class::isInstance)
                 .map(LambdaExpr.class::cast)
                 .allMatch(lambda -> lambda.getExpressionBody().isPresent()
-                    && lambda.getAllContainedComments().isEmpty());
+                    && !sourceShapePolicy.hasContainedComments(lambda));
     }
 
     /**
@@ -1119,7 +1123,7 @@ final class ChainFanLayout {
         return root instanceof ObjectCreationExpr objectCreation
             && objectCreation.getAnonymousClassBody().isEmpty()
             && !objectCreation.getArguments().isEmpty()
-            && objectCreation.getAllContainedComments().isEmpty();
+            && !sourceShapePolicy.hasContainedComments(objectCreation);
     }
 
     /**

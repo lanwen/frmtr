@@ -50,7 +50,7 @@ final class ControlConditionMethodCallLayout {
     }
 
     Optional<Doc> brokenCondition(MethodCallExpr expression) {
-        if (expression.getArguments().isEmpty() || !expression.getAllContainedComments().isEmpty()) {
+        if (expression.getArguments().isEmpty() || sourceShapePolicy.hasContainedComments(expression)) {
             return Optional.empty();
         }
         String prefix = methodCallPrefix(expression);

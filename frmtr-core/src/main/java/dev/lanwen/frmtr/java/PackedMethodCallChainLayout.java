@@ -121,7 +121,7 @@ final class PackedMethodCallChainLayout {
             ToIntFunction<String> continuationWidth,
             boolean reserveFinalTerminator
     ) {
-        if (!expression.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(expression)) {
             return Optional.empty();
         }
         List<String> segments = new ArrayList<>();

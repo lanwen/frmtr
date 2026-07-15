@@ -255,6 +255,7 @@ final class ExpressionPrinters {
         this.arrays = new ArrayExpressionPrinter(
             comments,
             commentPlacementPolicy,
+            context.sourceShapePolicy,
             options,
             rendering,
             enclosedExpressions::brokenEnclosedForSuffix,

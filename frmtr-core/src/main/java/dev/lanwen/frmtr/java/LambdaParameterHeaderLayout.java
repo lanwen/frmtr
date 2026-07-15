@@ -23,6 +23,8 @@ import java.util.function.ToIntFunction;
  */
 final class LambdaParameterHeaderLayout {
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final RawSource rawSource;
 
     private final FormatterOptions options;
@@ -34,12 +36,14 @@ final class LambdaParameterHeaderLayout {
     private final ToIntFunction<String> currentIndentedWidth;
 
     LambdaParameterHeaderLayout(
+            SourceShapePolicy sourceShapePolicy,
             RawSource rawSource,
             FormatterOptions options,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
             ToIntFunction<String> currentIndentedWidth
     ) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.rawSource = rawSource;
         this.options = options;
         this.compact = compact;
@@ -72,9 +76,7 @@ final class LambdaParameterHeaderLayout {
     boolean haveComments(LambdaExpr expression) {
         return parameterText(expression)
                 .map(parameterText -> parameterText.contains("//") || parameterText.contains("/*"))
-                .orElseGet(() -> expression.getParameters().stream().anyMatch(
-                        parameter -> !parameter.getAllContainedComments().isEmpty()
-                ));
+                .orElseGet(() -> expression.getParameters().stream().anyMatch(sourceShapePolicy::hasContainedComments));
     }
 
     Optional<String> inlineCommentedLambda(LambdaExpr expression) {

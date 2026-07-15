@@ -25,6 +25,8 @@ import java.util.function.Function;
  */
 final class TextBlockArgumentSourceLayout {
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final SourceText sourceText;
 
     private final FormatterOptions options;
@@ -32,10 +34,12 @@ final class TextBlockArgumentSourceLayout {
     private final Function<TextBlockLiteralExpr, String> literalRenderer;
 
     TextBlockArgumentSourceLayout(
+            SourceShapePolicy sourceShapePolicy,
             SourceText sourceText,
             FormatterOptions options,
             Function<TextBlockLiteralExpr, String> literalRenderer
     ) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.sourceText = sourceText;
         this.options = options;
         this.literalRenderer = literalRenderer;
@@ -84,7 +88,7 @@ final class TextBlockArgumentSourceLayout {
         if (
             methodCall.getArguments().size() == 1
             && methodCall.getArgument(0) instanceof TextBlockLiteralExpr textBlockLiteralExpr
-            && methodCall.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(methodCall)
         ) {
             return expressionLambdaMethodCallArgument(textBlockLiteralExpr);
         }

@@ -40,6 +40,8 @@ final class ChainSelectorLambdaLayout {
 
     private final CommentTracker comments;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final CompactSourceText compactSource;
 
     private final LayoutWidth layoutWidth;
@@ -74,6 +76,7 @@ final class ChainSelectorLambdaLayout {
 
     ChainSelectorLambdaLayout(
             CommentTracker comments,
+            SourceShapePolicy sourceShapePolicy,
             CompactSourceText compactSource,
             LayoutWidth layoutWidth,
             FormatterOptions options,
@@ -92,6 +95,7 @@ final class ChainSelectorLambdaLayout {
             BrokenMethodCallSegment brokenMethodCallSegment
     ) {
         this.comments = comments;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.compactSource = compactSource;
         this.layoutWidth = layoutWidth;
         this.options = options;
@@ -309,7 +313,7 @@ final class ChainSelectorLambdaLayout {
      * otherwise. This is the flat-head portion that precedes a hugged comment-carrying lambda's final selector.
      */
     private Optional<String> flatChainScopeText(Expression scope) {
-        if (!scope.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(scope)) {
             return Optional.empty();
         }
         if (scope instanceof MethodCallExpr methodCall) {
@@ -333,7 +337,7 @@ final class ChainSelectorLambdaLayout {
     private Optional<String> commentCarryingLambdaHugHeader(LambdaExpr lambdaExpr) {
         if (
             lambdaExpr.getExpressionBody().isEmpty()
-            || lambdaExpr.getAllContainedComments().isEmpty()
+            || !sourceShapePolicy.hasContainedComments(lambdaExpr)
             || !lambdaParameterHugCandidate(lambdaExpr)
         ) {
             return Optional.empty();
@@ -354,7 +358,7 @@ final class ChainSelectorLambdaLayout {
     }
 
     private boolean lambdaParameterHugCandidate(LambdaExpr lambdaExpr) {
-        return lambdaExpr.getParameters().stream().allMatch(parameter -> parameter.getAllContainedComments().isEmpty());
+        return lambdaExpr.getParameters().stream().noneMatch(sourceShapePolicy::hasContainedComments);
     }
 
     /**
@@ -394,7 +398,7 @@ final class ChainSelectorLambdaLayout {
         }
         LambdaExpr lambdaExpr = lambda.orElseThrow();
         if (
-            !lambdaExpr.getAllContainedComments().isEmpty()
+            sourceShapePolicy.hasContainedComments(lambdaExpr)
             || lambdaParametersShouldBreakInSegment(lambdaExpr)
         ) {
             return Optional.empty();
@@ -860,7 +864,7 @@ final class ChainSelectorLambdaLayout {
     private boolean lambdaParametersShouldBreakInSegment(LambdaExpr lambdaExpr) {
         return lambdaExpr.getParameters()
                 .stream()
-                .anyMatch(parameter -> !parameter.getAllContainedComments().isEmpty());
+                .anyMatch(sourceShapePolicy::hasContainedComments);
     }
 
     /**

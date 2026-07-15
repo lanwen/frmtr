@@ -26,6 +26,8 @@ import java.util.function.Function;
  */
 final class MixedFieldMethodCallChainLayout {
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final JavaFormatRule<Expression> expressionRenderer;
 
     private final Function<Doc, Doc> chainContinuation;
@@ -35,11 +37,13 @@ final class MixedFieldMethodCallChainLayout {
     private final BiFunction<FieldAccessExpr, MethodCallExpr, Doc> fieldAccessMethodCallSegment;
 
     MixedFieldMethodCallChainLayout(
+            SourceShapePolicy sourceShapePolicy,
             JavaFormatRule<Expression> expressionRenderer,
             Function<Doc, Doc> chainContinuation,
             Function<MethodCallExpr, Doc> methodCallChainSegment,
             BiFunction<FieldAccessExpr, MethodCallExpr, Doc> fieldAccessMethodCallSegment
     ) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.expressionRenderer = expressionRenderer;
         this.chainContinuation = chainContinuation;
         this.methodCallChainSegment = methodCallChainSegment;
@@ -53,7 +57,7 @@ final class MixedFieldMethodCallChainLayout {
      * structural-root path because field accesses can hide the earlier method-call root behind one or more field names.
      */
     Optional<Doc> mixedFieldMethodCallChain(MethodCallExpr expression) {
-        if (!expression.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(expression)) {
             return Optional.empty();
         }
         List<Doc> segments = new ArrayList<>();
@@ -70,7 +74,7 @@ final class MixedFieldMethodCallChainLayout {
     }
 
     Optional<Expression> mixedFieldMethodCallRoot(MethodCallExpr expression) {
-        if (!expression.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(expression)) {
             return Optional.empty();
         }
         if (mixedFieldMethodCallSegmentCount(expression) < 2) {

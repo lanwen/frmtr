@@ -276,7 +276,7 @@ final class TryStatementLayout {
     private String flatResourceText(Expression resource) {
         if (
             !(resource instanceof VariableDeclarationExpr declaration)
-            || !declaration.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(declaration)
             || declaration.getVariables().isEmpty()
         ) {
             return compact.apply(resource);
@@ -317,7 +317,7 @@ final class TryStatementLayout {
             || !(statement.getResources().get(0) instanceof VariableDeclarationExpr declaration)
             || !declaration.getModifiers().isEmpty()
             || !declaration.getAnnotations().isEmpty()
-            || !declaration.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(declaration)
             || declaration.getVariables().size() != 1
         ) {
             return Optional.empty();
@@ -327,7 +327,7 @@ final class TryStatementLayout {
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
                 .filter(methodCall -> !methodCall.getArguments().isEmpty())
-                .filter(methodCall -> methodCall.getAllContainedComments().isEmpty());
+                .filter(methodCall -> !sourceShapePolicy.hasContainedComments(methodCall));
         if (initializer.isEmpty()) {
             return Optional.empty();
         }
@@ -661,7 +661,7 @@ final class TryStatementLayout {
 
     private boolean parameterHasComments(Parameter parameter) {
         return parameter.getComment().filter(BlockComment.class::isInstance).isPresent()
-            || !parameter.getAllContainedComments().isEmpty();
+            || sourceShapePolicy.hasContainedComments(parameter);
     }
 
     private Doc commentedCatchParameter(Parameter parameter, String flat) {

@@ -107,6 +107,15 @@ final class SourceShapePolicyTest {
     }
 
     @Test
+    void hasContainedCommentsScansDetachedClonesOutsideTheRunIndex() {
+        String source = "class Demo { void run() { call(/* note */ value); } }";
+        CompilationUnit unit = parse(source);
+        MethodCallExpr detached = unit.findFirst(MethodCallExpr.class).orElseThrow().clone();
+
+        assertThat(policyForCommentRun(source, unit).hasContainedComments(detached)).isTrue();
+    }
+
+    @Test
     void hadBlankLineBeforeComparesACallerResolvedBeginLineAgainstThePreviousNode() {
         String source = "class Demo {\n    int first;\n\n\n    int second;\n}\n";
         FieldDeclaration first = field(source, 0);
@@ -141,8 +150,7 @@ final class SourceShapePolicyTest {
     }
 
     /**
-     * Builds a policy whose comment-placement collaborator has its run index started for {@code unit}, which
-     * {@link SourceShapePolicy#hasContainedComments} requires (the gate delegates to the per-run containment index).
+     * Builds a policy with the run index started for original nodes; detached nodes use the JavaParser fallback.
      */
     private static SourceShapePolicy policyForCommentRun(String source, CompilationUnit unit) {
         FormatterOptions options = FormatterOptions.defaults();

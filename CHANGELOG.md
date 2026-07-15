@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-15
+
+### Merged Pull Requests
+
+- `fix` fix(core): preserve chain comments stranded by a width-driven root-to-first-selector join ([#347](https://github.com/lanwen/frmtr/pull/347))
+- `docs` docs: require present-state comments; archive the actioned comment-handling-findings ([#348](https://github.com/lanwen/frmtr/pull/348))
+- `fix` fix(gradle): surface formatter progress ([#351](https://github.com/lanwen/frmtr/pull/351))
+- `perf` perf(core): single-pass raw-source trailing-whitespace strip (+ frmtr-bench JMH module) ([#352](https://github.com/lanwen/frmtr/pull/352))
+  Rewrites the raw-source trailing-whitespace strip as a single linear pass, eliminating the quadratic string concatenation that was the formatter pipeline's largest allocation source (~49% → ~0.5% of sampled allocation on a large macro corpus; ~46% less total allocation). Output is byte-identical. Adds a `:frmtr-bench` JMH module for measuring formatter hot paths.
+- `perf` perf(core): index comment-presence gates ([#353](https://github.com/lanwen/frmtr/pull/353))
+- `docs` docs: mark B3 corpus harness (Layer 3) as shipped and archive the proposal ([#354](https://github.com/lanwen/frmtr/pull/354))
+  Docs-only: reconcile the B3 correctness-net roadmap to present-state (Layer 3 corpus harness has shipped as `corpus.yml`); no formatter, CLI, or build behavior changes.
+- `perf` perf(core): single-scan raw-source whitespace normalization ([#355](https://github.com/lanwen/frmtr/pull/355))
+  Replaces `RawSource`'s five-regex compact-source whitespace normalization with a single byte-identical hand scan, removing the `Pattern` machinery (notably the `=`-spacing lookbehind/lookahead backtracking) from the hot path. ~7× faster and 3.6–12.7× less allocation on the `:frmtr-bench` normalize benchmarks; output is unchanged, pinned by a differential property test over 200k randomized inputs.
+
 ## [0.2.0] - 2026-07-14
 
 ### Merged Pull Requests
@@ -517,6 +532,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument-list path.
 - Preserved broken wrapping for over-wide nested string-concatenation arguments in method calls.
 
-[Unreleased]: https://github.com/lanwen/frmtr/compare/v0.2.0...main
+[Unreleased]: https://github.com/lanwen/frmtr/compare/v0.2.1...main
+[0.2.1]: https://github.com/lanwen/frmtr/releases/tag/v0.2.1
 [0.2.0]: https://github.com/lanwen/frmtr/releases/tag/v0.2.0
 [0.1.0]: https://github.com/lanwen/frmtr/releases/tag/v0.1.0

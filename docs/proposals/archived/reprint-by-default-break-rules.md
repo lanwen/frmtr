@@ -324,7 +324,7 @@ Risks:
 - **[doc-ir-combinators.md](doc-ir-combinators.md) (B2, landed)** — supplies `bestFitting`,
   `conditionalGroup`, `lineSuffix`, `breakParent`, `fill`, the primitives a `BreakRule`'s `layout`
   emits.
-- **[semantic-preservation-safety-net.md](../semantic-preservation-safety-net.md) (B3, landed)** — the
+- **[semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) (B3, landed)** — the
   verify + idempotence + corpus gates every retirement runs through.
 - **[formatter-owned-syntax-view.md](../formatter-owned-syntax-view.md) (held)** — the broad metadata-owner
   vision; the provenance/decision-attribution here is a concrete consumer of it.

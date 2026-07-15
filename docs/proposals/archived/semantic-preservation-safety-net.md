@@ -1,16 +1,17 @@
 # Semantic-Preservation Safety Net: AST-Equivalence, Idempotence, and a Real-World Corpus
 
-Status: Layers 1-2 implemented; Layer 3 proposed — the live remaining work is Layer 3 only.
+Status: implemented — all three layers are in place.
 
-> **Already landed (see the per-layer notes below for detail):**
+> **All three layers landed (see the per-layer notes below for detail):**
 > - **Layer 1 — AST-equivalence verify** (`AstEquivalence` + `FormatterGuardrails.assertAstEquivalent`, gated by
 >   `dev.lanwen.frmtr.debug.verify`, on across the `frmtr-core` suite).
 > - **Layer 2 — idempotence property test** (`IdempotencePropertyTest` over the fixture inputs + whitespace
 >   perturbations + hand-written snippets; asserts idempotence + AST-equivalence + parse-stability).
+> - **Layer 3 — real-world OSS corpus check** (`.github/workflows/corpus.yml`: a pinned, SHA-cached corpus formatted
+>   through the shipping CLI's `--write --verify` then `--check`, asserting parse-stability + AST-equivalence + one-pass
+>   idempotence per file). Runs on `release`-labelled PRs and `workflow_dispatch`, not on every PR.
 >
-> **Remaining actionable work: Layer 3 — the real-world OSS corpus harness** (a pinned, cached, opt-in CI job that
-> formats large external Java corpora and asserts parse-stability + idempotence + AST-equivalence per file). Everything
-> below Layer 3 is retained as the design record of the shipped layers.
+> The design record below is retained as provenance for the shipped layers.
 
 ## Summary
 
@@ -21,14 +22,14 @@ Golden fixtures verify *the output we expected* — they cannot catch a meaning-
 construct nobody wrote a fixture for. This proposal adds three independent, automatically-checkable
 correctness layers that do not depend on anyone having anticipated the bug:
 
-1. **Layer 1 — AST-equivalence check** (proposed-new): an opt-in verify mode that re-parses the
+1. **Layer 1 — AST-equivalence check** (implemented): an opt-in verify mode that re-parses the
    formatter *output* and asserts it is structurally equivalent to the input modulo trivia
    (whitespace, comment placement, and the deliberate import reorder). Small, high-value, can ship
    first.
 2. **Layer 2 — idempotence property test** (extends an existing assertion): `format(format(x)) ==
    format(x)` over generated and real inputs, not just the fixtures that already check it on line 29
    of `FrmtrTest`.
-3. **Layer 3 — corpus harness** (proposed-new): a CI task that formats large real-world OSS Java
+3. **Layer 3 — corpus harness** (implemented): a CI task that formats large real-world OSS Java
    codebases and asserts parse-stability + idempotence + AST-equivalence across hundreds of
    thousands of real files.
 
@@ -240,75 +241,51 @@ checked — but only over curated fixtures. The CLI/tooling never asserts it
   bug could be idempotent (stable wrong output) yet fail AST-equivalence — which is exactly why both
   layers are needed.
 
-## Layer 3 — corpus harness (proposed-new)
+## Layer 3 — corpus harness (implemented)
+
+> **Implemented as `.github/workflows/corpus.yml`.** Rather than a bespoke Java harness or a `corpusVerify` Gradle task,
+> the corpus check reuses the **shipping CLI** — the exact binary users run — over a pinned real-world corpus. It fetches
+> the corpus by commit SHA into a throwaway checkout (shallow `git fetch`, cached by SHA via `actions/cache`), formats it
+> with `frmtr --write --verify`, then re-checks with `frmtr --check`. Driving through the CLI (not `Frmtr.format`
+> directly) exercises discovery, excludes, and exit-code plumbing end to end, and the CLI's distinct exit codes let the
+> workflow separate the invariants: a verify violation (non-AST-equivalent output, exit `3`) from a parse/IO failure
+> (exit `2`) and a one-pass idempotence miss (exit `1`).
 
 **Goal:** run the formatter over large bodies of real Java that nobody curated and assert, per file:
 (a) it parses, (b) the output re-parses (parse-stability), (c) it is idempotent, and (d) it is
 AST-equivalent to the input (Layer 1). A single bug in a real construct then fails CI loudly.
 
-### Which OSS repos
+### The pinned corpus
 
-Pick a handful that maximize syntactic diversity and language-level coverage, matching the roadmap's
-"JDK, Spring, Guava, …":
-
-- **JDK `src`** (modern language features, modules, switch expressions, sealed types),
-- **Guava** (heavy generics, builders, fluent chains — exercises method-chain printers),
-- **Spring Framework** (annotations, large interface hierarchies),
-- one or two smaller, comment-dense projects (to exercise the comment machinery the guardrails
-  already protect).
-
-Keep the list small and pinned to specific commits/tags for determinism.
-
-### How it is vendored / fetched without bloating the repo
-
-**Do not vendor sources into the repo.** Fetch at CI time, pinned by commit SHA, and cache:
-
-- A new Gradle task (proposed `:frmtr-core:corpusVerify` or a dedicated `frmtr-corpus` test source
-  set) that clones/downloads pinned archives into a build-dir cache (`build/corpus/`), or relies on a
-  CI cache keyed on the pinned SHAs.
-- Network access is required only in the corpus job. Per the sandbox network policy, the GitHub/
-  archive hosts must be allow-listed; the job must degrade gracefully (skip with a clear message, not
-  fail) when the corpus cannot be fetched, so offline/local builds are unaffected.
-- Reuse the existing tooling entry points rather than new plumbing: drive formatting through
-  `dev.lanwen.frmtr.tooling.FormatterRunner` or `Frmtr.format` directly, walking files with
-  `FileDiscovery` (already used by the CLI, `frmtr-cli/.../FileDiscovery.java`).
+The corpus is one repository pinned to a commit SHA (`testcontainers/testcontainers-java`), scoped to its `main` sources
+and excluding build output, generated code, and test sources. Everything — repo URL, SHA, scope, and excludes — lives in
+the workflow's `env` block, so widening coverage (a newer SHA, or a second repository chosen for syntactic diversity) is
+a one-line change there; the sources are never vendored into this repository.
 
 ### What is asserted, per file
 
-1. Input parses with the configured language level (skip files that legitimately do not — e.g.
-   preview features the chosen level rejects).
-2. `format(input)` succeeds (no `FormatterException.internal`).
-3. **Parse-stability:** `format(input)` re-parses successfully (reuse `FrmtrTest.latestJavaParses`
-   logic).
-4. **Idempotence:** `format(format(input)) == format(input)`.
-5. **AST-equivalence:** Layer 1 comparator on input vs output.
+1. **Parse-stability + AST-equivalence:** `frmtr --write --verify` re-parses each formatted file and refuses output that
+   is not AST-equivalent to the input (the Layer 1 comparator); recovered (partially parsed) inputs are skipped, as
+   Layer 1 requires.
+2. **One-pass idempotence:** `frmtr --check` over the now-formatted tree exits non-zero if any file would still change,
+   i.e. formatting is not a fixed point.
 
-Aggregate failures into a report (count + first N minimized diffs) rather than dying on the first
-file, so a run characterizes the blast radius of a regression.
+The `--write --verify` pass mutates the throwaway checkout in place, so the follow-up `--check` measures idempotence over
+the already-formatted sources (`--write` and `--check` cannot be combined in one invocation). A non-zero exit fails the
+job with a code-specific message, so a run reports *which* invariant broke.
 
-### CI cost & opt-out
+### When it runs
 
-- Run as a **separate, scheduled / opt-in CI job** (nightly + on-demand label), *not* on every PR,
-  because it is minutes-to-tens-of-minutes and network-dependent.
-- Gate behind a property/env (proposed `-Pcorpus` or `CORPUS=1`) so it is never part of the default
-  `./gradlew build`.
-- Cache the fetched corpus aggressively (keyed on pinned SHAs) so reruns are fast.
-- Failures block merge to `main` only via the scheduled job's status, with the offending files and
-  minimized diffs attached.
+The job is gated to `release`-labelled PRs and manual `workflow_dispatch`, not every ordinary PR — a corpus run is
+minutes-long and network-dependent, so it guards releases rather than every change. The fetched corpus is cached on the
+pinned SHA so re-runs are fast. (A scheduled/nightly trigger is intentionally not configured.)
 
 ## Rollout order
 
-Mirrors the roadmap's suggested sequencing ("B3 layer 1 — small, catches real bugs now"):
-
-1. **Layer 1 comparator + verify mode.** Land `AstEquivalence` (Option A) and the
-   `dev.lanwen.frmtr.debug.verify` toggle. Turn it **on inside the existing fixture test** so every
-   golden fixture is now also AST-checked — this alone would have caught the enum-separator incident.
-2. **Layer 2 property test.** Add `FormatterIdempotenceTest` over fixture inputs + a small generator,
-   folding in the Layer 1 comparator. No new runtime code paths.
-3. **Layer 3 corpus harness.** Add the fetch+cache task and the opt-in CI job, reusing
-   `FormatterRunner` / `FileDiscovery`. Wire the same comparator and idempotence assertion.
-4. Update `docs/proposals/README.md` to replace `TODO-LINK-B3` with this file and flip B3 status as
-   appropriate. (This proposal does not edit `README.md`.)
+The three layers landed in dependency order: Layer 1 first (the `AstEquivalence` comparator behind the
+`dev.lanwen.frmtr.debug.verify` toggle, turned on across the fixture suite so every golden fixture is AST-checked), then
+Layer 2's property test folding in that comparator, then Layer 3's corpus job reusing the shipping CLI. Layer 1 was the
+cheap down-payment that delivered most of the confidence on its own.
 
 ## Risks & false-positives
 
@@ -353,9 +330,8 @@ Mirrors the roadmap's suggested sequencing ("B3 layer 1 — small, catches real 
   printer in a unit test).
 - Layer 2 idempotence + AST-equivalence green over 100% of fixture inputs and the generated sample
   budget on every PR.
-- Layer 3: a published per-run number — *N files formatted, parse-stable %, idempotent %,
-  AST-equivalent %* — with the standing target of **100%** on the pinned corpus, and any drop
-  blocking the scheduled job.
+- Layer 3: the corpus job passes only when every file is parse-stable, AST-equivalent, and one-pass idempotent; any
+  violation fails the release-PR check with a code-specific message identifying the broken invariant.
 - Net effect: a meaning-changing bug in *any* construct present in the corpus fails CI without anyone
   having written a fixture for it.
 

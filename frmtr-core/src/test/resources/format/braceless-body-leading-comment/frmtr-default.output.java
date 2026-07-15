@@ -19,7 +19,8 @@ class Demo {
     void doWhileBody(int count) {
         do
             // always run the body once before re-checking
-            count--; while (count > 0);
+            count--;
+        while (count > 0);
     }
 
     void forBody(int count) {

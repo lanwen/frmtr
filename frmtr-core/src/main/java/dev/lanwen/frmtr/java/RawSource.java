@@ -2,7 +2,6 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import dev.lanwen.frmtr.FormatterOptions;
-import java.util.regex.Pattern;
 
 /**
  * Recovers and normalizes original source text for AST nodes when the formatter must preserve source-only syntax.
@@ -12,20 +11,6 @@ import java.util.regex.Pattern;
  * are attached to docs, or which Java syntax constructs are printable by structured formatter logic.
  */
 final class RawSource {
-
-    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
-
-    private static final Pattern ASSIGN_EQUALS = Pattern.compile("(?<![-+*/%^&|=!<>])\\s*=\\s*(?![=])");
-
-    // Drops the space whitespace-collapsing leaves just inside a delimiter pair when the author broke the content across
-    // lines: {@code foo(\n    arg\n)} collapses to {@code foo( arg )}, but the canonical compact form is {@code foo(arg)}.
-    // Without this, a call's compact width depended on whether a prior pass had broken its args, so a near-boundary gate
-    // could flip between {@code (arg)} and {@code ( arg )} and never converge. Anchoring on the opener/closer keeps it a
-    // pure interior-spacing fix that never touches operator spacing ({@code 42/42} preserved) and never runs on literal
-    // content (string/character/text-block spans are emitted verbatim and never reach this non-literal buffer).
-    private static final Pattern SPACE_AFTER_OPENER = Pattern.compile("([(\\[]) ");
-
-    private static final Pattern SPACE_BEFORE_CLOSER = Pattern.compile(" ([)\\]])");
 
     private final FormatterOptions options;
 
@@ -109,10 +94,10 @@ final class RawSource {
      * literal's value — data corruption. Literal boundaries are tracked by a hand scanner, not a regex, because a text
      * block ({@code """..."""}) cannot be matched reliably alongside plain strings.
      *
-     * <p>The {@code =} spacing regex also excludes the trailing {@code =} of a compound-assignment operator ({@code ^=},
-     * {@code +=}, {@code <<=}, …) and the equality/relational operators ({@code ==}, {@code !=}, {@code <=}, {@code >=}):
-     * splitting a compound operator into {@code "^ ="} produces source {@code javac} rejects, so the negative lookbehind
-     * excludes every operator character that can precede a single {@code =}.
+     * <p>The {@code =} spacing skips the trailing {@code =} of a compound-assignment operator ({@code ^=}, {@code +=},
+     * {@code <<=}, …) and the equality/relational operators ({@code ==}, {@code !=}, {@code <=}, {@code >=}): splitting a
+     * compound operator into {@code "^ ="} would produce source {@code javac} rejects, so a lone {@code =} is spaced only
+     * when the next character is not {@code =} and the character it abuts is not itself an operator.
      */
     String normalizeWhitespace(String text) {
         String stripped = text.strip();
@@ -140,9 +125,9 @@ final class RawSource {
         while (index < text.length()) {
             int blockCommentEnd = blockCommentSpanEnd(text, index);
             if (blockCommentEnd >= 0) {
-                // A block comment does not run to end-of-line, so it keeps the previous behavior of being collapsed with
-                // the surrounding text. It is consumed as one span here only so a {@code //} sequence inside it (such as
-                // a {@code http://} URL) is not mistaken for a line comment by the line-comment check below.
+                // A block comment does not run to end-of-line, so it is collapsed with the surrounding text like any
+                // other non-literal span. It is consumed as one span here only so a {@code //} sequence inside it (such
+                // as a {@code http://} URL) is not mistaken for a line comment by the line-comment check below.
                 outside.append(text, index, blockCommentEnd);
                 index = blockCommentEnd;
                 continue;
@@ -206,20 +191,83 @@ final class RawSource {
         return closing < 0 ? text.length() : closing + 2;
     }
 
-    /**
-     * Normalizes one non-literal region: collapses whitespace runs to single spaces, applies the {@code =} spacing rule,
-     * then re-collapses because inserting {@code " = "} can produce a space adjacent to an existing one.
-     */
+    /** Flushes one accumulated non-literal region into {@code result}, normalized for the compact form. */
     private void flushOutside(StringBuilder result, StringBuilder outside) {
         if (outside.length() == 0) {
             return;
         }
-        String collapsed = WHITESPACE.matcher(outside).replaceAll(" ");
-        String normalized = ASSIGN_EQUALS.matcher(collapsed).replaceAll(" = ");
-        String reCollapsed = WHITESPACE.matcher(normalized).replaceAll(" ");
-        String afterOpener = SPACE_AFTER_OPENER.matcher(reCollapsed).replaceAll("$1");
-        result.append(SPACE_BEFORE_CLOSER.matcher(afterOpener).replaceAll("$1"));
+        appendNormalizedRegion(result, outside);
         outside.setLength(0);
+    }
+
+    /** Single-region entry point mirroring {@link #flushOutside}, exposed so tests can pin it against the region rule. */
+    String normalizeOutsideRegion(CharSequence region) {
+        StringBuilder out = new StringBuilder(region.length());
+        appendNormalizedRegion(out, region);
+        return out.toString();
+    }
+
+    /**
+     * Appends {@code region} to {@code out} in one left-to-right scan: whitespace runs collapse to a single space, a
+     * standalone assignment {@code =} is spaced (a compound/relational operator's {@code =} is left alone), and the space
+     * just inside an opener ({@code (} {@code [}) or closer ({@code )} {@code ]}) is dropped. The opener/closer trim keeps
+     * a call's compact width from depending on whether a prior pass broke its arguments, so a near-boundary gate cannot
+     * oscillate between {@code (arg)} and {@code ( arg )}. Operates on the region alone, so the seam with already-emitted
+     * output is never trimmed.
+     */
+    private void appendNormalizedRegion(StringBuilder out, CharSequence region) {
+        int length = region.length();
+        boolean pendingSpace = false;
+        char lastEmitted = 0;
+        char lastSignificant = 0;
+        for (int index = 0; index < length; index++) {
+            char current = region.charAt(index);
+            if (isCollapsibleWhitespace(current)) {
+                pendingSpace = true;
+                continue;
+            }
+            // A lone '=' is spaced unless the next char is '=' (==) or the char it abuts is an operator (+=, <=, …).
+            boolean assignmentEquals = current == '='
+                && !(index + 1 < length && region.charAt(index + 1) == '=')
+                && (pendingSpace || lastSignificant == 0 || !isAssignmentBoundaryOperator(lastSignificant));
+            if (assignmentEquals) {
+                pendingSpace = true;
+            }
+            if (pendingSpace) {
+                boolean justInsideOpener = lastEmitted == '(' || lastEmitted == '[';
+                boolean justBeforeCloser = current == ')' || current == ']';
+                if (!justInsideOpener && !justBeforeCloser) {
+                    out.append(' ');
+                }
+                pendingSpace = false;
+            }
+            out.append(current);
+            lastEmitted = current;
+            lastSignificant = current;
+            if (assignmentEquals) {
+                pendingSpace = true;
+            }
+        }
+        // A trailing collapsed space survives unless it sits just inside an opener.
+        if (pendingSpace && lastEmitted != '(' && lastEmitted != '[') {
+            out.append(' ');
+        }
+    }
+
+    /** Matches Java regex {@code \s} — the six ASCII whitespace characters the collapse recognizes. */
+    private static boolean isCollapsibleWhitespace(char c) {
+        return switch (c) {
+            case ' ', '\t', '\n', '\u000B', '\f', '\r' -> true;
+            default -> false;
+        };
+    }
+
+    /** Operator characters that, abutting a lone {@code =}, make it part of a compound/relational operator. */
+    private static boolean isAssignmentBoundaryOperator(char c) {
+        return switch (c) {
+            case '-', '+', '*', '/', '%', '^', '&', '|', '=', '!', '<', '>' -> true;
+            default -> false;
+        };
     }
 
     /**

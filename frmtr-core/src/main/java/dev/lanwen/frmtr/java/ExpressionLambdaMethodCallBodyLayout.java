@@ -25,6 +25,8 @@ import java.util.function.ToIntFunction;
  */
 final class ExpressionLambdaMethodCallBodyLayout {
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -42,6 +44,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
     private final ToIntFunction<String> expressionFirstLineWidth;
 
     ExpressionLambdaMethodCallBodyLayout(
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<List<? extends Node>, String> compactJoin,
@@ -51,6 +54,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             ToIntFunction<String> expressionFirstLineWidth
     ) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compactJoin = compactJoin;
@@ -74,7 +78,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
         if (
             !methodCall.getArguments().isEmpty()
             || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()
-            || !methodCall.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodCall)
         ) {
             return Optional.empty();
         }

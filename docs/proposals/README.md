@@ -438,7 +438,7 @@ adopted one.**
 | — | Printer-contract inversion (dissolve the callback mesh) | [printer-contract-inversion.md](printer-contract-inversion.md) | Stage 3 per-construct generalization |
 | B2/B3 | Layout decision model (LDM-1…LDM-5) | [layout-decision-model.md](layout-decision-model.md) | LDM-4 context→enum (LDM-5 mostly moot) |
 | — | Formatter-owned syntax view | [formatter-owned-syntax-view.md](formatter-owned-syntax-view.md) | held for architecture review |
-| — | Comment containment index | [comment-containment-index.md](comment-containment-index.md) | bottom-up index + caller migration |
+| — | Comment containment index | [comment-containment-index.md](comment-containment-index.md) | query-specific and accounting caller migration + measurement |
 | — | Lazy `.gitignore` discovery | [cli-discovery-lazy-ignore.md](cli-discovery-lazy-ignore.md) | guarded ignored-directory pruning |
 | S7/S9 | Comment-handling findings (evidence record) | [archived/comment-handling-findings.md](archived/comment-handling-findings.md) | — (reference) |
 

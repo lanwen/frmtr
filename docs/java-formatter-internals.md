@@ -191,15 +191,12 @@ closed enumerated registry of every permitted read (each tagged `FIXPOINT_SAFE` 
 `SourceShapeExceptionGovernanceTest` fails if an uncategorized policy method appears or if the pinned retirement-target
 count (zero) rises — an enforced "reprint by default, these exceptions only" contract.
 
-The containment gate delegates to the run-indexed
-`JavaCommentPlacementPolicy.hasContainedComments` rather than re-scanning JavaParser, so the formatter keeps one
-containment index; compact-source reconstruction that strips comments on clones (`CompactSourceText`) keeps its own
-direct `getAllContainedComments` scan, because the run index reports an unknown clone as comment-free and would change
-which reconstruction path is taken. Raw recovery/fallback text generation is **not** a source-shape decision, so it
-does not live behind the policy: printers that must emit a node's raw source for recovery or a fallback retrieve it from
-`RawSource` directly (the string forms `raw` / `rawWithoutOwnComment`), or from `RawPreservedSource` when that raw
-output also needs comment accounting. The policy deliberately does not absorb `SourceText` slicing,
-`RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them.
+The containment gate delegates original nodes to run-indexed `JavaCommentPlacementPolicy.hasContainedComments`, so ordinary formatter paths share one containment index.
+Detached expression clones are absent from that snapshot, so `SourceShapePolicy` falls back to JavaParser for those nodes instead of treating them as comment-free.
+Compact-source reconstruction that strips comments on clones (`CompactSourceText`) keeps its direct `getAllContainedComments` scans for the same reason.
+Raw recovery/fallback text generation is **not** a source-shape decision, so it does not live behind the policy.
+Printers that must emit a node's raw source for recovery or a fallback retrieve it from `RawSource` directly through `raw` or `rawWithoutOwnComment`, or from `RawPreservedSource` when that output also needs comment accounting.
+The policy deliberately does not absorb `SourceText` slicing, `RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them.
 
 `SourceShapeCouplingGuardTest` enforces the two patterns this consolidation drove to zero: no
 `rawSource....contains("\n")` multiline probe and no `previous.end.line + 1` blank-line gap arithmetic outside the

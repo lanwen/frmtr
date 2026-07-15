@@ -258,11 +258,10 @@ fact travels in an immutable **`LayoutContext`** record threaded down the descen
 indent but overflows once its prefix is counted breaks instead of being emitted flat over width. `LayoutWidth` supplies
 the indentation baselines these probes measure against.
 
-A per-run **`SourceShapePolicy`** is the single home for the "respect the author's source shape
-here?" questions (e.g. blank-line-between, fits-on-one-line, contained-comments, try-with-resources shape). It holds a
-small set of *fixpoint-safe* reads that the formatter's own output reproduces; the method-call / chain / object-creation
-/ lambda hub reflows by width, not by the author's incidental line breaks. Governance tests keep new source-shape reads
-out of the printers.
+A per-run **`SourceShapePolicy`** is the single home for the "respect the author's source shape here?" questions, including blank-line-between, fits-on-one-line, contained-comments, and try-with-resources shape.
+It holds a small set of *fixpoint-safe* reads that the formatter's own output reproduces; the method-call / chain / object-creation / lambda hub reflows by width, not by the author's incidental line breaks.
+Contained-comment gates read the run index for original nodes and fall back to JavaParser for detached clones outside that snapshot.
+Governance tests keep new source-shape reads out of the printers.
 
 ### Chain and wrapping layout
 

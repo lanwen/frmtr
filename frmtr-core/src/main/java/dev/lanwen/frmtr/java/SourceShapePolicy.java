@@ -64,21 +64,13 @@ final class SourceShapePolicy {
     }
 
     /**
-     * Reports whether a node carries any contained comments, the source-shape gate that decides whether a
-     * compact or otherwise source-shaped layout is safe to take without dropping comment content.
-     *
-     * <p>The gate several printers spelled inline as {@code node.getAllContainedComments().isEmpty()} belongs behind this
-     * policy. Containment is not re-derived here: it delegates to
-     * {@link JavaCommentPlacementPolicy#hasContainedComments(Node)}, the run-indexed query, so the formatter keeps one
-     * containment index instead of a competing scan.
-     *
-     * <p>Because that delegate is the per-run index, this gate is only valid for original nodes from the current run.
-     * Callers that may pass cloned or detached nodes (e.g. compact-source reconstruction that strips comments on a clone)
-     * must keep their own JavaParser containment scan: the run index reports a clone as comment-free, which would change
-     * the layout path.
+     * Reports whether a node contains comments, using the run index for original nodes and JavaParser for detached clones.
+     * The fallback preserves comment-stripping render paths whose cloned trees are absent from the run snapshot.
      */
     boolean hasContainedComments(Node node) {
-        return commentPolicy.hasContainedComments(node);
+        return commentPolicy.contains(node)
+            ? commentPolicy.hasContainedComments(node)
+            : !node.getAllContainedComments().isEmpty();
     }
 
     /**

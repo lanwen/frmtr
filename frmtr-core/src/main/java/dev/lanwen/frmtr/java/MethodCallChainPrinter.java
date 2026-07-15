@@ -153,6 +153,7 @@ final class MethodCallChainPrinter {
             context.layoutDecisions
         );
         this.mixedFieldChains = new MixedFieldMethodCallChainLayout(
+            context.sourceShapePolicy,
             expressionRenderer,
             this::chainContinuation,
             this::methodCallChainSegment,
@@ -184,6 +185,7 @@ final class MethodCallChainPrinter {
         );
         this.chainSelectorLambda = new ChainSelectorLambdaLayout(
             context.comments,
+            context.sourceShapePolicy,
             context.compactSource,
             context.layoutWidth,
             context.options,
@@ -205,6 +207,7 @@ final class MethodCallChainPrinter {
         this.chainComments = new ChainCommentLayout(comments, commentPlacement, commentedExpressionLists);
         this.chainFan = new ChainFanLayout(
             context.options,
+            context.sourceShapePolicy,
             context.compactSource,
             expressionRenderer,
             chainWidthBreakExplain,
@@ -428,7 +431,7 @@ final class MethodCallChainPrinter {
             root.ifPresent(ignored -> segments.add(compactMethodCallChainSegment(expression)));
             return root;
         }
-        if (!scoped.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(scoped)) {
             return Optional.empty();
         }
         segments.add(compactMethodCallChainSegment(expression));
@@ -443,7 +446,7 @@ final class MethodCallChainPrinter {
         return expression.getArguments()
                 .stream()
                 .noneMatch(argument -> argument instanceof LambdaExpr
-                        || !argument.getAllContainedComments().isEmpty()
+                        || sourceShapePolicy.hasContainedComments(argument)
                 );
     }
 
@@ -696,7 +699,7 @@ final class MethodCallChainPrinter {
             // printer, which keeps each comment on its own line at the body indent. The enclosing {@code !analysis.hasComments()}
             // guard already kept CHAIN-level comments out of this branch, so the only comments here live inside the lambda
             // body argument and are claimed exactly once by that body's renderer, never double-claimed by the fan root.
-            if (bodyForcesMultiline && !expression.getAllContainedComments().isEmpty()) {
+            if (bodyForcesMultiline && sourceShapePolicy.hasContainedComments(expression)) {
                 return Optional.of(fanOut);
             }
             return Optional.of(bodyForcesMultiline ? Doc.bestFitting(arms) : Doc.conditionalGroup(arms));
@@ -725,8 +728,8 @@ final class MethodCallChainPrinter {
         if (
             breakMode.isForced()
             && calls.size() == 1
-            && root.getAllContainedComments().isEmpty()
-            && calls.getFirst().getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(root)
+            && !sourceShapePolicy.hasContainedComments(calls.getFirst())
             && !chainComments.methodCallSegmentHasComment(calls.getFirst())
             && !analysis.rootHasBlockLambdaArgument()
         ) {
@@ -857,7 +860,7 @@ final class MethodCallChainPrinter {
         if (
             root instanceof MethodCallExpr methodRoot
             && calls.size() == 1
-            && root.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(root)
             && !chainComments.methodCallSegmentHasComment(calls.getFirst())
             && methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
             && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
@@ -1083,7 +1086,7 @@ final class MethodCallChainPrinter {
     }
 
     private boolean methodRootCanKeepSingleSuffixAttached(MethodCallExpr methodRoot) {
-        if (methodRoot.getAllContainedComments().isEmpty()) {
+        if (!sourceShapePolicy.hasContainedComments(methodRoot)) {
             return true;
         }
         if (
@@ -1172,7 +1175,7 @@ final class MethodCallChainPrinter {
     ) {
         if (
             methodRoot.getArguments().isEmpty()
-            || !methodRoot.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodRoot)
             || methodRoot.getArguments().stream().anyMatch(argument -> argument instanceof LambdaExpr)
         ) {
             return Optional.empty();
@@ -1968,7 +1971,7 @@ final class MethodCallChainPrinter {
     }
 
     private Optional<String> compactSingleLineRoot(Expression root) {
-        if (!root.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(root)) {
             return Optional.empty();
         }
         return Optional.of(compactSource.compact(root));
@@ -2099,7 +2102,7 @@ final class MethodCallChainPrinter {
     ) {
         if (
             !hasSingleExpressionLambdaArgument(methodRoot)
-            || !methodRoot.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(methodRoot)
             || !methodCallSegmentHasNoOwnContainedComments(call)
             || chainComments.methodCallSegmentHasComment(call)
             || methodCallSegmentHasBlockLambdaArgument(call)
@@ -2129,7 +2132,7 @@ final class MethodCallChainPrinter {
         return expression.getArguments().size() == 1
             && expression.getArgument(0) instanceof LambdaExpr lambdaExpr
             && lambdaExpr.getExpressionBody().isPresent()
-            && lambdaExpr.getAllContainedComments().isEmpty();
+            && !sourceShapePolicy.hasContainedComments(lambdaExpr);
     }
 
     private boolean methodCallSegmentHasBlockLambdaArgument(MethodCallExpr expression) {
@@ -2385,7 +2388,7 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> compactSegmentWidth
     ) {
         if (
-            !expression.getAllContainedComments().isEmpty()
+            sourceShapePolicy.hasContainedComments(expression)
             || methodCallSegmentHasBlockLambdaArgument(expression)
             || expression.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
         ) {

@@ -38,7 +38,7 @@ final class ObjectCreationLayoutPolicy {
      */
     boolean constructorArgumentsAreWidthDriven(ObjectCreationExpr expression) {
         return expression.getAnonymousClassBody().isEmpty()
-            && expression.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(expression)
             && !isTryResourceObjectCreation(expression);
     }
 
@@ -53,7 +53,7 @@ final class ObjectCreationLayoutPolicy {
      */
     boolean canKeepCompactChainRoot(ObjectCreationExpr expression, int compactWidth, int lineWidth) {
         return expression.getAnonymousClassBody().isEmpty()
-            && expression.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(expression)
             && compactWidth <= lineWidth;
     }
 

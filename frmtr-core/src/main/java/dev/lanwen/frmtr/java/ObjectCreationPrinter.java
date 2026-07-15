@@ -34,6 +34,8 @@ final class ObjectCreationPrinter {
 
     private final ObjectCreationLayoutPolicy layoutPolicy;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final TypePrinter types;
 
     private final CommentedExpressionListPrinter commentedExpressionLists;
@@ -74,10 +76,12 @@ final class ObjectCreationPrinter {
     ) {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.types = types;
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, node -> rendering.render(node));
         this.rendering = rendering;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
+            context.sourceShapePolicy,
             node -> rendering.render(node),
             brokenArgumentRenderer,
             binaryFansChainOperand
@@ -123,7 +127,7 @@ final class ObjectCreationPrinter {
         if (
             expression.getAnonymousClassBody().isPresent()
             || expression.getArguments().isEmpty()
-            || !expression.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(expression)
         ) {
             return objectCreation(expression, true, "");
         }
@@ -155,7 +159,7 @@ final class ObjectCreationPrinter {
      */
     private Doc heavyArgumentBreak(ObjectCreationExpr expression) {
         boolean heavy = expression.getAnonymousClassBody().isEmpty()
-            && expression.getAllContainedComments().isEmpty()
+            && !sourceShapePolicy.hasContainedComments(expression)
             && argumentHeaviness.isHeavy(expression.getArguments(), true);
         return heavy ? Doc.BREAK_PARENT : Doc.EMPTY;
     }

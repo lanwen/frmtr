@@ -20,6 +20,8 @@ import java.util.function.Predicate;
  */
 final class BreakableArgumentExpressionPrinter {
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final Function<Expression, Doc> expressionRenderer;
 
     private final Function<Expression, Optional<Doc>> brokenArgumentRenderer;
@@ -27,10 +29,12 @@ final class BreakableArgumentExpressionPrinter {
     private final Predicate<Expression> binaryFansChainOperand;
 
     BreakableArgumentExpressionPrinter(
+            SourceShapePolicy sourceShapePolicy,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentRenderer,
             Predicate<Expression> binaryFansChainOperand
     ) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.expressionRenderer = expressionRenderer;
         this.brokenArgumentRenderer = brokenArgumentRenderer;
         this.binaryFansChainOperand = binaryFansChainOperand;
@@ -98,7 +102,7 @@ final class BreakableArgumentExpressionPrinter {
     }
 
     private Optional<Doc> brokenArgument(Expression argument) {
-        if (!argument.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(argument)) {
             return Optional.empty();
         }
         return brokenArgumentRenderer.apply(argument);

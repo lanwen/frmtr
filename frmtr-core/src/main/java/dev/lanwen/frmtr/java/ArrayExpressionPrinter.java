@@ -41,6 +41,8 @@ final class ArrayExpressionPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final ExpressionRendering rendering;
@@ -60,6 +62,7 @@ final class ArrayExpressionPrinter {
     ArrayExpressionPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             ExpressionRendering rendering,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
@@ -71,6 +74,7 @@ final class ArrayExpressionPrinter {
     ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.rendering = rendering;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
@@ -162,7 +166,7 @@ final class ArrayExpressionPrinter {
      * itself width-checked by the caller, so a fitting {@code new T<...>[] {...}} stays compact.
      */
     private Optional<String> compactArrayCreation(ArrayCreationExpr expression, ArrayInitializerExpr initializer) {
-        if (!initializer.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(initializer)) {
             return Optional.empty();
         }
         if (initializer.getValues().stream().anyMatch(value -> !value.isLiteralExpr())) {
@@ -181,7 +185,7 @@ final class ArrayExpressionPrinter {
 
     private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
         if (
-            !initializer.getAllContainedComments().isEmpty()
+            sourceShapePolicy.hasContainedComments(initializer)
             || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))
         ) {
             return Optional.empty();
@@ -222,7 +226,7 @@ final class ArrayExpressionPrinter {
     private boolean compactArrayInitializerValue(Expression value) {
         return (
             value.isLiteralExpr()
-            || (value.getAllContainedComments().isEmpty()
+            || (!sourceShapePolicy.hasContainedComments(value)
                 && !compact.apply(value).contains("\n"))
         );
     }

@@ -209,7 +209,7 @@ final class ReturnExpressionPrinter {
         if (preempted.isPresent()) {
             return Doc.concat(Doc.text("return "), preempted.orElseThrow(), Doc.text(";"));
         }
-        if (expression.getComment().isPresent() || !expression.getAllContainedComments().isEmpty()) {
+        if (expression.getComment().isPresent() || sourceShapePolicy.hasContainedComments(expression)) {
             // A comment-bearing value cannot use the conditional group: both arms would build the value, and rendering a
             // value renders through the single-owner comment rail, so the comment is owned by whichever (node, slot) the
             // dry-run recorded first while the renderer independently picks an arm by width. When those disagree the

@@ -36,6 +36,8 @@ import java.util.function.ToIntBiFunction;
  */
 final class InitializerObjectCreationLayout {
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -61,6 +63,7 @@ final class InitializerObjectCreationLayout {
     private final ToIntBiFunction<VariableDeclarator, String> openerLineWidth;
 
     InitializerObjectCreationLayout(
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             Function<Node, String> compact,
@@ -74,6 +77,7 @@ final class InitializerObjectCreationLayout {
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
             ToIntBiFunction<VariableDeclarator, String> openerLineWidth
     ) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.compact = compact;
@@ -101,7 +105,7 @@ final class InitializerObjectCreationLayout {
         if (objectCreation.getAnonymousClassBody().isPresent()) {
             return Optional.empty();
         }
-        if (!objectCreation.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(objectCreation)) {
             return variableWithCommentedObjectCreation(variable, name, flatName, objectCreation);
         }
         Optional<Doc> typeArguments = variableWithBrokenObjectCreationTypeArguments(

@@ -260,7 +260,7 @@ final class ControlConditionPrinter {
     }
 
     private Optional<Doc> brokenMethodCallCondition(MethodCallExpr expression) {
-        if (expression.getArguments().isEmpty() || !expression.getAllContainedComments().isEmpty()) {
+        if (expression.getArguments().isEmpty() || sourceShapePolicy.hasContainedComments(expression)) {
             return Optional.empty();
         }
         return methodCallLayout.brokenCondition(expression);

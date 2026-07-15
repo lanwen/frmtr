@@ -146,6 +146,7 @@ final class MethodCallPrinter {
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.brokenArgumentExpressionRenderer = brokenArgumentExpressionRenderer;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
+            context.sourceShapePolicy,
             node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentExpressionRenderer,
             methodChains::binaryFansChainOperand
@@ -156,6 +157,7 @@ final class MethodCallPrinter {
         this.expressionLambdaArgumentPlan = expressionLambdaArgumentPlan;
         this.unformattedTextBlockRenderer = unformattedTextBlockRenderer;
         this.textBlockArguments = new TextBlockArgumentSourceLayout(
+            context.sourceShapePolicy,
             context.sourceText,
             context.options,
             unformattedTextBlockRenderer
@@ -654,7 +656,7 @@ final class MethodCallPrinter {
         if (
             !(scope instanceof TextBlockLiteralExpr textBlockLiteralExpr)
             || expression.getArguments().size() < 2
-            || !expression.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(expression)
             || hasHuggableExpressionLambdaArgument(expression)
         ) {
             return Optional.empty();
@@ -991,7 +993,7 @@ final class MethodCallPrinter {
         // measured at the true rendered column.
         Optional<Doc> compactBrokenSegment =
             compactRootWithBrokenFinalChainSegment(methodCall, lineWidth, chainLayout);
-        if (methodCall.getAllContainedComments().isEmpty() && compactBrokenSegment.isPresent()) {
+        if (!sourceShapePolicy.hasContainedComments(methodCall) && compactBrokenSegment.isPresent()) {
             Optional<Doc> fanOut = forcedMethodCallChain(methodCall, firstLineWidth, chainLayout)
                     .or(() -> forcedMethodCallChainAtBaseline(methodCall, lineWidth, chainLayout));
             if (fanOut.isPresent()) {
@@ -1334,7 +1336,7 @@ final class MethodCallPrinter {
         if (
             expression.getArguments().size() != 1
             || !(expression.getArgument(0) instanceof MethodCallExpr argument)
-            || !expression.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(expression)
             || expression.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
             || hostIsChainSegment(expression)
         ) {
@@ -1671,7 +1673,7 @@ final class MethodCallPrinter {
         if (argument instanceof ObjectCreationExpr objectCreation && !suffix.isEmpty()) {
             return objectCreationWithSuffix.apply(objectCreation, suffix);
         }
-        if (argument instanceof MethodCallExpr methodCall && !methodCall.getAllContainedComments().isEmpty()) {
+        if (argument instanceof MethodCallExpr methodCall && sourceShapePolicy.hasContainedComments(methodCall)) {
             Optional<Doc> chain = methodCallChain(methodCall, MethodCallBreakMode.FORCED, suffix);
             if (chain.isPresent()) {
                 return chain.orElseThrow();
@@ -1725,7 +1727,7 @@ final class MethodCallPrinter {
     }
 
     private Optional<Doc> textBlockRootChainArgumentWithSuffix(MethodCallExpr expression, String suffix) {
-        if (!expression.getAllContainedComments().isEmpty()) {
+        if (sourceShapePolicy.hasContainedComments(expression)) {
             return Optional.empty();
         }
         List<MethodCallExpr> calls = new ArrayList<>();
@@ -1946,7 +1948,7 @@ final class MethodCallPrinter {
                 return assignmentValueChain(assignExpr, chain.orElseThrow());
             }
         }
-        if (methodCall.getArguments().isEmpty() || !methodCall.getAllContainedComments().isEmpty()) {
+        if (methodCall.getArguments().isEmpty() || sourceShapePolicy.hasContainedComments(methodCall)) {
             return Optional.empty();
         }
         String firstLine = assignmentPrefix + methodCallPrefix(methodCall) + "(";

@@ -404,6 +404,13 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Reports whether {@code node} belongs to the current run snapshot.
+     */
+    boolean contains(Node node) {
+        return map().contains(node);
+    }
+
+    /**
      * Reports whether {@code node} contains any line comments.
      */
     boolean hasContainedLineComments(Node node) {

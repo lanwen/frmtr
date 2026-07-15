@@ -42,7 +42,10 @@ final class RawSource {
     String rawWithoutOwnComment(Node node) {
         Node clone = node.clone();
         clone.removeComment();
-        String raw = clone.getTokenRange().map(Object::toString).orElseGet(clone::toString).strip();
+        String raw = clone.getTokenRange()
+                .map(Object::toString)
+                .orElseGet(clone::toString)
+                .strip();
         return options.preserveRawTrailingWhitespace() ? raw : stripTrailingHorizontalWhitespace(raw);
     }
 
@@ -51,18 +54,49 @@ final class RawSource {
      * whitespace in raw-preservation paths.
      */
     String raw(Node node) {
-        String raw = node.getTokenRange().map(Object::toString).orElseGet(node::toString).strip();
+        String raw = node.getTokenRange()
+                .map(Object::toString)
+                .orElseGet(node::toString)
+                .strip();
         return options.preserveRawTrailingWhitespace() ? raw : stripTrailingHorizontalWhitespace(raw);
     }
 
     /**
-     * Removes trailing horizontal whitespace line-by-line without otherwise changing line structure.
+     * Strips trailing horizontal whitespace from each line in a single pass, matching a {@code String.lines()} split
+     * (terminators dropped, no trailing empty line for a final terminator) and rejoining with the platform separator.
+     * Normalizing CR/CRLF/LF to the platform separator makes it deliberately not interchangeable with
+     * {@link SourceText}'s separator-preserving strip.
      */
     String stripTrailingHorizontalWhitespace(String text) {
-        return text.lines()
-                .map(line -> line.stripTrailing())
-                .reduce((left, right) -> left + System.lineSeparator() + right)
-                .orElse("");
+        int length = text.length();
+        StringBuilder result = new StringBuilder(length);
+        int index = 0;
+        boolean firstLine = true;
+        while (index < length) {
+            int lineEnd = index;
+            while (lineEnd < length && text.charAt(lineEnd) != '\n' && text.charAt(lineEnd) != '\r') {
+                lineEnd++;
+            }
+            int contentEnd = lineEnd;
+            while (contentEnd > index && Character.isWhitespace(text.charAt(contentEnd - 1))) {
+                contentEnd--;
+            }
+            if (!firstLine) {
+                result.append(System.lineSeparator());
+            }
+            result.append(text, index, contentEnd);
+            firstLine = false;
+            if (lineEnd == length) {
+                break;
+            }
+            boolean crlf = text.charAt(lineEnd) == '\r' && lineEnd + 1 < length && text.charAt(lineEnd + 1) == '\n';
+            index = crlf ? lineEnd + 2 : lineEnd + 1;
+            // A terminator at end of text yields no trailing empty line, mirroring String.lines().
+            if (index == length) {
+                break;
+            }
+        }
+        return result.toString();
     }
 
     /**

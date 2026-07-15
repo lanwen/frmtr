@@ -192,35 +192,75 @@ final class AssignmentExpressionPrinter {
     }
 
     /**
+     * The width-triggered broken assignment value arms, keyed on the assigned value's AST kind. The suffixed-enclosed
+     * shape is tried first, <em>outside</em> this enum, because it fires for a suffix after an enclosed receiver
+     * regardless of the value's kind; every arm below is a single, mutually exclusive value kind.
+     */
+    private enum AssignmentValueArm {
+        /** Binary value moved below the operator (cast-division continuation kept flat when it still fits). */
+        BINARY,
+        /** Non-anonymous object creation with its argument list broken under the assignment. */
+        OBJECT_CREATION,
+        /** Method-call value shaped by the method-call printer. */
+        METHOD_CALL,
+        /** Conditional value routed to the conditional assignment hook. */
+        CONDITIONAL,
+        /** Nested assignment moved onto the continuation line. */
+        NESTED_ASSIGNMENT,
+        /** No construct-specific broken shape; the cascade declines and the caller falls back to flat. */
+        NONE,
+    }
+
+    /**
      * Tries the width-triggered assignment branches in order of local layout-constraint strength.
      *
-     * <p>Earlier branches handle shapes that have stronger local layout constraints: enclosed suffixes must stay attached
-     * to their broken receiver, binary expressions have operator-position rules, constructor calls can break their
-     * argument list, and ternaries/method calls have dedicated assignment hooks. Only when none of those cases applies
-     * does the caller fall back to flat assignment assembly.
+     * <p>The suffixed-enclosed shape must stay attached to its own broken receiver, so it is tried first regardless of
+     * value kind. When it declines, the value's AST kind selects one {@link AssignmentValueArm}; each arm has stronger
+     * local constraints than plain flat assembly (binary operator position, constructor argument breaking,
+     * ternary/method-call hooks). An arm that declines leaves the cascade empty, so the caller falls back to flat.
      */
     private Optional<Doc> brokenAssignment(AssignExpr expression) {
         Optional<Doc> suffixedEnclosedValue = assignmentWithSuffixedEnclosedValue(expression);
         if (suffixedEnclosedValue.isPresent()) {
             return suffixedEnclosedValue;
         }
-        Optional<Doc> binaryValue = assignmentWithBinaryValue(expression);
-        if (binaryValue.isPresent()) {
-            return binaryValue;
-        }
-        Optional<Doc> objectCreationValue = assignmentWithObjectCreationValue(expression);
-        if (objectCreationValue.isPresent()) {
-            return objectCreationValue;
-        }
-        Optional<Doc> methodCallValue = assignmentWithMethodCallValue(expression);
-        if (methodCallValue.isPresent()) {
-            return methodCallValue;
-        }
-        Optional<Doc> conditionalValue = assignmentWithConditionalValue(expression);
-        if (conditionalValue.isPresent()) {
-            return conditionalValue;
-        }
-        return assignmentWithNestedAssignmentValue(expression);
+        return renderAssignmentValueArm(classifyAssignmentValue(expression.getValue()), expression);
+    }
+
+    /**
+     * Selects the {@link AssignmentValueArm} for a broken assignment value from its AST kind alone, reproducing the former
+     * ordered cascade. The kinds are mutually exclusive, so this switch is order-independent; an anonymous-class object
+     * creation matches no arm (its body owns the layout) and resolves to {@link AssignmentValueArm#NONE}.
+     */
+    private AssignmentValueArm classifyAssignmentValue(Expression value) {
+        return switch (value) {
+            case BinaryExpr binaryValue -> AssignmentValueArm.BINARY;
+            // An anonymous-class body owns the layout after the constructor header, so it takes no broken shape here and
+            // declines like the former object-creation branch (empty -> flat).
+            case ObjectCreationExpr objectCreation -> objectCreation.getAnonymousClassBody().isEmpty()
+                ? AssignmentValueArm.OBJECT_CREATION
+                : AssignmentValueArm.NONE;
+            case MethodCallExpr methodCall -> AssignmentValueArm.METHOD_CALL;
+            case ConditionalExpr conditional -> AssignmentValueArm.CONDITIONAL;
+            case AssignExpr nestedAssignment -> AssignmentValueArm.NESTED_ASSIGNMENT;
+            default -> AssignmentValueArm.NONE;
+        };
+    }
+
+    /**
+     * Dispatches a classified {@link AssignmentValueArm} to its unchanged shape emitter, returning the identical
+     * {@code Optional<Doc>} the former cascade produced -- including the empty the {@code METHOD_CALL} and
+     * {@code CONDITIONAL} hooks may return, which leaves the cascade empty and falls the caller back to flat assignment.
+     */
+    private Optional<Doc> renderAssignmentValueArm(AssignmentValueArm arm, AssignExpr expression) {
+        return switch (arm) {
+            case BINARY -> assignmentWithBinaryValue(expression);
+            case OBJECT_CREATION -> assignmentWithObjectCreationValue(expression);
+            case METHOD_CALL -> assignmentWithMethodCallValue(expression);
+            case CONDITIONAL -> assignmentWithConditionalValue(expression);
+            case NESTED_ASSIGNMENT -> assignmentWithNestedAssignmentValue(expression);
+            case NONE -> Optional.empty();
+        };
     }
 
     /**
@@ -233,8 +273,10 @@ final class AssignmentExpressionPrinter {
     private Optional<Doc> assignmentWithSuffixedEnclosedValue(AssignExpr expression) {
         // The assignment has already decided this value breaks, so the enclosed suffix receiver must lead with a break;
         // that positional fact rides on the LayoutContext (#189) rather than a loose boolean argument.
-        Optional<Doc> suffixedEnclosedValue =
-            suffixedEnclosedExpression.apply(expression.getValue(), LayoutContext.root().withLeadingBreak(true));
+        Optional<Doc> suffixedEnclosedValue = suffixedEnclosedExpression.apply(
+            expression.getValue(),
+            LayoutContext.root().withLeadingBreak(true)
+        );
         return suffixedEnclosedValue.map(value -> Doc.concat(
                 rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
@@ -267,7 +309,9 @@ final class AssignmentExpressionPrinter {
             Doc.concat(
                 rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString()),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(expression.getValue(), true)))
+                Doc.indent(
+                    Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(expression.getValue(), true))
+                )
             )
         );
     }
@@ -297,7 +341,11 @@ final class AssignmentExpressionPrinter {
         if (lineCommentedBinaryCanKeepFirstOperandWithOperator(expression, binaryValue)) {
             return Doc.concat(target, Doc.text(" " + operator + " "), Doc.indent(lines));
         }
-        return Doc.concat(target, Doc.text(" " + operator), Doc.indent(Doc.concat(Doc.HARD_LINE, lines)));
+        return Doc.concat(
+            target,
+            Doc.text(" " + operator),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, lines))
+        );
     }
 
     /**
@@ -481,7 +529,9 @@ final class AssignmentExpressionPrinter {
      * genuine, non-empty own block comment in the gap is claimed here.
      */
     private Optional<String> gapBlockComment(AssignExpr expression) {
-        String raw = expression.getTokenRange().map(Object::toString).orElseGet(expression::toString);
+        String raw = expression.getTokenRange()
+                .map(Object::toString)
+                .orElseGet(expression::toString);
         int operator = raw.indexOf(expression.getOperator().asString());
         int blockComment = raw.indexOf("/*");
         if (blockComment < 0 || operator < 0 || blockComment < operator) {

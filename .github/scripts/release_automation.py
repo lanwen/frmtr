@@ -66,9 +66,6 @@ class Version:
             return Version(self.major, self.minor, self.patch + 1)
         raise ValueError(f"Unknown bump level {level!r}")
 
-    def next_minor_snapshot(self) -> str:
-        return f"{self.major}.{self.minor + 1}.0-SNAPSHOT"
-
     def snapshot(self) -> str:
         return f"{self}-SNAPSHOT"
 
@@ -468,7 +465,7 @@ def snapshot_pr_body(snapshot_version: str, release_version: str) -> str:
 def prepare_snapshot(args: argparse.Namespace) -> int:
     release_version = Version.parse(required_value(args, "release_version", "RELEASE_VERSION"))
     body_file = required_value(args, "body_file", "SNAPSHOT_PR_BODY_FILE")
-    snapshot_version = release_version.next_minor_snapshot()
+    snapshot_version = release_version.bump("patch").snapshot()
     write_version(snapshot_version)
     write_snapshot_docs_version(snapshot_version)
     Path(body_file).parent.mkdir(parents=True, exist_ok=True)

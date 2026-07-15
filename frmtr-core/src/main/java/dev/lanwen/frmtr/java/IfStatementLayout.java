@@ -107,8 +107,9 @@ final class IfStatementLayout {
         // below) own every gap line; claim the standalone then-trailing slot only otherwise. A collapse can re-attach a
         // gap line as the then block's own trailing comment, and claiming it here would render it alone and drop the
         // rest of the block.
-        boolean elseLeadingGapOwnsThenTrailing = statement.getThenStmt().isBlockStmt()
-            && statement.getElseStmt().filter(elseStatement -> !elseStatement.isEmptyStmt()).isPresent();
+        boolean elseLeadingGapOwnsThenTrailing = statement.getThenStmt().isBlockStmt() && statement.getElseStmt()
+                .filter(elseStatement -> !elseStatement.isEmptyStmt())
+                .isPresent();
         Doc thenTrailingLineComment = elseLeadingGapOwnsThenTrailing
             ? Doc.EMPTY
             : trailingLineComment.apply(statement.getThenStmt());
@@ -118,11 +119,14 @@ final class IfStatementLayout {
         // between the two slots: a comment before it is a separator (this gap slot), one after it leads a braceless else
         // body — those render indented under `else` via the braceless-body handler, and claiming the body block here
         // keeps the two slots from double-owning a line.
+        boolean thenBrokeBraceless = bracelessThenBrokeOnLeadingComment(statement);
         Optional<Statement> bracelessElse = statement.getElseStmt()
                 .filter(elseStatement -> !elseStatement.isEmptyStmt())
                 .filter(elseStatement -> !elseStatement.isIfStmt())
                 .filter(elseStatement -> !elseStatement.isBlockStmt());
-        Optional<Position> elseKeyword = bracelessElse.isPresent() ? elseKeywordPosition(statement) : Optional.empty();
+        Optional<Position> elseKeyword = bracelessElse.isPresent()
+            ? elseKeywordPosition(statement)
+            : Optional.empty();
         Doc elseLeadingLineComment = statement.getElseStmt()
                 .filter(elseStatement -> !elseStatement.isEmptyStmt())
                 .map(elseStatement -> elseLeadingLineComment(statement, elseStatement, elseKeyword))
@@ -132,8 +136,9 @@ final class IfStatementLayout {
         // collapse-rebucketed body-leading line and split it off the body. As the sole renderer for a braceless else
         // body, it also keeps a reattached separator comment from tripping nestedStatement's generic leading-comment
         // body break.
-        Optional<Doc> bracelessElseBody = bracelessElse
-                .map(elseStatement -> bracelessElseBody(statement, elseStatement, elseKeyword));
+        Optional<Doc> bracelessElseBody = bracelessElse.map(
+            elseStatement -> bracelessElseBody(statement, elseStatement, elseKeyword, thenBrokeBraceless)
+        );
         Doc conditionTrailingLineComment = controlConditions.closeParenTrailingLineComment(statement.getCondition());
         Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
         docs.add(ifCondition(statement));
@@ -145,8 +150,7 @@ final class IfStatementLayout {
             docs.add(Doc.text(" "));
             docs.add(ifThenStatement(statement));
         }
-        statement
-                .getElseStmt()
+        statement.getElseStmt()
                 .ifPresent(elseStatement -> {
                     if (elseStatement.isEmptyStmt()) {
                         docs.add(emptyElseStatement(statement, elseStatement));
@@ -168,7 +172,8 @@ final class IfStatementLayout {
                             thenTrailingLineComment,
                             betweenThenAndElseBlockComment,
                             elseLeadingLineComment,
-                            elseLeadingBlockComment
+                            elseLeadingBlockComment,
+                            thenBrokeBraceless
                         )
                     );
                     if (bracelessElseBody.isPresent()) {
@@ -212,7 +217,11 @@ final class IfStatementLayout {
      * <em>after</em> {@code else} and is owned by {@link #bracelessElseBody(IfStmt, Statement, java.util.Optional)};
      * absent for an {@code else if} or block else, where the whole gap block is recovered as before.
      */
-    private Doc elseLeadingLineComment(IfStmt statement, Statement elseStatement, Optional<Position> elseKeywordUpperBound) {
+    private Doc elseLeadingLineComment(
+            IfStmt statement,
+            Statement elseStatement,
+            Optional<Position> elseKeywordUpperBound
+    ) {
         return comments.gapLeadingLineCommentBlock(
             statement,
             statement.getThenStmt(),
@@ -240,12 +249,24 @@ final class IfStatementLayout {
      * {@code else} line like {@link StatementPrinter#nestedStatement(Statement)}, so a reattached separator comment does
      * not trip that method's generic leading-comment body break on a later pass.
      */
-    private Doc bracelessElseBody(IfStmt statement, Statement elseStatement, Optional<Position> elseKeyword) {
+    private Doc bracelessElseBody(
+            IfStmt statement,
+            Statement elseStatement,
+            Optional<Position> elseKeyword,
+            boolean thenBrokeBraceless
+    ) {
         List<JavaCommentTrivia> aboveBodyComments = commentPlacement
-                .gapLineCommentsBefore(statement.getThenStmt(), elseStatement, List.of(statement, statement.getThenStmt()))
+                .gapLineCommentsBefore(
+                    statement.getThenStmt(),
+                    elseStatement,
+                    List.of(statement, statement.getThenStmt())
+                )
                 .stream()
-                .filter(trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position))
-                        .orElse(true))
+                .filter(
+                    trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position)).orElse(
+                        true
+                    )
+                )
                 .toList();
         // The body's own leading comment counts only when it sits after the `else` keyword. A collapse can re-attach a
         // genuine separator comment (one written before `else`) onto the else statement as its own leading trivia; that
@@ -254,10 +275,16 @@ final class IfStatementLayout {
         boolean bodyOwnsLeadingLineComment = commentPlacement.leadingComment(elseStatement)
                 .filter(JavaCommentTrivia::isLine)
                 .filter(trivia -> !trivia.startsAfterEndOf(elseStatement))
-                .filter(trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position))
-                        .orElse(true))
+                .filter(
+                    trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position)).orElse(
+                        true
+                    )
+                )
                 .isPresent();
-        if (aboveBodyComments.isEmpty() && !bodyOwnsLeadingLineComment) {
+        // When the braceless then broke onto its own line(s), the else body must break under `else` too, even with no
+        // leading comment of its own -- otherwise the whole if/else expanded except the else body, which would cram
+        // `else body;` onto the `else` line while the then sits multi-line above it.
+        if (aboveBodyComments.isEmpty() && !bodyOwnsLeadingLineComment && !thenBrokeBraceless) {
             return statementRenderer.format(elseStatement, LayoutContext.root());
         }
         List<Doc> indented = new ArrayList<>();
@@ -284,19 +311,22 @@ final class IfStatementLayout {
      * callers then treat the whole gap as the separator.
      */
     private Optional<Position> elseKeywordPosition(IfStmt statement) {
-        Optional<Position> thenEnd = statement.getThenStmt().getRange().map(range -> range.end);
-        return statement.getTokenRange().flatMap(tokenRange -> {
-            for (JavaToken token : tokenRange) {
-                if (token.getKind() != GeneratedJavaParserConstants.ELSE) {
-                    continue;
-                }
-                Optional<Position> tokenStart = token.getRange().map(range -> range.begin);
-                if (tokenStart.isPresent() && thenEnd.map(end -> tokenStart.orElseThrow().isAfter(end)).orElse(true)) {
-                    return tokenStart;
-                }
-            }
-            return Optional.empty();
-        });
+        Optional<Position> thenEnd = statement.getThenStmt()
+                .getRange()
+                .map(range -> range.end);
+        return statement.getTokenRange()
+                .flatMap(tokenRange -> {
+                    for (JavaToken token : tokenRange) {
+                        if (token.getKind() != GeneratedJavaParserConstants.ELSE) {
+                            continue;
+                        }
+                        Optional<Position> tokenStart = token.getRange().map(range -> range.begin);
+                        if (tokenStart.isPresent() && thenEnd.map(end -> tokenStart.orElseThrow().isAfter(end)).orElse(true)) {
+                            return tokenStart;
+                        }
+                    }
+                    return Optional.empty();
+                });
     }
 
     /**
@@ -319,8 +349,7 @@ final class IfStatementLayout {
     private Doc ifWithEmptyThenStatement(IfStmt statement) {
         List<Doc> docs = new ArrayList<>();
         docs.add(Doc.text("if (" + ifEmptyThenCondition(statement) + ");"));
-        statement
-                .getElseStmt()
+        statement.getElseStmt()
                 .ifPresent(elseStatement -> {
                     docs.add(Doc.HARD_LINE);
                     docs.add(
@@ -377,16 +406,16 @@ final class IfStatementLayout {
                 .stream()
                 .filter(BlockComment.class::isInstance)
                 .filter(comment -> comment.getRange()
-                            .flatMap(commentRange -> thenStatement.getRange().flatMap(
-                                    thenRange -> elseStatement.getRange().map(
-                                        elseRange -> commentRange.begin.line == thenRange.end.line
-                                                && commentRange.begin.column > thenRange.end.column
-                                                && commentRange.begin.column <= thenRange.end.column + 2
-                                                && commentRange.begin.line == elseRange.begin.line
-                                                && commentRange.begin.column < elseRange.begin.column
-                                    )
-                            ))
-                            .orElse(false)
+                        .flatMap(commentRange -> thenStatement.getRange().flatMap(
+                                thenRange -> elseStatement.getRange().map(
+                                    elseRange -> commentRange.begin.line == thenRange.end.line
+                                            && commentRange.begin.column > thenRange.end.column
+                                            && commentRange.begin.column <= thenRange.end.column + 2
+                                            && commentRange.begin.line == elseRange.begin.line
+                                            && commentRange.begin.column < elseRange.begin.column
+                                )
+                        ))
+                        .orElse(false)
                 )
                 .findFirst()
                 .map(comments::comment)
@@ -432,7 +461,9 @@ final class IfStatementLayout {
         if (statement.getThenStmt().isBlockStmt()) {
             return Doc.concat(Doc.HARD_LINE, ifThenStatement(statement));
         }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getThenStmt(), LayoutContext.root())));
+        return Doc.indent(
+            Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getThenStmt(), LayoutContext.root()))
+        );
     }
 
     private Doc elseChainSeparator(
@@ -442,7 +473,8 @@ final class IfStatementLayout {
             Doc thenTrailingLineComment,
             Doc betweenThenAndElseBlockComment,
             Doc elseLeadingLineComment,
-            Doc elseLeadingBlockComment
+            Doc elseLeadingBlockComment,
+            boolean thenBrokeBraceless
     ) {
         if (conditionTrailingLineComment != Doc.EMPTY && !statement.getThenStmt().isBlockStmt()) {
             // The condition trailing comment is rendered on the `if` line by ifStatement; this slot only emits the
@@ -466,7 +498,31 @@ final class IfStatementLayout {
         if (elseStatement.isIfStmt() && !statement.getThenStmt().isBlockStmt()) {
             return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
         }
+        if (thenBrokeBraceless) {
+            // The braceless then broke onto its own line(s) (a leading `//` comment), so `else` cannot hang off the
+            // then's last line: it goes on its own line. A block else keeps `{` on the `else` line; a braceless else
+            // body breaks and indents beneath it ({@link #bracelessElseBody}), so it needs no trailing space here.
+            return elseStatement.isBlockStmt()
+                ? Doc.concat(Doc.HARD_LINE, Doc.text("else "))
+                : Doc.concat(Doc.HARD_LINE, Doc.text("else"));
+        }
         return Doc.text(" else ");
+    }
+
+    /**
+     * Whether a braceless then-branch carries a leading {@code //} comment that forces it -- and so the whole if/else --
+     * to break. Mirrors {@link StatementPrinter}'s braceless-body break predicate: with such a comment the then renders
+     * multi-line, so the {@code else} must move to its own line rather than cram onto the then's last line.
+     */
+    private boolean bracelessThenBrokeOnLeadingComment(IfStmt statement) {
+        Statement thenStatement = statement.getThenStmt();
+        if (thenStatement.isBlockStmt()) {
+            return false;
+        }
+        return commentPlacement.leadingComment(thenStatement)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(trivia -> !trivia.startsAfterEndOf(thenStatement))
+                .isPresent();
     }
 
     /**

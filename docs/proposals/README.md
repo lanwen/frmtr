@@ -19,10 +19,10 @@ investigation link out to a focused proposal in this directory.
 | ⚪ Deferred | Intentionally parked. |
 
 **Overall status:** The big architectural arc is largely **in place**.
-Source-shape decisions are centralized (**B1**) and reprint-by-default uses a closed, ratchet-guarded exception set (**B4**); the Doc IR includes the **B2** capabilities; the ranked-layout engine (`Doc.bestFitting`) and the method-call / chain / object-creation / lambda **hub** use pure AST input with true-column measurement; the layout-decision-model, convergence-redesign, chain-path-unification, hub-canonicalization, and leftEdgePrefix-foundation records are archived as implemented; and **S3**, **S5**, **S6**, **S7**, **S8**, **S9**, **M2/M2a**, and **M3** are done.
+Source-shape decisions are centralized (**B1**) and reprint-by-default uses a closed, ratchet-guarded exception set (**B4**); the Doc IR includes the **B2** capabilities; the ranked-layout engine (`Doc.bestFitting`) and the method-call / chain / object-creation / lambda **hub** use pure AST input with true-column measurement; the layout-decision-model, convergence-redesign, chain-path-unification, hub-canonicalization, and leftEdgePrefix-foundation records are archived as implemented; the **B3** correctness safety net (AST-equivalence + idempotence + a real-world-corpus check) is complete; and **S3**, **S5**, **S6**, **S7**, **S8**, **S9**, **M2/M2a**, and **M3** are done.
 The archived provenance records live in [`archived/`](archived/).
 
-What remains active: **B3** Layer 3 (real-world corpus harness), **M4** (LSP), **M1** (benchmark discipline), the [printer-contract-inversion](printer-contract-inversion.md) Stage-3 per-construct generalization (= the layout-decision-model's **LDM-4**), the [comment-containment-index](comment-containment-index.md) caller migration, the [cli-discovery](cli-discovery-lazy-ignore.md) ignored-directory pruning, and the still-proposed smalls (**S1**, **S2**, **S4**).
+What remains active: **M4** (LSP), **M1** (benchmark discipline), the [printer-contract-inversion](printer-contract-inversion.md) Stage-3 per-construct generalization (= the layout-decision-model's **LDM-4**), the [comment-containment-index](comment-containment-index.md) caller migration, the [cli-discovery](cli-discovery-lazy-ignore.md) ignored-directory pruning, and the still-proposed smalls (**S1**, **S2**, **S4**).
 
 ### Relationship to existing proposals in this directory
 
@@ -58,8 +58,8 @@ The opportunities that framed this roadmap were targeted leverage, not a rewrite
 2. ~~An **IR that cannot express** trailing comments, fill-wrapping, break-parent, conditional/ranked layouts~~ —
    **addressed.** `LineSuffix`, `Fill`, `BreakParent`, `ConditionalGroup`, and `BestFitting` all landed (B2 + the
    ranked-layout engine).
-3. ~~**No correctness safety net**~~ — **largely addressed.** AST-equivalence verify + an idempotence property test
-   over a perturbed corpus landed (B3 Layers 1–2); the real-world corpus harness (Layer 3) is the remaining piece.
+3. ~~**No correctness safety net**~~ — **addressed.** All three B3 layers are in place: AST-equivalence verify, an
+   idempotence property test over a perturbed corpus, and a real-world OSS corpus check in CI (`corpus.yml`).
 4. **The performance / distribution story is the main open frontier.** Multi-file parallelism + Gradle caching landed
    (M3), but there is still no benchmark discipline (M1) and no editor integration (M4).
 
@@ -145,7 +145,7 @@ the four it was missing most:
 - **Effort:** large but additive and incremental. Paired with B1.
 
 ### B3. A correctness safety net: AST-equivalence + idempotence + a real-world corpus
-**Status:** 🟢 In progress — Layers 1-2 landed · _focused proposal:_ [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)
+**Status:** ✅ Done (archived) — all three layers in place: AST-equivalence verify, the idempotence property test, and the `corpus.yml` real-world OSS corpus check · _focused proposal:_ [archived/semantic-preservation-safety-net.md](archived/semantic-preservation-safety-net.md)
 
 > **Layer 1 landed.** The AST-equivalence verify mode is implemented: a `dev.lanwen.frmtr.debug.verify` toggle
 > (off by default) re-parses the formatter output and asserts it is structurally equivalent to the input (via
@@ -159,8 +159,13 @@ the four it was missing most:
 > one-pass idempotence + AST-equivalence on well-shaped inputs and AST-equivalence + parse-stability on perturbed inputs,
 > and deliberately does **not** assert convergence (the formatter preserves intentional source shape). The broadened
 > corpus surfaced six real data-loss / parse-stability defects on perturbed inputs (dropped enum separators, dropped
-> module directives), excluded from the green corpus and recorded as findings in the proposal. Layer 3 (real-world OSS
-> corpus harness) remains proposed.
+> module directives), all since fixed and fixture-pinned.
+
+> **Layer 3 landed.** `.github/workflows/corpus.yml` formats a pinned, SHA-cached real-world corpus
+> (`testcontainers/testcontainers-java`) through the shipping CLI — `frmtr --write --verify` (parse-stability +
+> AST-equivalence) then `frmtr --check` (one-pass idempotence) — reading the CLI's distinct exit codes to separate a
+> verify violation (`3`) from a parse/IO failure (`2`) and an idempotence miss (`1`). It runs on `release`-labelled PRs
+> and `workflow_dispatch`, not every PR; coverage widens by bumping the pin in the workflow's `env` block.
 
 > **Investigation finding:** an idempotence assertion already exists (`FrmtrTest.java:29`); the gap
 > is AST-equivalence. Proposes a `dev.lanwen.frmtr.debug.verify` toggle parallel to the existing
@@ -168,12 +173,12 @@ the four it was missing most:
 > comparator must sort both trees' imports with the formatter's own order before comparing — but
 > still fail on a dropped/duplicated import.
 
-A formatter must never change program meaning. Today that is guarded only by golden fixtures, which
-is why an earlier change silently dropped enum separators undetected. Add three layers:
+A formatter must never change program meaning. Golden fixtures alone once let an enum-separator drop slip through
+undetected; three layers now guard meaning independent of anyone having written a fixture for the bug:
 
 1. A debug/CI mode that **re-parses output and asserts AST equivalence** (modulo trivia).
 2. A property test: `format(format(x)) == format(x)` over generated and real inputs.
-3. A **corpus harness** that formats large, pinned real-world Java corpora in CI and checks
+3. A **corpus harness** that formats a pinned real-world Java corpus in CI and checks
    parse-stability + idempotence + AST-equivalence.
 
 - **Serves:** correctness, plus the confidence to do B1/B2 aggressively.
@@ -409,16 +414,14 @@ comments, so no comment-drop backlog remains.
 ## Suggested sequencing
 
 The original B1→B2→B3 / S5→M2 spine is **done**: B1/B2 landed, the ranked-layout engine + reprint-by-default hub flip
-retired the source-shape coupling and `LayoutWidth`, and B3 Layers 1–2 + M2/M2a shipped. What's left, roughly in
+retired the source-shape coupling and `LayoutWidth`, and B3 (all three layers) + M2/M2a shipped. What's left, roughly in
 priority order:
 
-1. **B3 Layer 3** — the real-world OSS corpus harness (the last correctness-net layer; the property test already runs
-   over perturbed fixtures).
-2. **M1** — a benchmark discipline (JMH + macro + competitive diff); the prerequisite for any "fastest" claim and for
+1. **M1** — a benchmark discipline (JMH + macro + competitive diff); the prerequisite for any "fastest" claim and for
    validating M2/M3.
-3. **Printer-contract Stage 3 / LDM-4** — generalize the ranked output seam per construct (context→enum) so the
+2. **Printer-contract Stage 3 / LDM-4** — generalize the ranked output seam per construct (context→enum) so the
    remaining mega-printers decompose. Enablers all landed.
-4. **M4** (LSP / editor integration) for adoption; the thin partial follow-ups (cli-discovery pruning and comment-containment caller migration); and the still-proposed smalls **S1** (display width), **S2** (`.editorconfig`), **S4** (pre-commit/Action/changed-hunks) — **S2 / S4** are quick user-facing wins.
+3. **M4** (LSP / editor integration) for adoption; the thin partial follow-ups (cli-discovery pruning and comment-containment caller migration); and the still-proposed smalls **S1** (display width), **S2** (`.editorconfig`), **S4** (pre-commit/Action/changed-hunks) — **S2 / S4** are quick user-facing wins.
 
 The throughline held: **B1/B2 shrank the code and bug surface, B4 inverted the source-shape coupling behind a closed
 exception set, B3 made those changes safe, and the remaining M-items turn a correct formatter into a fast, widely
@@ -432,7 +435,6 @@ adopted one.**
 
 | ID | Topic | Doc | Remaining work |
 | --- | --- | --- | --- |
-| B3 | Correctness safety net | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) | Layer 3 (real-world corpus harness) |
 | M1 | Performance follow-ups from JFR sampling | [performance-followups-from-jfr.md](performance-followups-from-jfr.md) | benchmark discipline (investigating) |
 | M4 | LSP / editor integration | [lsp-editor-integration.md](lsp-editor-integration.md) | whole feature (unimplemented) |
 | — | Printer-contract inversion (dissolve the callback mesh) | [printer-contract-inversion.md](printer-contract-inversion.md) | Stage 3 per-construct generalization |
@@ -448,6 +450,7 @@ adopted one.**
 | --- | --- | --- |
 | B1 | Centralize source-shape coupling | [archived/source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) |
 | B2 | Enrich the Doc IR | [archived/doc-ir-combinators.md](archived/doc-ir-combinators.md) |
+| B3 | Correctness safety net (AST-equivalence + idempotence + real-world corpus) | [archived/semantic-preservation-safety-net.md](archived/semantic-preservation-safety-net.md) |
 | B4 | Reprint by default: structural break rules + closed exception set | [archived/reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md) |
 | — | Layout hub: atomic-rewrite plan | [archived/hub-canonicalization-atomic-rewrite.md](archived/hub-canonicalization-atomic-rewrite.md) |
 | — | Layout hub: D3 atomic-flip map | [archived/hub-canonicalization-d3-flip-map.md](archived/hub-canonicalization-d3-flip-map.md) |

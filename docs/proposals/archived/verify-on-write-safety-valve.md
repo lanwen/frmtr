@@ -33,7 +33,7 @@ stakes (overwriting source).
 
 ## Relationship to B3 (read this before implementing)
 
-The B3 safety-net proposal (`docs/proposals/semantic-preservation-safety-net.md`) deliberately keeps verify **off by
+The B3 safety-net proposal (`docs/proposals/archived/semantic-preservation-safety-net.md`) deliberately keeps verify **off by
 default in the shipped CLI/Gradle hot path** (its Non-goals, line 440: "Turning any new check on by default in the
 shipped CLI / Gradle plugin hot path"; and the performance note, lines 188-197: re-parsing doubles parse cost, so verify
 must be opt-in). **This plan does not contradict that** — it is additive and stays within the decision:

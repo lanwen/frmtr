@@ -2,7 +2,7 @@
 
 Status: 🟢 Partially implemented — the foundation (LDM-1/-2/-3) landed and the doc's central gap is closed; LDM-4 remains. This is **not** a re-proposal of
 [B1](archived/source-shape-policy-consolidation.md), [B2](archived/doc-ir-combinators.md), or
-[B3](semantic-preservation-safety-net.md) (all landed). It sits *above* them: it states the layout
+[B3](archived/semantic-preservation-safety-net.md) (all landed). It sits *above* them: it states the layout
 decision model as a concise rule set and identifies the one architectural gap B2 documented as
 **"not achievable"** — ranking multiple *broken* layouts by context, idempotently — and the mechanism
 that closes it. A [prior-art reference](#prior-art--existing-formatters-reference) at the end compares
@@ -31,7 +31,7 @@ frmtr is **not** missing a document IR. Per the roadmap and focused proposals it
 - One consolidated `SourceShapePolicy` for every "respect the source shape here?" decision
   ([source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md)).
 - An AST-equivalence verify mode + an idempotence property test over a perturbed corpus
-  ([semantic-preservation-safety-net.md](semantic-preservation-safety-net.md), Layers 1–2).
+  ([semantic-preservation-safety-net.md](archived/semantic-preservation-safety-net.md), Layers 1–2).
 
 So the foundation already matches the mature-formatter model. The pain is therefore **narrower and
 specific**, and this doc's job is to name it precisely and route it to the mechanism that solves it —
@@ -76,7 +76,7 @@ frmtr has made the **opposite, deliberate product choice**: preserve author inte
 multiline calls/constructors/ternaries/lambdas, deliberate blank lines
 ([source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) "What stays
 source-aware on purpose"). Its safety net therefore asserts **idempotence and AST-equivalence but
-deliberately *not* convergence** ([semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)).
+deliberately *not* convergence** ([semantic-preservation-safety-net.md](archived/semantic-preservation-safety-net.md)).
 
 This fork is the reason frmtr cannot simply adopt a canonicalizing model wholesale, and it must be
 stated up front because it changes the rules below:
@@ -308,7 +308,7 @@ predicates fold into the rule; the shape callbacks collapse to a single `JavaFor
 
 ## Milestones & execution plan
 
-Each milestone is gated on [B3](semantic-preservation-safety-net.md)'s AST-equivalence + idempotence
+Each milestone is gated on [B3](archived/semantic-preservation-safety-net.md)'s AST-equivalence + idempotence
 net; every step lands behind `--verify`. LDM-1 is mechanical, parallelizable, and byte-identical — it
 is the first to orchestrate. (IDs are namespaced **LDM-N** to avoid collision with the roadmap's
 unrelated M1–M4 in [README.md](README.md).)
@@ -335,7 +335,7 @@ gating — without giving up frmtr's deliberate author-intent preservation.
 | B8/D16 (rank broken layouts) | [doc-ir-combinators.md](archived/doc-ir-combinators.md) Outcomes | **The gap B2 documented as "not achievable" with `ConditionalGroup`.** This doc supplies the ranked-broken-layout mechanism that resolves it. |
 | C10 (measure at output column) | [doc-ir-combinators.md](archived/doc-ir-combinators.md) (byte-identity finding); [linear-time-doc-renderer.md](archived/linear-time-doc-renderer.md) (M2) | The source-column-vs-output-column split is B2's byte-identity blocker; M2's bounded `fits` is the renderer surface any ranking engine must stay linear within. |
 | B7 (id-keyed conditionals) | [doc-ir-combinators.md](archived/doc-ir-combinators.md) | `IfBreak`+`groupId` and `LineSuffix` landed; extend to continuation-indent / ternary placement. |
-| D13–D15 (idempotence ≠ convergence) | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) (B3); [source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) (B1) | B1 consolidated the reads; B3 asserts idempotence (not convergence). This doc adds the **per-signal fixpoint** invariant as the discipline that keeps preservation idempotent. |
+| D13–D15 (idempotence ≠ convergence) | [semantic-preservation-safety-net.md](archived/semantic-preservation-safety-net.md) (B3); [source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) (B1) | B1 consolidated the reads; B3 asserts idempotence (not convergence). This doc adds the **per-signal fixpoint** invariant as the discipline that keeps preservation idempotent. |
 | B5/B6 (context→enum) | — | New. Closest existing surface is `VariableInitializerLayout`; no proposal frames it as an explicit layout enum yet. |
 | B9 (resolved-state conditions) | [source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) | The principled replacement for the chain planner's `selectorBrokeAfter`/`sourceMultilineChain` source reads. |
 | formatter-owned context object | [formatter-owned-syntax-view.md](formatter-owned-syntax-view.md) | A `LayoutContext` carrying rendered column + enclosing-construct kind (replacing callback-implicit context) is a natural facet of that held proposal. |

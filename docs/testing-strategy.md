@@ -41,9 +41,9 @@ debug/explain/error behavior, or narrow helper contracts that cannot be expresse
 
 ## Semantic-Preservation Property Checks
 
-Beyond the curated golden fixtures, two layers of the semantic-preservation safety net
-([docs/proposals/semantic-preservation-safety-net.md](proposals/semantic-preservation-safety-net.md), roadmap B3)
-verify correctness without anyone having written a fixture for the bug:
+Beyond the curated golden fixtures, two of the three layers of the semantic-preservation safety net
+([docs/proposals/archived/semantic-preservation-safety-net.md](proposals/archived/semantic-preservation-safety-net.md),
+roadmap B3) run inside this suite and verify correctness without anyone having written a fixture for the bug:
 
 - **AST-equivalence verify mode (layer 1):** the `dev.lanwen.frmtr.debug.verify` system property (on for the whole
   `frmtr-core` test suite) makes `JavaFormatter.format` re-parse its own output and assert structural equivalence to the
@@ -55,6 +55,9 @@ verify correctness without anyone having written a fixture for the bug:
   deliberately does **not** assert convergence (`format(perturbed(x)) == format(x)`): the formatter preserves intentional
   source shape, so equivalent inputs of different shape may format differently. Perturbed shapes that expose genuine
   defects are excluded as documented findings rather than masked.
+
+The third layer — a real-world OSS corpus check — runs in CI rather than this unit suite; see
+[Real-World Corpus Check](../ARCHITECTURE.md#real-world-corpus-check).
 
 Normal fixtures are discovered by the `@ResourceFixtureSource(glob = "format/**/input.java")` JUnit source extension.
 Each normal fixture must include at least one recognized expected output next to the input:

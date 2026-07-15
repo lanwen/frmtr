@@ -18,6 +18,7 @@ val projectDescriptions =
         ":frmtr-cli" to "Command-line Java formatter powered by frmtr.",
         ":frmtr-gradle-plugin" to "Gradle plugin that checks and formats Java source with frmtr.",
         ":frmtr-native-image-support" to "GraalVM native-image support metadata for frmtr.",
+        ":frmtr-bench" to "JMH microbenchmarks for frmtr formatter hot paths.",
         ":site" to "Static onboarding site for frmtr.")
 val centralMavenJavaProjects = setOf(":frmtr-core", ":frmtr-tooling")
 val centralSnapshotProjects = centralMavenJavaProjects + ":frmtr-gradle-plugin"

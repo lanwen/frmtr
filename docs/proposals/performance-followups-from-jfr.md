@@ -99,60 +99,53 @@ The samples were short, but the recurring signals were consistent enough to guid
 
 ## Investigation lane 1: raw-source whitespace churn
 
-**Priority:** high. **Confidence:** high.
+**Priority:** medium. **Confidence:** high.
 
-### Signal
+### State
 
-`RawSource.normalizeWhitespace` showed up as a top formatter-owned execution path, and
-`RawSource.stripTrailingHorizontalWhitespace` dominated several allocation stacks. The current code
-uses regex replacement for compact whitespace and a `lines().map(...).reduce(left + sep + right)`
-shape for stripping trailing horizontal whitespace.
+`stripTrailingHorizontalWhitespace` is a single-pass scan: its per-op allocation scales linearly with input, and it
+is out of the top allocation tier on the macro corpus. `normalizeWhitespace` is the remaining churn — it applies
+several regex passes (`WHITESPACE` twice, `ASSIGN_EQUALS`, `SPACE_AFTER_OPENER`, `SPACE_BEFORE_CLOSER`) to each
+non-literal region and stays a top formatter-owned CPU path (about 7% of execution samples), with modest allocation.
 
-The broader allocation sample also had large `byte[]`, `Object[]`, stream pipeline, and `String`
-signals. This lane is a direct formatter-owned way to attack that pressure before blaming parser
-internals.
+The `:frmtr-bench` JMH module measures these helpers directly against the real code; pair it with an
+`allocation-profiling=maximum` JFR macro run to attribute pipeline-level share.
 
 ### Question
 
-Can raw-source normalization be made single-pass and allocation-light without changing output?
+Can compact whitespace normalization avoid repeated regex matching and replacement without changing output?
 
 Sub-questions:
 
-- Can trailing horizontal whitespace stripping use a single `StringBuilder` pass instead of stream
-  lines plus repeated concatenation?
-- Can compact whitespace normalization avoid repeated regex matching and replacement?
-- Can compact raw text be cached per original node within one formatting run so callers do not
-  normalize the same token range repeatedly?
+- Can `flushOutside` collapse whitespace, apply the `=` spacing rule, and fix opener/closer interior spacing in one
+  hand-written scan instead of five `Matcher`/`replaceAll` passes?
+- Can compact raw text be cached per original node within one formatting run so callers do not normalize the same
+  token range repeatedly? Such a cache must live for one run and never cross source strings or AST instances.
 
 ### Code area
 
-- `RawSource.stripTrailingHorizontalWhitespace`
-- `RawSource.normalizeWhitespace`
+- `RawSource.normalizeWhitespace` / `RawSource.flushOutside`
 - `CompactSourceText.compact`
 
 ### Proposed experiment
 
-1. Add a focused microbenchmark or temporary test harness around representative raw snippets:
-   multiline method chains, text with comments, annotation arguments, and raw-preserved fallback
-   snippets.
-2. Prototype a single-pass implementation behind existing methods.
-3. Run the full fixture suite with AST-equivalence enabled.
-4. Re-run the paired macro check and an `allocmax` JFR pass.
+1. Extend `RawSourceNormalizationBenchmark` with the normalization inputs under study.
+2. Prototype a single-scan `flushOutside` behind the existing method.
+3. Run the full fixture suite with AST-equivalence enabled, plus a differential property test against the current
+   regex output.
+4. Re-run the paired macro check and an `allocmax` JFR pass; confirm `normalizeWhitespace` leaves the top CPU path.
 
 ### Success metrics
 
-- Byte-identical formatter output across fixtures.
-- `RawSource` allocation samples drop or disappear from top app-owned allocation sites.
+- Byte-identical formatter output across fixtures and the macro corpus summary.
+- `normalizeWhitespace` allocation and CPU samples drop.
 - No regression in paired macro median beyond noise.
-- If a compact-text cache is added, cache lifetime is one formatting run and never crosses source
-  strings or AST instances.
 
 ### Risks
 
-- Regex behavior around operators and whitespace is subtle; hand-written normalization must preserve
-  current spacing around assignment-like tokens.
-- Raw-preserved text blocks and formatter-ignore regions must not be normalized through this path.
-- A cache can accidentally retain cloned/detached nodes if it is not scoped to original parse trees.
+- The `=` spacing and opener/closer rules are subtle; a hand-written scan must preserve spacing around
+  assignment-like tokens and never rewrite inside string/character/text-block literals or line comments.
+- A cache can retain cloned/detached nodes if it is not scoped to original parse trees.
 
 ## Investigation lane 2: comment-query indexing
 
@@ -391,7 +384,8 @@ After formatter-owned hot paths improve, does discovery become material again on
 
 ## Suggested sequencing
 
-1. **Raw-source whitespace churn**: highest-confidence formatter-owned allocation/CPU target.
+1. **Raw-source `normalizeWhitespace`**: the residual formatter-owned CPU target now that the trailing-whitespace
+   strip is single-pass.
 2. **Comment-query indexing**: likely large, but should be split by query family.
 3. **Worker-local formatter/parser reuse**: narrow session reuse landed; measure before widening it.
 4. **Method-chain/comment stream flattening**: useful after the source-shape/comment policy surface

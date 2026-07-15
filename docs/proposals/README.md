@@ -216,10 +216,10 @@ landed as [archived/left-edge-prefix-foundation.md](archived/left-edge-prefix-fo
 ### M1. A benchmark discipline (JMH + macro + competitive diff)
 **Status:** 🟣 Investigating · _focused proposal:_ [performance-followups-from-jfr.md](performance-followups-from-jfr.md)
 
-No benchmark discipline exists; "fastest" cannot be claimed without one. Add JMH microbenchmarks
-(render-only, full pipeline), a macro run over the B3 corpus, CI regression gates, and published
-head-to-head numbers + output diffs against other Java formatters. This also reveals whether parsing
-or rendering dominates, which directs further optimization.
+A JMH microbenchmark harness (`:frmtr-bench`) measures formatter hot paths against the real code; the pieces still
+missing before "fastest" can be claimed are a committed macro run over the B3 corpus, CI regression gates, and
+published head-to-head numbers + output diffs against other Java formatters. Measurement already shows parser
+tokenization and comment queries — not rendering — dominate CPU, which directs further optimization.
 
 > **M2a follow-up finding:** paired macro checks over an anonymized 631-file external corpus did not
 > show a whole-CLI win from M2a (paired mean delta `+0.18s`, median delta `-0.09s`, M2a faster in
@@ -228,9 +228,10 @@ or rendering dominates, which directs further optimization.
 > `7193.9 kB`) appeared on main and disappeared on M2a. The same JFR pass produced a focused
 > performance backlog: raw-source whitespace churn, comment-query indexing, worker-local
 > formatter/parser reuse, stream-heavy method-chain analysis, startup separation, and discovery
-> isolation. The narrow formatter/parser reuse slice has since landed as public sequential
-> `FrmtrSession` reuse plus worker-local reuse in the file-oriented runner; remaining work is
-> measurement and any broader follow-up justified by that evidence.
+> isolation. Two slices have since landed: the raw-source trailing-whitespace strip is single-pass
+> (out of the top allocation tier; `normalizeWhitespace` is the residual raw-source target), and
+> formatter/parser reuse ships as public sequential `FrmtrSession` reuse plus worker-local reuse in
+> the file-oriented runner. Remaining work is measurement and the follow-ups that evidence justifies.
 
 - **Serves:** "fastest" credibility, maintainer-friendly.
 - **Effort:** medium. Methodology-heavy, low risk.

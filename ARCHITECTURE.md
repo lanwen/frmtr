@@ -78,6 +78,7 @@ catalog owns external versions and they are not repeated here.
          └──────────────┘
 
 frmtr-cli ──► frmtr-native-image-support   (build-time only; consumed by the native-image build)
+frmtr-bench ──► frmtr-core                 (dev-only JMH benchmarks; no runtime artifact)
 ```
 
 - **Root** — aggregates build conventions and repo-local helper tasks; produces no runtime artifact.
@@ -89,6 +90,8 @@ frmtr-cli ──► frmtr-native-image-support   (build-time only; consumed by t
   tooling.
 - **`:frmtr-native-image-support`** — build-time native-image metadata for JavaParser reflection; visible only to
   native-image builds and native tests, never on a normal JVM runtime classpath.
+- **`:frmtr-bench`** — JMH microbenchmarks for formatter hot paths; shares core's package to measure package-private
+  helpers directly. Dev-only, depends on core, produces no runtime artifact and is not published.
 - **`:site`** — static onboarding site built with JBake.
 
 ### Toolchain

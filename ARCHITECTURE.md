@@ -393,8 +393,8 @@ Native-image targets the build OS and uses a native-image-capable JDK 25 launche
 the JVM artifacts. `:frmtr-cli:nativeDistributionZip` wraps the platform executable as a JReleaser `BINARY`
 distribution; the release workflow builds archives on Linux x64, macOS arm64, and Windows x64, then publishes GitHub
 release assets, Maven Central artifacts, the Homebrew formula, and the Gradle Plugin Portal publication. Release
-automation derives version bumps from Conventional Commits-style PR titles (schema in
-[docs/release-automation.md](docs/release-automation.md)).
+automation derives version bumps from Conventional Commits-style PR titles and starts post-release development at the
+next patch snapshot (schema in [docs/release-automation.md](docs/release-automation.md)).
 
 ## Tests
 

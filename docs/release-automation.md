@@ -30,7 +30,7 @@ feat(core): format compact record constructors
 refactor(java)!: remove legacy comment ownership path
 deps: bump JavaParser to 3.28.3
 chore(release): prepare 0.2.0
-chore(snapshot): start 0.3.0-SNAPSHOT
+chore(snapshot): start 0.2.1-SNAPSHOT
 ```
 
 ## Changelog Detail Markers
@@ -87,6 +87,9 @@ Version selection:
 
 The computed version is compared with the current `*-SNAPSHOT` version in `gradle.properties`; the release PR uses
 whichever is higher, then removes `-SNAPSHOT`.
+
+After a release, the next-snapshot PR starts the next patch version by default.
+For example, releasing `0.2.0` starts `0.2.1-SNAPSHOT`.
 
 On every `main` push, `snapshot-target-pr.yml` also checks whether merged feature or breaking-change PRs require a
 higher snapshot target. If `gradle.properties` is still on a lower `*-SNAPSHOT`, it opens or updates a signed `snapshot`

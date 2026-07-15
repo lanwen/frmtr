@@ -150,5 +150,31 @@ class PrepareSnapshotTargetTest(unittest.TestCase):
             )
 
 
+class PrepareSnapshotTest(unittest.TestCase):
+    def test_prepare_snapshot_starts_next_patch_version(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path.cwd()
+            workspace = Path(directory)
+            (workspace / "gradle.properties").write_text("version=0.2.0\n")
+            (workspace / "README.md").write_text("Current snapshot: `0.2.0-SNAPSHOT`\n")
+            (workspace / "PUBLISHING.md").write_text(
+                'id("dev.lanwen.frmtr") version "0.2.0-SNAPSHOT"\n')
+
+            try:
+                os.chdir(workspace)
+                args = mock.Mock(body_file="build/snapshot-pr-body.md", release_version="0.2.0")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(0, release_automation.prepare_snapshot(args))
+            finally:
+                os.chdir(cwd)
+
+            self.assertEqual("version=0.2.1-SNAPSHOT\n", (workspace / "gradle.properties").read_text())
+            self.assertIn("Current snapshot: `0.2.1-SNAPSHOT`", (workspace / "README.md").read_text())
+            self.assertIn(
+                'id("dev.lanwen.frmtr") version "0.2.1-SNAPSHOT"',
+                (workspace / "PUBLISHING.md").read_text(),
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

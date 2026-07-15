@@ -85,6 +85,42 @@ final class FrmtrGradlePluginFunctionalTest {
     }
 
     @Test
+    void javaCheckReportsRunnerProgressAtInfoLevel() {
+        writeSettings();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/CheckProgress.java", "package demo; class CheckProgress{int value;}");
+
+        BuildResult result = gradle("frmtrJavaCheck", "--info").buildAndFail();
+
+        assertProgressLifecycle(result, "check", Path.of("src/main/java/demo/CheckProgress.java"));
+    }
+
+    @Test
+    void javaFormatReportsRunnerProgressAtInfoLevel() {
+        writeSettings();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/FormatProgress.java", "package demo; class FormatProgress{int value;}");
+
+        BuildResult result = gradle("frmtrJavaFormat", "--info").build();
+
+        assertProgressLifecycle(result, "format", Path.of("src/main/java/demo/FormatProgress.java"));
+    }
+
+    @Test
     void successfulJavaCheckIsUpToDateOnWarmRerun() {
         writeSettings();
         writeBuildFile(
@@ -747,6 +783,17 @@ final class FrmtrGradlePluginFunctionalTest {
                 .withProjectDir(projectDir.toFile())
                 .withPluginClasspath()
                 .withArguments(arguments);
+    }
+
+    private static void assertProgressLifecycle(BuildResult result, String action, Path activePath) {
+        assertThat(result.getOutput()).contains(
+            "frmtr %s progress started: processed=0/1, changed=0, failed=0, workers=1".formatted(action),
+            "frmtr %s progress running: processed=0/1, changed=0, failed=0, workers=1, active=[%s]".formatted(
+                action,
+                activePath
+            ),
+            "frmtr %s progress finished: processed=1/1, changed=1, failed=0, workers=1".formatted(action)
+        );
     }
 
     private void writeSettings() {

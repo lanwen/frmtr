@@ -18,20 +18,11 @@ investigation link out to a focused proposal in this directory.
 | ✅ Done | Landed on `main`. |
 | ⚪ Deferred | Intentionally parked. |
 
-**Overall status:** The big architectural arc has largely **landed**. The source-shape coupling was centralized
-(**B1**) and then inverted to reprint-by-default behind a closed, ratchet-guarded exception set (**B4**); the Doc IR
-was enriched (**B2**); the ranked-layout engine (`Doc.bestFitting`) shipped and the whole method-call / chain /
-object-creation / lambda **hub** was flipped to pure-AST + true-column measurement (the layout-decision-model,
-convergence-redesign, chain-path-unification, hub-canonicalization, and leftEdgePrefix-foundation efforts — now
-archived as implemented). **S3**, **S5**, **S6**, **S7**, **S8**, **S9**, and **M2/M2a** are done. The archived
-provenance records live in [`archived/`](archived/).
+**Overall status:** The big architectural arc is largely **in place**.
+Source-shape decisions are centralized (**B1**) and reprint-by-default uses a closed, ratchet-guarded exception set (**B4**); the Doc IR includes the **B2** capabilities; the ranked-layout engine (`Doc.bestFitting`) and the method-call / chain / object-creation / lambda **hub** use pure AST input with true-column measurement; the layout-decision-model, convergence-redesign, chain-path-unification, hub-canonicalization, and leftEdgePrefix-foundation records are archived as implemented; and **S3**, **S5**, **S6**, **S7**, **S8**, **S9**, **M2/M2a**, and **M3** are done.
+The archived provenance records live in [`archived/`](archived/).
 
-What remains active: **B3** Layer 3 (real-world corpus harness), **M3**'s optional Gradle-native progress follow-up,
-**M4** (LSP), **M1** (benchmark discipline), the [printer-contract-inversion](printer-contract-inversion.md) Stage-3
-per-construct generalization (= the layout-decision-model's **LDM-4**), the
-[comment-containment-index](comment-containment-index.md) caller migration, the
-[cli-discovery](cli-discovery-lazy-ignore.md) ignored-directory pruning, and the still-proposed smalls (**S1**, **S2**,
-**S4**).
+What remains active: **B3** Layer 3 (real-world corpus harness), **M4** (LSP), **M1** (benchmark discipline), the [printer-contract-inversion](printer-contract-inversion.md) Stage-3 per-construct generalization (= the layout-decision-model's **LDM-4**), the [comment-containment-index](comment-containment-index.md) caller migration, the [cli-discovery](cli-discovery-lazy-ignore.md) ignored-directory pruning, and the still-proposed smalls (**S1**, **S2**, **S4**).
 
 ### Relationship to existing proposals in this directory
 
@@ -276,24 +267,18 @@ profiling proves it is worthwhile.
   contract.
 
 ### M3. Multi-file parallelism + content-addressed caching
-**Status:** 🟢 In progress — runner-level bounded parallelism, CLI progress, and Gradle incremental/cache behavior landed; Gradle-native progress/logging remains · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)
+**Status:** ✅ Done (archived) — bounded parallelism, CLI/Gradle progress, and Gradle incremental/cache behavior are implemented · _focused proposal:_ [archived/multi-file-parallelism-and-caching.md](archived/multi-file-parallelism-and-caching.md)
 
-> **Implementation state:** `FormatterRunner` now uses order-preserving bounded-pool parallelism
-> for `check` and `write`. `frmtrJavaCheck` is cacheable through Gradle's native build cache via a
-> deterministic success marker and uses Gradle incremental inputs so changed-source runs process
-> only added/modified files. `frmtrJavaFormat` remains deliberately non-cacheable because it mutates
-> source files in place and does not declare a synthetic marker output.
-> `Frmtr.format` is **definitively thread-safe** (pure function of `(source, options)`; fresh
-> `JavaFormatContext` per call, no shared mutable state), while `FrmtrSession` provides explicit
-> sequential reuse and the file-oriented runner reuses sessions per worker. The CLI now renders
-> progress on a separate side channel while preserving deterministic final result output. Persistent
-> CLI caching stays out of scope per the lazy-ignore non-goal, and Gradle-native progress/logging
-> remains a separate follow-up if needed.
+> **Implementation state:** `FormatterRunner` uses order-preserving bounded-pool parallelism for `check` and `write`.
+> `frmtrJavaCheck` is cacheable through Gradle's native build cache via a deterministic success marker and uses Gradle incremental inputs so changed-source runs process only added/modified files.
+> `frmtrJavaFormat` remains deliberately non-cacheable because it mutates source files in place and does not declare a synthetic marker output.
+> `Frmtr.format` is **definitively thread-safe** (pure function of `(source, options)`; fresh `JavaFormatContext` per call, no shared mutable state), while `FrmtrSession` provides explicit sequential reuse and the file-oriented runner reuses sessions per worker.
+> The CLI renders progress on a separate side channel, while `GradleProgressLogger` reports check/format snapshots, counters, workers, and active project-relative paths through Gradle's public `Logger` at `INFO` level.
+> Persistent CLI caching stays out of scope per the lazy-ignore non-goal.
 
-The tooling runner now formats independent files on a bounded thread pool, and the Gradle check task
-now leans on Gradle's input snapshots and build cache to avoid reprocessing unchanged files.
-Remaining M3 work is limited to measurement/reporting discipline and any Gradle-native
-progress/logging that proves necessary.
+The tooling runner formats independent files on a bounded thread pool.
+The Gradle check task leans on Gradle's input snapshots and build cache to avoid reprocessing unchanged files.
+M1 owns the remaining benchmark and performance-measurement discipline.
 
 - **Serves:** fastest (real-world), user-friendly.
 - **Effort:** medium.
@@ -432,9 +417,7 @@ priority order:
    validating M2/M3.
 3. **Printer-contract Stage 3 / LDM-4** — generalize the ranked output seam per construct (context→enum) so the
    remaining mega-printers decompose. Enablers all landed.
-4. **M4** (LSP / editor integration) for adoption; the thin partial follow-ups (M3 Gradle progress, cli-discovery
-   pruning, comment-containment caller migration); and the still-proposed smalls **S1** (display width), **S2**
-   (`.editorconfig`), **S4** (pre-commit/Action/changed-hunks) — **S2 / S4** are quick user-facing wins.
+4. **M4** (LSP / editor integration) for adoption; the thin partial follow-ups (cli-discovery pruning and comment-containment caller migration); and the still-proposed smalls **S1** (display width), **S2** (`.editorconfig`), **S4** (pre-commit/Action/changed-hunks) — **S2 / S4** are quick user-facing wins.
 
 The throughline held: **B1/B2 shrank the code and bug surface, B4 inverted the source-shape coupling behind a closed
 exception set, B3 made those changes safe, and the remaining M-items turn a correct formatter into a fast, widely
@@ -450,7 +433,6 @@ adopted one.**
 | --- | --- | --- | --- |
 | B3 | Correctness safety net | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) | Layer 3 (real-world corpus harness) |
 | M1 | Performance follow-ups from JFR sampling | [performance-followups-from-jfr.md](performance-followups-from-jfr.md) | benchmark discipline (investigating) |
-| M3 | Parallelism + caching | [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md) | optional Gradle-native progress |
 | M4 | LSP / editor integration | [lsp-editor-integration.md](lsp-editor-integration.md) | whole feature (unimplemented) |
 | — | Printer-contract inversion (dissolve the callback mesh) | [printer-contract-inversion.md](printer-contract-inversion.md) | Stage 3 per-construct generalization |
 | B2/B3 | Layout decision model (LDM-1…LDM-5) | [layout-decision-model.md](layout-decision-model.md) | LDM-4 context→enum (LDM-5 mostly moot) |
@@ -473,6 +455,7 @@ adopted one.**
 | — | Chain-path unification | [archived/chain-path-unification.md](archived/chain-path-unification.md) |
 | — | F2 / #190 object-creation-root column | [archived/f2-object-creation-root-column.md](archived/f2-object-creation-root-column.md) |
 | M2 | Linear-time renderer | [archived/linear-time-doc-renderer.md](archived/linear-time-doc-renderer.md) |
+| M3 | Parallelism + caching | [archived/multi-file-parallelism-and-caching.md](archived/multi-file-parallelism-and-caching.md) |
 | S6 | Atomic in-place writes | [archived/atomic-in-place-writes.md](archived/atomic-in-place-writes.md) |
 | S7 | Comment guardrail split + drop net | [archived/comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md) |
 | S8 | `--verify` safety valve | [archived/verify-on-write-safety-valve.md](archived/verify-on-write-safety-valve.md) |

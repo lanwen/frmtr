@@ -374,6 +374,8 @@ The root build exposes `frmtrSelfCheck` / `frmtrSelfFormat` as one-invocation do
 
 The Gradle plugin is the build-tool adapter over the same API and tooling runner. It owns Gradle model wiring, task
 registration, source-set discovery, incremental input declarations, cache semantics, and Gradle-native diagnostics.
+Runner progress flows through `GradleProgressLogger`, which reports check/format lifecycle snapshots, counters, worker counts, and active project-relative paths through Gradle's public `Logger` at `INFO` level.
+Ordered final diagnostics and diffs remain lifecycle output assembled from `FormatRunResult` after the runner finishes.
 
 Applying the plugin creates project-local `frmtrCheck` / `frmtrFormat` lifecycle tasks and an extension for that
 project only — no recursive application or root aggregation. Multi-project runs rely on Gradle's normal task-selector
@@ -404,8 +406,7 @@ The suite is module-scoped:
 - **`:frmtr-tooling`** — file runs, diffs, ordering, de-duplication, write behavior, per-file failure handling.
 - **`:frmtr-cli`** — selectors, discovery, ignore handling, stream modes, summaries, diagnostics, option validation,
   exit codes.
-- **`:frmtr-gradle-plugin`** — TestKit functional coverage for task registration, defaults, lifecycle, filters, and
-  language-level inference.
+- **`:frmtr-gradle-plugin`** — TestKit functional coverage for task registration, defaults, lifecycle, progress logging, filters, and language-level inference.
 - **`:frmtr-native-image-support`** / **`:frmtr-cli:nativeTest`** — reflection-registration coverage and explicit
   native-image compatibility checks.
 

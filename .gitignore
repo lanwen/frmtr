@@ -5,6 +5,7 @@ bin/
 *.class
 *.log
 .DS_Store
+codedb.snapshot
 
 # IDE
 .idea/

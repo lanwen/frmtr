@@ -26,33 +26,31 @@ import org.openjdk.jmh.annotations.Warmup;
 @State(Scope.Benchmark)
 public class RawSourceNormalizationBenchmark {
 
-    private RawSource rawSource;
-
-    /** A typical builder chain with trailing whitespace on each broken line. */
-    private String multilineChain;
+    /** A typical multi-line builder chain with clean lines: exercises the split-and-join path with nothing to strip. */
+    private final String multilineChain = """
+            HttpClient.newBuilder()
+                    .version(HttpClient.Version.HTTP_2)
+                    .connectTimeout(Duration.ofSeconds(30))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .proxy(ProxySelector.getDefault())
+                    .build()""";
 
     /** Annotation arguments mixing string literals, {@code =} spacing, and line/block comments. */
-    private String commentedArguments;
+    private final String commentedArguments = """
+            @RequestMapping(
+                    path = "/orders/{id}",   // primary lookup route
+                    method = RequestMethod.GET,
+                    produces = "application/json",
+                    /* content negotiation */ consumes = "application/json")""";
 
-    /** A long method body, sized to expose how trailing-whitespace stripping scales with line count. */
+    private RawSource rawSource;
+
+    /** A long method body with trailing whitespace, sized to expose how stripping scales with line count. */
     private String largeMethodBody;
 
     @Setup
     public void setUp() {
         rawSource = new RawSource(FormatterOptions.defaults());
-        multilineChain =
-            "HttpClient.newBuilder()   \n"
-            + "        .version(HttpClient.Version.HTTP_2)   \n"
-            + "        .connectTimeout(Duration.ofSeconds(30))   \n"
-            + "        .followRedirects(HttpClient.Redirect.NORMAL)   \n"
-            + "        .proxy(ProxySelector.getDefault())   \n"
-            + "        .build()";
-        commentedArguments =
-            "@RequestMapping(\n"
-            + "        path = \"/orders/{id}\",   // primary lookup route\n"
-            + "        method = RequestMethod.GET,\n"
-            + "        produces = \"application/json\",\n"
-            + "        /* content negotiation */ consumes = \"application/json\")";
         StringBuilder body = new StringBuilder();
         for (int lineItem = 0; lineItem < 60; lineItem++) {
             body.append("        subtotal = subtotal.add(lineItems.get(")

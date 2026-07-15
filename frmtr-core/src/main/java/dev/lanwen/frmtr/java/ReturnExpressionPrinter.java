@@ -168,7 +168,11 @@ final class ReturnExpressionPrinter {
     Doc returnStatement(Expression expression, LayoutContext layout) {
         if (expression instanceof ObjectCreationExpr objectCreation) {
             if (returnLineOverflows(objectCreation, layout)) {
-                return Doc.concat(Doc.text("return "), brokenObjectCreation.apply(objectCreation), Doc.text(";"));
+                return Doc.concat(
+                    Doc.text("return "),
+                    brokenObjectCreation.apply(objectCreation),
+                    Doc.text(";")
+                );
             }
             return Doc.concat(Doc.text("return "), objectCreationWithSuffix.apply(objectCreation, ";"));
         }
@@ -207,7 +211,11 @@ final class ReturnExpressionPrinter {
         // broken arm is the chain's ranked Doc.bestFitting (LDM-3g, #210).
         Optional<Doc> preempted = preemptedReturnValue(expression, layout);
         if (preempted.isPresent()) {
-            return Doc.concat(Doc.text("return "), preempted.orElseThrow(), Doc.text(";"));
+            return Doc.concat(
+                Doc.text("return "),
+                preempted.orElseThrow(),
+                Doc.text(";")
+            );
         }
         if (expression.getComment().isPresent() || sourceShapePolicy.hasContainedComments(expression)) {
             // A comment-bearing value cannot use the conditional group: both arms would build the value, and rendering a
@@ -216,7 +224,11 @@ final class ReturnExpressionPrinter {
             // comment is dropped and the two passes diverge. The imperative oracle renders the value exactly once, so
             // comment-bearing returns stay on it (byte-identical to before); only comment-free returns move to the
             // renderer-measured gate.
-            return Doc.concat(Doc.text("return "), returnExpression(expression, layout), Doc.text(";"));
+            return Doc.concat(
+                Doc.text("return "),
+                returnExpression(expression, layout),
+                Doc.text(";")
+            );
         }
         // A binary return whose operand is a fan-threshold chain
         // ({@code return promotesFirstCall(analysis.root()) || analysis.calls().stream()….anyMatch(ref);}) commits a
@@ -248,8 +260,16 @@ final class ReturnExpressionPrinter {
         // broken arm keeps the ranked/imperative broken-shape selection (forced chain, forced ternary, lambda break,
         // logical-complement break, parenthesized/binary continuation); the conditional group only moves the
         // flat-versus-broken verdict to the renderer.
-        Doc flatReturn = Doc.concat(Doc.text("return "), rendering.render(expression), Doc.text(";"));
-        Doc brokenReturn = Doc.concat(Doc.text("return "), brokenReturnValue(expression, layout), Doc.text(";"));
+        Doc flatReturn = Doc.concat(
+            Doc.text("return "),
+            rendering.render(expression),
+            Doc.text(";")
+        );
+        Doc brokenReturn = Doc.concat(
+            Doc.text("return "),
+            brokenReturnValue(expression, layout),
+            Doc.text(";")
+        );
         return Doc.conditionalGroup(List.of(flatReturn, brokenReturn));
     }
 
@@ -281,20 +301,23 @@ final class ReturnExpressionPrinter {
         // actually used: deciding the flat-versus-broken fit before rendering keeps the comment-aware render from claiming
         // a comment in a flat shape we then discard, which would leave the broken render with an empty comment.
         Doc value = commentBearingBinaryReturnFlatLineFits(binaryExpr, layout)
-            ? binaryFlatLineWithComments.apply(binaryExpr).orElseGet(
-                () -> Doc.indent(binaryLinesWithComments.apply(binaryExpr))
-            )
+            ? binaryFlatLineWithComments.apply(binaryExpr).orElseGet(() -> Doc.indent(
+                    binaryLinesWithComments.apply(binaryExpr)
+            ))
             : Doc.indent(binaryLinesWithComments.apply(binaryExpr));
         if (trailingIsInlineBlock) {
             Doc trailingComment = inlineTrailingComments(
                 trailingValueCommentsBeforeSemicolon.apply(semicolonOwner, binaryExpr)
             );
-            return Doc.concat(Doc.text("return "), value, trailingComment, Doc.text(";"));
+            return Doc.concat(
+                Doc.text("return "),
+                value,
+                trailingComment,
+                Doc.text(";")
+            );
         }
         Doc preSemicolonComment = preSemicolonValueComment(binaryExpr);
-        Doc semicolon = preSemicolonComment == Doc.EMPTY
-            ? Doc.text(";")
-            : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
+        Doc semicolon = preSemicolonComment == Doc.EMPTY ? Doc.text(";") : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
         return Doc.concat(Doc.text("return "), value, preSemicolonComment, semicolon);
     }
 
@@ -302,7 +325,10 @@ final class ReturnExpressionPrinter {
         if (recovered.isEmpty()) {
             return Doc.EMPTY;
         }
-        return Doc.concat(Doc.text(" "), Doc.join(Doc.text(" "), recovered));
+        return Doc.concat(
+            Doc.text(" "),
+            Doc.join(Doc.text(" "), recovered)
+        );
     }
 
     private boolean commentBearingBinaryReturnFlatLineFits(BinaryExpr binaryExpr, LayoutContext layout) {
@@ -390,9 +416,8 @@ final class ReturnExpressionPrinter {
             // continuation versus parenthesized break) that the binary printer does not yet expose as ranked candidates,
             // so this stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
             return Optional.of(
-                binaryReturns.directBinaryReturn(binaryExpr, expression, layout).orElseGet(
-                    () -> parenthesizedBreak.apply(binaryExpr, true)
-                )
+                binaryReturns.directBinaryReturn(binaryExpr, expression, layout)
+                        .orElseGet(() -> parenthesizedBreak.apply(binaryExpr, true))
             );
         }
         return Optional.empty();
@@ -411,10 +436,7 @@ final class ReturnExpressionPrinter {
      * verdict moved to the renderer.
      */
     private Doc brokenReturnValue(Expression expression, LayoutContext layout) {
-        if (
-            expression instanceof MethodCallExpr methodCall
-            && methodCallChainIsSourceMultiline.test(methodCall)
-        ) {
+        if (expression instanceof MethodCallExpr methodCall && methodCallChainIsSourceMultiline.test(methodCall)) {
             Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, layout);
             if (forcedChain.isPresent()) {
                 return forcedChain.orElseThrow();
@@ -474,37 +496,72 @@ final class ReturnExpressionPrinter {
      * transitional fixed-baseline selector.
      */
     private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
-        return Math.max(
-            layoutWidth.nodeLine(expression, line),
-            layoutWidth.currentIndented(line)
-        );
+        return Math.max(layoutWidth.nodeLine(expression, line), layoutWidth.currentIndented(line));
+    }
+
+    /**
+     * The width-triggered broken return value arms, keyed on the return value's AST kind. Every arm is a single, mutually
+     * exclusive value kind; a value that matches none -- or a lambda/unary whose sub-shape declines -- leaves the cascade
+     * empty and the caller renders the value with ordinary dispatch.
+     */
+    private enum ReturnValueArm {
+        /** Method-call value forced through its chain shape (may decline). */
+        METHOD_CALL_CHAIN,
+        /** Ternary value broken by the conditional printer. */
+        CONDITIONAL,
+        /** Expression-bodied lambda broken by the lambda printer (a block-bodied lambda declines). */
+        LAMBDA,
+        /** {@code !(...)} kept attached while the enclosed operand breaks (other unary values decline). */
+        LOGICAL_COMPLEMENT,
+        /** Enclosed or bare binary value moved inside/under its grouping. */
+        PARENTHESIZED_OR_BINARY,
+        /** No construct-specific broken shape; the cascade declines. */
+        NONE,
     }
 
     /**
      * Tries the width-triggered return branches in precedence order.
      *
-     * <p>Method calls and conditionals are tried first because their helpers already know how to force a useful break for
-     * the whole expression. Parenthesized-looking values are handled next so the long part moves inside parentheses
-     * instead of leaving a wide value directly after {@code return}.
+     * <p>The return value's AST kind selects one {@link ReturnValueArm}: method calls and conditionals have helpers that
+     * force a useful break for the whole expression, and parenthesized/binary values move the long part inside or under
+     * their grouping. An arm that declines leaves the cascade empty, so the caller falls back to ordinary rendering.
      */
     private Optional<Doc> brokenReturnExpression(Expression expression, LayoutContext layout) {
-        Optional<Doc> methodCallChain = returnWithForcedMethodCallChain(expression, layout);
-        if (methodCallChain.isPresent()) {
-            return methodCallChain;
-        }
-        Optional<Doc> conditionalBreak = returnWithForcedConditionalBreak(expression);
-        if (conditionalBreak.isPresent()) {
-            return conditionalBreak;
-        }
-        Optional<Doc> lambdaBreak = returnWithForcedLambdaBreak(expression);
-        if (lambdaBreak.isPresent()) {
-            return lambdaBreak;
-        }
-        Optional<Doc> logicalComplementBreak = returnWithLogicalComplementBreak(expression);
-        if (logicalComplementBreak.isPresent()) {
-            return logicalComplementBreak;
-        }
-        return returnWithParenthesizedValueBreak(expression, layout);
+        return renderReturnValueArm(classifyReturnValue(expression), expression, layout);
+    }
+
+    /**
+     * Selects the {@link ReturnValueArm} for a broken return value from its AST kind alone, reproducing the former ordered
+     * cascade. The kinds are mutually exclusive, so this switch is order-independent; the {@code LAMBDA} and
+     * {@code LOGICAL_COMPLEMENT} arms still decline internally for a block-bodied lambda or a non-complement unary, exactly
+     * as the former branches fell through.
+     */
+    private ReturnValueArm classifyReturnValue(Expression expression) {
+        return switch (expression) {
+            case MethodCallExpr methodCall -> ReturnValueArm.METHOD_CALL_CHAIN;
+            case ConditionalExpr conditional -> ReturnValueArm.CONDITIONAL;
+            case LambdaExpr lambda -> ReturnValueArm.LAMBDA;
+            case UnaryExpr unary -> ReturnValueArm.LOGICAL_COMPLEMENT;
+            case EnclosedExpr enclosed -> ReturnValueArm.PARENTHESIZED_OR_BINARY;
+            case BinaryExpr binary -> ReturnValueArm.PARENTHESIZED_OR_BINARY;
+            default -> ReturnValueArm.NONE;
+        };
+    }
+
+    /**
+     * Dispatches a classified {@link ReturnValueArm} to its unchanged shape emitter, returning the identical
+     * {@code Optional<Doc>} the former cascade produced -- including the empty a declining method-call/lambda/unary arm
+     * yields, which leaves the cascade empty and falls the caller back to ordinary rendering.
+     */
+    private Optional<Doc> renderReturnValueArm(ReturnValueArm arm, Expression expression, LayoutContext layout) {
+        return switch (arm) {
+            case METHOD_CALL_CHAIN -> returnWithForcedMethodCallChain(expression, layout);
+            case CONDITIONAL -> returnWithForcedConditionalBreak(expression);
+            case LAMBDA -> returnWithForcedLambdaBreak(expression);
+            case LOGICAL_COMPLEMENT -> returnWithLogicalComplementBreak(expression);
+            case PARENTHESIZED_OR_BINARY -> returnWithParenthesizedValueBreak(expression, layout);
+            case NONE -> Optional.empty();
+        };
     }
 
     /**
@@ -559,7 +616,12 @@ final class ReturnExpressionPrinter {
         ) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(Doc.text("!"), parenthesizedBreak.apply(enclosedExpr.getInner(), false)));
+        return Optional.of(
+            Doc.concat(
+                Doc.text("!"),
+                parenthesizedBreak.apply(enclosedExpr.getInner(), false)
+            )
+        );
     }
 
     /**

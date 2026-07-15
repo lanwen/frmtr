@@ -381,7 +381,27 @@ final class LoopStatementLayout {
             }
             return Doc.text("do; while (" + condition + ");");
         }
-        return Doc.concat(Doc.text("do "), doBody(statement.getBody()), doWhileTail(statement));
+        boolean bracelessDoBodyBroke = bracelessBodyBrokeOnLeadingComment(statement.getBody());
+        return Doc.concat(
+            Doc.text("do "),
+            doBody(statement.getBody()),
+            doWhileTail(statement, bracelessDoBodyBroke)
+        );
+    }
+
+    /**
+     * Whether a braceless do-body broke onto its own line(s) because of a leading {@code //} comment. Mirrors the
+     * braceless-body break predicate {@link #bracelessLoopBody} and {@code StatementPrinter} use, so the {@code while}
+     * tail moves to its own line rather than cramming onto the body's last line.
+     */
+    private boolean bracelessBodyBrokeOnLeadingComment(Statement body) {
+        if (body.isBlockStmt()) {
+            return false;
+        }
+        return commentPlacement.leadingComment(body)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(trivia -> !trivia.startsAfterEndOf(body))
+                .isPresent();
     }
 
     private Doc doBody(Statement body) {
@@ -395,14 +415,17 @@ final class LoopStatementLayout {
         return Doc.concat(leadingBlockComment, Doc.text(" "), blockRenderer.format(body.asBlockStmt(), LayoutContext.root()));
     }
 
-    private Doc doWhileTail(DoStmt statement) {
+    private Doc doWhileTail(DoStmt statement, boolean bracelessDoBodyBroke) {
         Doc trailing = doWhileTrailingLineComment(statement);
         Doc beforeWhileComment = doWhileBeforeWhileBlockComment(statement);
+        // A braceless do-body that broke onto its own line(s) (a leading comment) pushes `while` to its own line;
+        // otherwise it stays on the body's line (`} while (...)` or the collapsed `body; while (...)`).
+        Doc lead = bracelessDoBodyBroke ? Doc.HARD_LINE : Doc.text(" ");
         if (beforeWhileComment != Doc.EMPTY) {
             return Doc.concat(
+                lead,
                 Doc.text(
-                    " "
-                        + commentText.apply(beforeWhileComment)
+                    commentText.apply(beforeWhileComment)
                         + " while ("
                         + compactWithoutOwnComment.apply(statement.getCondition())
                         + ");"
@@ -411,7 +434,8 @@ final class LoopStatementLayout {
             );
         }
         return Doc.concat(
-            Doc.text(" while "),
+            lead,
+            Doc.text("while "),
             controlConditions.controlCondition(
                 statement.getCondition(),
                 "while (",

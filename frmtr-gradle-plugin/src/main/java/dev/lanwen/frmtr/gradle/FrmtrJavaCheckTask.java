@@ -47,7 +47,7 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
             files,
             formatterOptions(),
             printDiffs.get(),
-            state -> {}
+            GradleProgressLogger.forCheck(getLogger())
         );
         run.changedResults().forEach(this::printChanged);
         printFailures(run);

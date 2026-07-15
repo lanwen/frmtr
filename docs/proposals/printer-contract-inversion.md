@@ -211,4 +211,4 @@ shrinking) are the acceptance bar for this remaining stage.
 | Per-construct `BreakRuleRegistry` default+diverge | [reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md) | Generalizes Stage 1 from chains to every construct; the registry is the authoring surface. |
 | Chain pilot (Stage 2) | [chain-path-unification.md](archived/chain-path-unification.md) | Its destination, reachable now that true-column/`widthBudget` retirement landed. |
 | Ranking primitive + priority key | [convergence-redesign.md](archived/convergence-redesign.md) | Consumes `bestFitting(list, int[])`; does not change it. |
-| Claim-free candidate rendering | B2 `strict-claims` / [comment-handling-findings.md](comment-handling-findings.md) | Reframes it as the gating enabler for modularity, not only comment correctness. |
+| Claim-free candidate rendering | B2 `strict-claims` / [comment-handling-findings.md](archived/comment-handling-findings.md) | Reframes it as the gating enabler for modularity, not only comment correctness. |

@@ -1,5 +1,10 @@
 # Comment-Handling Findings → B-Work Map
 
+> **Archived — findings fully actioned.** The comment work this synthesis mapped is complete: the S7 net + guardrail
+> split shipped, `strict-claims` is a default CI gate, and `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty (the last
+> two comment × width chain drops were fixed in #347). Kept as a provenance record; the buckets and dates below are the
+> original snapshot, not current state.
+
 **Status:** Implemented — reference/synthesis whose findings were actioned: S7 net + guardrail split landed, and all bucket-A comment-drop fixes landed on `main` so `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty; the bucket B/C/D strict-claims/accounting work stays deferred to B1/B2, with B2's ownership consolidation now underway (Stage 1: the trailing family migrated to an explicit pre-claim ownership pre-pass, output-neutral, strict-claims still off); see [Outcome](#outcome) · **As of:** commit `9a89f7eb` (S6 + S8 merged), 2026-06-20
 
 > **Update 2026-07-14 (two claims below are stale relative to this snapshot):** (1) the bucket B/C/D `strict-claims`
@@ -13,8 +18,8 @@
 This is the consolidated, evidence-backed map of every comment-handling finding surfaced by the S7 guardrail
 experiment and the output-level investigation behind it. Its job is to **route each finding to its fix and to the right
 B-work** so B1 (source-shape consolidation) and B2 (Doc-IR / `lineSuffix`) start from a concrete work-list rather than
-"fix comments." The actionable plans are [comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md) (S7 — the net + the
-guardrail split) and [comment-data-loss.md](archived/comment-data-loss.md) (S9 — fix the real drops).
+"fix comments." The actionable plans are [comment-accounting-in-ci.md](comment-accounting-in-ci.md) (S7 — the net + the
+guardrail split) and [comment-data-loss.md](comment-data-loss.md) (S9 — fix the real drops).
 
 ## How we know what's real
 
@@ -94,14 +99,14 @@ not `assertAllCommentsAccounted`, is the durable "no comment dropped" guarantee.
 
 ## Routing to B-work
 
-**B1 — Centralize source-shape coupling** ([source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md)).
+**B1 — Centralize source-shape coupling** ([source-shape-policy-consolidation.md](source-shape-policy-consolidation.md)).
 The ~37 perturbation drops in bucket A are B1's headline evidence and concrete work-list: comment ownership currently
 depends on incidental whitespace (collapsing/expanding a layout changes whether a comment is claimed). B1's
 shape-independent ownership is the durable fix; the per-cluster S9 fixes are the test-pinned down payment. Each S9
 cluster that resolves to "ownership keyed on source adjacency" should fold into the B1 `SourceShapePolicy` rather than
 staying a per-construct patch.
 
-**B2 — Enrich the Doc IR (`lineSuffix` first)** ([doc-ir-combinators.md](archived/doc-ir-combinators.md)). Buckets B, C, and D are
+**B2 — Enrich the Doc IR (`lineSuffix` first)** ([doc-ir-combinators.md](doc-ir-combinators.md)). Buckets B, C, and D are
 B2's evidence: the `CommentTracker` claim/render coupling (`.filter(this::claim)` everywhere) is the single root of the
 benign duplicate-claims (C), the render-without-record accounting gaps (B), and the orphan-attachment fragility (D). B2's
 `lineSuffix` "retires most of the comment-placement machinery"; once comment emission is deterministic and owned in one
@@ -116,12 +121,12 @@ comments specifically, the same way AST-equivalence verify (B3 layer 1) covers p
 - `impl/comment-guardrail-split` `82f7780b` — guardrail split (dup-claim → `…strict-claims`), green, pushed; supersedes
   the "enable `assertAllCommentsAccounted` in CI" idea (that check is unreliable — bucket B/D).
 - `inv/comment-presence` PR #1 — the output-level lexer net (diagnostic; promote per S7/E).
-- Plans: S7 ([comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md)) and S9 ([comment-data-loss.md](archived/comment-data-loss.md)).
+- Plans: S7 ([comment-accounting-in-ci.md](comment-accounting-in-ci.md)) and S9 ([comment-data-loss.md](comment-data-loss.md)).
 
 ## Outcome
 
 The map was actioned on `main`. **Net (E) + the split** landed (see
-[comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md)): the guardrail split is in
+[comment-accounting-in-ci.md](comment-accounting-in-ci.md)): the guardrail split is in
 `frmtr-core/src/main/java/dev/lanwen/frmtr/java/FormatterGuardrails.java` (`STRICT_CLAIMS_PROPERTY`, off by default), and
 the lexer net `frmtr-core/src/test/java/dev/lanwen/frmtr/CommentPresenceDiagnosticTest.java` is now an asserting CI test.
 **The concrete comment-preservation fixes shipped:** whole-file orphan ordering in

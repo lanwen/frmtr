@@ -35,6 +35,10 @@
 - Keep comments aggressively compact — **2-3 lines at most**, for both new and changed methods (and classes).
 - Give a quick *hint* at what the code does and why — enough to jump into context fast — not a technical walkthrough,
   and never a restatement of what the code already says.
+- Write comments in the present tense, describing the code as it stands — as if nothing came before it. Don't narrate
+  history: "X landed", "now does Y", "Y again", "used to", "retired the old Z", or a PR/issue number as the rationale are
+  all smells. Reference the past only when it is crucial to avoid breaking something, and then state the hazard, not the
+  changelog.
 - If a method needs more than that to be understood, or the comment reads cryptic, treat it as a signal that the method
   or class is too complex: prefer improving the code (clearer names, smaller units) over writing a longer comment.
 

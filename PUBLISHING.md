@@ -74,7 +74,7 @@ Apply the snapshot plugin:
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("dev.lanwen.frmtr") version "0.2.1-SNAPSHOT"
+    id("dev.lanwen.frmtr") version "0.2.2-SNAPSHOT"
 }
 ```
 

@@ -49,9 +49,8 @@ import org.junit.jupiter.params.provider.MethodSource;
  * re-indentation, trailing-whitespace strip, and block {@code *}-prefix re-shaping invisible, so only genuine textual
  * <em>absence</em> fails.
  *
- * <p><strong>The exclusion list ({@link #KNOWN_DROPS}) holds two tracked D3-flip follow-up drops.</strong> Both are on
- * reshaped (collapsed/expanded) perturbations of a comment-bearing chain; every golden fixture at its own options still
- * drops nothing. {@link #assertNoUnexpectedDrop} fails in both directions: on any <em>new</em> drop (the formatter must
+ * <p><strong>The exclusion list ({@link #KNOWN_DROPS}) is empty.</strong> No golden fixture or perturbation shape drops
+ * a comment. {@link #assertNoUnexpectedDrop} fails in both directions: on any <em>new</em> drop (the formatter must
  * never lose a comment), and on any <em>stale</em> exclusion (an entry that no longer drops, which would let a future
  * regression hide). An entry may exist only as a documented, individually tracked drop; the list is never widened to
  * mask a regression — a new drop must be fixed or diagnosed, not parked (see the STOP conditions in
@@ -63,9 +62,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 final class CommentPresenceDiagnosticTest {
 
     /**
-     * Documented comment-drop exclusions, keyed by {@code (fixture, shape)} display name. Holds two tracked D3-flip
-     * follow-up drops (both on reshaped perturbations of a comment-bearing chain); every golden fixture at its own
-     * options still drops nothing.
+     * Documented comment-drop exclusions, keyed by {@code (fixture, shape)} display name. Currently empty: no golden
+     * fixture or perturbation shape drops a comment.
      *
      * <p>An entry may be added only to track a real, individually documented drop, with the comment text it loses and
      * the work the fix belongs to, so any parked finding stays honest and reviewable. The list is never widened to
@@ -76,23 +74,11 @@ final class CommentPresenceDiagnosticTest {
     private static final Map<String, String> KNOWN_DROPS = knownDrops();
 
     private static Map<String, String> knownDrops() {
-        Map<String, String> drops = new TreeMap<>();
-        // D3 flip follow-ups: two perturbation shapes drop a chain comment because the retired source-shape reads no
-        // longer route the comment-bearing chain onto the comment-preserving path for that reshaped layout. Both are
-        // individually tracked and flip green when the comment × width deep slice lands; they are NOT widened to mask a
-        // regression — the formatted output here is byte-identical to the pre-deletion (return-false) behavior.
-        // tracked: D3 flip follow-ups.
-        drops.put(
-            "method-chain-member-access @ expanded",
-            "orphan `//` floated between blank lines inside the chain (parked on an inner-selector MethodCallExpr, not a"
-                + " segment comment) is dropped when the expanded perturbation re-lays the chain — comment × width."
-        );
-        drops.put(
-            "source-multiline-object-chain-initializer @ collapsed",
-            "chain comment on the object-creation-rooted initializer is dropped when the collapsed perturbation folds the"
-                + " chain — initializer break-after-`=` + comment placement; comment × width."
-        );
-        return Collections.unmodifiableMap(drops);
+        // Empty: the chain layout breaks at a root-to-first-selector / selector-leading line comment on both the
+        // field-access single-call ladder and the object-creation initializer single-call chain, so no fixture or
+        // perturbation shape drops a comment. Never add an entry to mask a regression — a fresh drop is a data-loss
+        // bug this net exists to catch.
+        return Collections.unmodifiableMap(new TreeMap<>());
     }
 
     // Accumulators shared across the two parameterized passes; drained by printReport() in @AfterAll for diagnostics.
@@ -138,7 +124,7 @@ final class CommentPresenceDiagnosticTest {
     /**
      * Fails the build when {@code (fixture, shape)} {@code name} drops a comment and is <em>not</em> a documented
      * {@link #KNOWN_DROPS} exclusion (currently empty). A case that is in {@link #KNOWN_DROPS} but no longer drops
-     * anything also fails — a stale exclusion means a fix landed without un-parking it, which would let a future
+     * anything also fails — a stale exclusion means the drop was fixed without un-parking it, which would let a future
      * regression hide; remove the entry in the fix's commit.
      */
     private static void assertNoUnexpectedDrop(String name, List<Drop> drops) {

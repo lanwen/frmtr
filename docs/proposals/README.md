@@ -413,8 +413,8 @@ landed in `CompilationUnitPrinter` (file-orphan ordering), `SwitchPrinter` (orph
 control-condition/if, labeled-statement, try-resource, method-argument, switch, records/enums/conditionals, and
 member/interface-body clusters, pinned by fixtures like `block-orphan-method-call-comments`.
 The S7 net is green over the full corpus plus every collapsed/expanded perturbation and bites on any new or stale
-entry. (`CommentPresenceDiagnosticTest.KNOWN_DROPS` now parks two later, unrelated D3-flip perturbation drops from the
-reprint-by-default hub flip — a different lineage, byte-identical to pre-flip behavior — not S9's original backlog.)
+entry, and `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty: every fixture and perturbation preserves all
+comments, so no comment-drop backlog remains.
 
 - **Serves:** correctness / data-loss. Iterative; folds into B1/B2.
 

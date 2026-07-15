@@ -39,6 +39,9 @@
   history: "X landed", "now does Y", "Y again", "used to", "retired the old Z", or a PR/issue number as the rationale are
   all smells. Reference the past only when it is crucial to avoid breaking something, and then state the hazard, not the
   changelog.
+- The same present-state rule governs prose docs — proposals, the roadmap `README`, `ARCHITECTURE`: state where things
+  stand and what to do next, so the doc reads as a map, not a changelog of what broke and how it was fixed. A finished
+  item states its current state; keep provenance only where it still guides the next decision.
 - If a method needs more than that to be understood, or the comment reads cryptic, treat it as a signal that the method
   or class is too complex: prefer improving the code (clearer names, smaller units) over writing a longer comment.
 

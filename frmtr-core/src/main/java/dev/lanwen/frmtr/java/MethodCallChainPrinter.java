@@ -605,6 +605,10 @@ final class MethodCallChainPrinter {
                 && !(breakMode.isForced() && root instanceof ObjectCreationExpr)
                 && !rootObjectCreationNeedsBreak
                 && !analysis.rootHasComments()
+                // A root-to-first-selector `//` line comment (e.g. `new X(...) // note`⏎`.with(...)`) rides in
+                // hasInterSegmentLineComment but NOT rootHasComments, so without this a single-selector chain would
+                // bail to the flat render and drop it; keep it on the breaking path so the comment gets a home.
+                && !analysis.hasInterSegmentLineComment()
                 && !analysis.singleCommentedSegment())
         ) {
             return Optional.empty();
@@ -676,9 +680,9 @@ final class MethodCallChainPrinter {
             // lambda whose body itself nests a lambda — {@link #lambdaArgumentForcesMultilineBody}) is the exception: its
             // flat compact never "fits flat", so a conditionalGroup would fan the receiver on every pass, but the standalone
             // lambda-body renderer ({@code LambdaExpressionPrinter}) still decides that body's shape from a deferred
-            // lambda-arrow source-shape read, which oscillates once the receiver is un-collapsed. (The sibling
-            // method-call-body arrow read {@code lambdaBodyStartsAfterHeader} was retired; the
-            // block/nested-lambda arrow reads here are not yet.) Such a chain keeps the {@link Doc#bestFitting} arm
+            // lambda-arrow source-shape read, which oscillates once the receiver is un-collapsed. (Only the
+            // block/nested-lambda arrow reads here still do that deferred source-shape read; the sibling
+            // method-call-body arrow read does not.) Such a chain keeps the {@link Doc#bestFitting} arm
             // (rendered collapsed), so it does not introduce a new oscillation.
             List<Doc> arms = List.of(flat, fanOut);
             boolean bodyForcesMultiline = calls.getLast().getArguments().stream()
@@ -687,7 +691,7 @@ final class MethodCallChainPrinter {
             // compact arm at all: {@code compactSource.compact} routes a comment-bearing subtree through
             // {@code compactTokenText}, which only collapses whitespace RUNS, so every {@code //} line comment de-indents
             // to column one and merges the following token into itself (the nested {@code forEach(… -> // note … body)}
-            // shape PR #279 flagged). {@link Doc#bestFitting} would still rank that malformed one-line-ish arm fewest-lines
+            // shape). {@link Doc#bestFitting} would still rank that malformed one-line-ish arm fewest-lines
             // and emit it. Fan unconditionally instead — {@link #chainFanOut} dispatches the lambda body through its own
             // printer, which keeps each comment on its own line at the body indent. The enclosing {@code !analysis.hasComments()}
             // guard already kept CHAIN-level comments out of this branch, so the only comments here live inside the lambda
@@ -785,9 +789,20 @@ final class MethodCallChainPrinter {
             && fieldAccess.getScope() instanceof MethodCallExpr methodRoot
             && calls.size() == 1
         ) {
+            // A `//` line comment before the inner method-call selector (the `.util()` in `x.util().java.java()`) is
+            // dropped by the flat expressionRenderer root when an expanded shape parks it as the call's orphan rather
+            // than the name's own comment; fan the inner call onto its own continuation line so its segment prefix
+            // re-emits the comment, matching the canonical shape.
+            Doc methodRootDoc =
+                chainComments.methodCallSegmentHasLeadingLineComment(methodRoot) && methodRoot.getScope().isPresent()
+                    ? Doc.concat(
+                        expressionRenderer.format(methodRoot.getScope().orElseThrow(), LayoutContext.root()),
+                        chainContinuation(methodCallChainSegment(methodRoot))
+                    )
+                    : expressionRenderer.format(methodRoot, LayoutContext.root());
             return Optional.of(
                 Doc.concat(
-                    expressionRenderer.format(methodRoot, LayoutContext.root()),
+                    methodRootDoc,
                     chainContinuation(
                         appendFinalSegmentSuffix(
                             fieldAccessMethodCallSegment(fieldAccess, calls.getFirst()),
@@ -1408,11 +1423,9 @@ final class MethodCallChainPrinter {
             List<MethodCallExpr> calls,
             MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis
     ) {
-        // First-segment attachment only ever engaged for a chain the author wrote source-multiline — the retired
-        // {@code sourceMultilineChain} signal (now constant-false) — so this gate can no longer attach. Its structural
-        // guards are inert (every path returns false); the last source read it carried, the
-        // {@code sourceFirstLineIsOnlyChainRoot} source-first-line probe, was retired, so the gate is now a pure
-        // structural no-op and both passes take the imperative chain path identically.
+        // This gate is a pure structural no-op: every path returns false, so first-segment attachment never engages
+        // and both passes take the imperative chain path identically. The guards are kept as an inert structural
+        // placeholder.
         if (
             chainPlan.rootRendering() != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
             || calls.size() < 2
@@ -1982,9 +1995,9 @@ final class MethodCallChainPrinter {
     /**
      * Routes a chain carrying an inter-segment {@code //} line comment onto its caller's comment-aware chain path.
      *
-     * <p>Once the {@code sourceMultilineChain} source-shape signal was retired (a chain fans by width / structural rule,
-     * never by the author's line breaks), this reduced to a pure comment-presence router: a chain with an inter-segment
-     * line comment is reported "source-multiline" here so the caller (e.g. {@code MethodCallPrinter}'s comment-aware
+     * <p>This is a pure comment-presence router: a chain fans by width / structural rule, never by the author's line
+     * breaks, so a chain with an inter-segment line comment is reported "source-multiline" here so the caller (e.g.
+     * {@code MethodCallPrinter}'s comment-aware
      * branch) keeps it off the plain method-call render that would drop the comment — the MirrorMaker
      * {@code encode(x) // note}⏎{@code .replaceAll(...)} shape. Keyed on comment presence, not line breaks (see
      * {@link ChainCommentLayout#chainHasInterSegmentLineComment}). This covers the leading/trailing/gap inter-segment {@code //} positions;
@@ -2409,10 +2422,10 @@ final class MethodCallChainPrinter {
         // comment-preserving exploded path — the constructor broken open, the selector re-emitting its leading comment on
         // its own continuation line — regardless of the author's line breaks. The verdict keys purely on comment presence
         // ({@link ChainCommentLayout#methodCallSegmentHasLeadingLineComment}, a structural fact), never on the author's line breaks, so both
-        // passes fan identically and the shape is a one-pass fixpoint. Before the source-shape signal was retired a dead
-        // {@code sourceMultilineChain} gate let a comment-on-its-own-line source fall through to the width-driven
-        // compact-glued shape below ({@code new X(...)// note}⏎{@code .selector(...)}), which then re-attached the comment
-        // as the ROOT's trailing comment on the next pass and exploded — the attach⇄explode oscillation this closes. The
+        // passes fan identically and the shape is a one-pass fixpoint. Keying this on the author's line breaks instead
+        // of comment presence would let a comment-on-its-own-line source fall through to the width-driven compact-glued
+        // shape below ({@code new X(...)// note}⏎{@code .selector(...)}), which re-attaches the comment as the ROOT's
+        // trailing comment on the next pass and explodes — an attach⇄explode oscillation this keying avoids. The
         // segment renderer claims the leading comment exactly once and {@code brokenObjectCreationRenderer} renders a
         // comment-free constructor, so no comment is double-claimed or dropped (guarded by CommentPresenceDiagnosticTest).
         if (chainComments.methodCallSegmentHasLeadingLineComment(call)) {
@@ -2441,8 +2454,7 @@ final class MethodCallChainPrinter {
             // already-broken selectors are excluded by singleSimpleMethodCallSegmentArgument, so they keep the existing
             // argument-opening fan-out.
             //
-            // This dot-break — introduced for the return chain behind a non-empty leftEdgePrefix gate — is now applied to
-            // every caller. A statement chain
+            // This dot-break applies to every caller. A statement chain
             // ({@code new ProfileRequest(...).submit(10);}) reaches this branch once
             // {@link #refuseOpeningSingleSimpleObjectRootChainTail} declines the arg-opening compact shape, and wants the
             // same {@code new ProfileRequest(...)}⏎{@code .submit(10)} shape, not the arg-opened

@@ -383,7 +383,7 @@ means "replace failed, original intact."
 - **Serves:** correctness / data-loss. Isolated to `frmtr-tooling`.
 
 ### S7. Comment guardrail split + output-level comment-drop net in CI
-**Status:** ✅ Done — landed on `main` · _focused proposal (archived):_ [archived/comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md) · _evidence:_ [comment-handling-findings.md](comment-handling-findings.md)
+**Status:** ✅ Done — landed on `main` · _focused proposal (archived):_ [archived/comment-accounting-in-ci.md](archived/comment-accounting-in-ci.md) · _evidence:_ [archived/comment-handling-findings.md](archived/comment-handling-findings.md)
 
 The single `debug.guardrails` toggle conflated an unreliable dup-claim fail-fast with the accounting checks; it was
 **split** so the dup-claim invariant sits behind an off-by-default `FormatterGuardrails.STRICT_CLAIMS_PROPERTY`. The
@@ -457,7 +457,7 @@ adopted one.**
 | — | Formatter-owned syntax view | [formatter-owned-syntax-view.md](formatter-owned-syntax-view.md) | held for architecture review |
 | — | Comment containment index | [comment-containment-index.md](comment-containment-index.md) | bottom-up index + caller migration |
 | — | Lazy `.gitignore` discovery | [cli-discovery-lazy-ignore.md](cli-discovery-lazy-ignore.md) | guarded ignored-directory pruning |
-| S7/S9 | Comment-handling findings (evidence record) | [comment-handling-findings.md](comment-handling-findings.md) | — (reference) |
+| S7/S9 | Comment-handling findings (evidence record) | [archived/comment-handling-findings.md](archived/comment-handling-findings.md) | — (reference) |
 
 ### Archived (implemented / superseded) — see [`archived/`](archived/)
 

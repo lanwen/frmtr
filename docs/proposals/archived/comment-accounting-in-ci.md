@@ -5,7 +5,7 @@
 **Status:** Implemented (roadmap S7) — guardrail split (`FormatterGuardrails.STRICT_CLAIMS_PROPERTY`, off by default) + asserting output-level lexer net (`CommentPresenceDiagnosticTest` with the `KNOWN_DROPS` backlog); see [Outcome](#outcome) · Category: tests / correctness · Effort: M · Risk: LOW
 **Planned at:** commit `9a89f7eb`, 2026-06-20
 
-> See [comment-handling-findings.md](../comment-handling-findings.md) for the full evidence map this plan implements.
+> See [comment-handling-findings.md](comment-handling-findings.md) for the full evidence map this plan implements.
 >
 > **Drift check (run first)**: `git diff 9a89f7eb..HEAD -- frmtr-core/src/main/java/dev/lanwen/frmtr/java/FormatterGuardrails.java frmtr-core/build.gradle.kts`
 
@@ -58,7 +58,7 @@ strip, `*`-prefix) so only genuine absence fails — `CommentPresenceDiagnosticT
 **In scope:** merge `impl/comment-guardrail-split` (Part 1); promote `CommentPresenceDiagnosticTest` to an asserting,
 exclusion-list-backed CI test (Part 2); `ARCHITECTURE.md` + `docs/testing-strategy.md` doc updates.
 **Out of scope:** fixing the drops (S9); CI-enabling `assertAllCommentsAccounted` or the strict-claims property (the
-former is unreliable, the latter deferred to B1/B2 — see [comment-handling-findings.md](../comment-handling-findings.md)).
+former is unreliable, the latter deferred to B1/B2 — see [comment-handling-findings.md](comment-handling-findings.md)).
 
 ## Done criteria
 - [ ] `impl/comment-guardrail-split` merged (split landed; `strict-claims` off by default).
@@ -76,7 +76,7 @@ former is unreliable, the latter deferred to B1/B2 — see [comment-handling-fin
 - Keep the accounting guardrail (`assertAllCommentsAccounted`) as an opt-in dev aid; it is useful while editing comment
   code but is not trustworthy enough to gate CI (12 FP / 3 FN). The lexer net is the gate.
 - The strict-claims invariant becomes CI-worthy only after B2 makes comment ownership deterministic
-  ([comment-handling-findings.md](../comment-handling-findings.md), bucket C).
+  ([comment-handling-findings.md](comment-handling-findings.md), bucket C).
 - **Update (B2 landed):** B2's ownership consolidation plus the Stage 3 candidate-ladder decoupling
   (`CommentTracker.speculatively`) made the strict-claims invariant hold across the whole `frmtr-core` suite, so Stage 4
   enabled `dev.lanwen.frmtr.debug.guardrails.strict-claims` **on by default** in `frmtr-core/build.gradle.kts` — it is now

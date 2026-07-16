@@ -88,6 +88,8 @@ final class MethodCallPrinter {
 
     private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
 
+    private final SingleCallArgumentOpenerHugLayout singleCallArgumentOpenerHug;
+
     MethodCallPrinter(
             JavaFormatContext context,
             TypePrinter types,
@@ -163,6 +165,15 @@ final class MethodCallPrinter {
             unformattedTextBlockRenderer
         );
         this.layoutDecisions = context.layoutDecisions;
+        this.singleCallArgumentOpenerHug = new SingleCallArgumentOpenerHugLayout(
+            context.options,
+            context.sourceShapePolicy,
+            context.compactSource,
+            context.layoutWidth,
+            this::methodCallPrefix,
+            this::methodCallArgumentList,
+            this::brokenMethodCall
+        );
     }
 
     /**
@@ -1381,11 +1392,13 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Always empty: a single inner-method-call argument is not hugged onto the opener — it breaks by width through the
-     * generic path. Kept (returning empty) so the dispatch hook stays wired.
+     * Hugs a single inner-method-call argument onto a short wrapping call's opener
+     * ({@code when(sharePartition.acquire(} ⏎ arguments ⏎ {@code ))}) via {@link SingleCallArgumentOpenerHugLayout};
+     * empty when that rule declines, so the caller keeps the generic dispatch. The fan-threshold inner chain is handled
+     * ahead of this by {@link #singleFanChainArgumentBestFitting}.
      */
     private Optional<Doc> singleMethodCallArgument(String prefix, MethodCallExpr expression) {
-        return Optional.empty();
+        return singleCallArgumentOpenerHug.hug(prefix, expression);
     }
 
     /**

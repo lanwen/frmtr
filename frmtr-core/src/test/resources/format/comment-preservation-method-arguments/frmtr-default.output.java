@@ -66,17 +66,15 @@ class MethodArgumentCommentSample {
     void seedStages(StageRepository repository, StageCache cache, ParcelRoute route, ParcelOwner owner) {
         StageJoin.when(
             // Persist source state before projection checks
-            repository.persist(
-                parcelRecord(
-                    ACTIVE_STAGE_KEY,
-                    route.primaryShardKey(),
-                    owner.activePrincipalKey(),
-                    timestampForStep(20),
-                    null,
-                    TimeSlice.ofSeconds(120),
-                    5
-                )
-            ),
+            repository.persist(parcelRecord(
+                ACTIVE_STAGE_KEY,
+                route.primaryShardKey(),
+                owner.activePrincipalKey(),
+                timestampForStep(20),
+                null,
+                TimeSlice.ofSeconds(120),
+                5
+            )),
             // Seed transient projection state
             cache.deleteByKey(ACTIVE_STAGE_KEY)
                     .then(cache.recordValue(ACTIVE_STAGE_KEY, "alpha:latest"))

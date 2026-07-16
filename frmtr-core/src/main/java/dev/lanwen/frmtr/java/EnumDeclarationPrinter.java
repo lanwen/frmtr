@@ -78,6 +78,8 @@ final class EnumDeclarationPrinter {
 
     private final EnumConstantLayout enumConstantLayout;
 
+    private final SourceOrderedCommentInterleaver<BodyDeclaration<?>> commentInterleaver;
+
     /**
      * Names the previous recovered enum-body item so raw gaps and formatted constants do not duplicate separators.
      */
@@ -110,6 +112,7 @@ final class EnumDeclarationPrinter {
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
+        this.commentInterleaver = new SourceOrderedCommentInterleaver<>(context.comments);
         this.enumConstantComments = new EnumConstantComments(context.comments, context.commentPlacementPolicy);
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.rawSource = context.rawSource;
@@ -196,9 +199,14 @@ final class EnumDeclarationPrinter {
      */
     private Doc enumBlock(EnumDeclaration declaration) {
         Optional<EnumEntryList> entries = enumEntryList(declaration);
-        List<Doc> members = declaration.getMembers().stream().map(memberRenderer).toList();
-        List<Doc> bodyComments = enumBodyComments(declaration);
-        if (entries.isEmpty() && members.isEmpty() && bodyComments.isEmpty()) {
+        List<BodyDeclaration<?>> memberNodes = declaration.getMembers();
+        List<Doc> memberDocs = memberNodes.stream().map(memberRenderer).toList();
+        boolean hasMembers = !memberDocs.isEmpty();
+        // Body comments render as an ORPHAN band only when there are no members; with members present the interleaver
+        // owns them under INTERLEAVED, so materializing the ORPHAN docs here too would double-claim and drop them.
+        List<Doc> bandComments = hasMembers ? List.of() : enumBodyComments(declaration);
+        boolean hasBodyComments = hasMembers ? !bodyOrphanCommentTrivia(declaration).isEmpty() : !bandComments.isEmpty();
+        if (entries.isEmpty() && !hasMembers && !hasBodyComments) {
             return Doc.text("{}");
         }
         List<Doc> contents = new ArrayList<>();
@@ -207,24 +215,29 @@ final class EnumDeclarationPrinter {
             contents.add(entryList.doc());
             // The list terminator is emitted unconditionally (the last constant's trailing comment is a deferred line
             // suffix that flushes after it at the next break), except when a recovered raw island already supplied it.
-            if (!entryList.rawOwnsTrailingComma() || !members.isEmpty() || !bodyComments.isEmpty()) {
-                contents.add(Doc.text(members.isEmpty() && bodyComments.isEmpty() ? "," : ";"));
+            if (!entryList.rawOwnsTrailingComma() || hasMembers || hasBodyComments) {
+                contents.add(Doc.text(!hasMembers && !hasBodyComments ? "," : ";"));
             }
-        } else if (!members.isEmpty() && enumHasExplicitSemicolon(declaration)) {
+        } else if (hasMembers && enumHasExplicitSemicolon(declaration)) {
             contents.add(Doc.text(";"));
         }
-        if (!bodyComments.isEmpty()) {
+        if (!hasMembers) {
+            if (!bandComments.isEmpty()) {
+                if (!contents.isEmpty()) {
+                    contents.add(Doc.HARD_LINE);
+                    contents.add(Doc.HARD_LINE);
+                }
+                contents.add(Doc.join(Doc.HARD_LINE, bandComments));
+            }
+        } else {
+            // The constant list (or brace) is separated from the body section by a blank line; members and body orphan
+            // comments then interleave by source line, so a comment run leading a later member is not hoisted above the
+            // first member the way a single pre-member band would place it.
             if (!contents.isEmpty()) {
                 contents.add(Doc.HARD_LINE);
                 contents.add(Doc.HARD_LINE);
             }
-            contents.add(Doc.join(Doc.HARD_LINE, bodyComments));
-        }
-        if (!members.isEmpty()) {
-            if (!contents.isEmpty()) {
-                contents.add(enumMemberSeparator(declaration, bodyComments));
-            }
-            contents.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), members));
+            contents.addAll(interleavedEnumBody(declaration, memberNodes, memberDocs));
         }
         return Doc.concat(
             Doc.text("{"),
@@ -232,6 +245,86 @@ final class EnumDeclarationPrinter {
             Doc.HARD_LINE,
             Doc.text("}")
         );
+    }
+
+    /**
+     * Interleaves the enum's ordinary members with its body orphan comments by source line.
+     *
+     * <p>Members keep the blank-line separation the enum body applies between declarations; comments restore their
+     * source-order position, so a comment run sitting directly above a later member is not hoisted above the first one.
+     */
+    private List<Doc> interleavedEnumBody(
+            EnumDeclaration declaration,
+            List<BodyDeclaration<?>> memberNodes,
+            List<Doc> memberDocs
+    ) {
+        return commentInterleaver.interleave(
+            declaration,
+            memberNodes,
+            bodyOrphanCommentTrivia(declaration),
+            (previous, current, index) -> Optional.of(memberDocs.get(index)),
+            new SourceOrderedCommentInterleaver.Spacing<>() {
+                @Override
+                public int beginLine(BodyDeclaration<?> member) {
+                    return enumMemberBeginLine(member);
+                }
+
+                @Override
+                public int endLine(BodyDeclaration<?> member) {
+                    return CommentIndex.endLine(member, Integer.MAX_VALUE);
+                }
+
+                @Override
+                public Doc separatorBeforeSibling(
+                        SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
+                        BodyDeclaration<?> member
+                ) {
+                    // Two adjacent members always keep a blank line; a member following a comment tracks the source gap.
+                    if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING) {
+                        return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
+                    }
+                    return sourceLineSeparator(previous.endLine(), beginLine(member));
+                }
+
+                @Override
+                public Doc separatorBeforeComment(
+                        SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
+                        JavaCommentTrivia comment
+                ) {
+                    return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
+                }
+            }
+        );
+    }
+
+    /**
+     * The member's source begin line, pulled up to a leading comment JavaParser attached directly above it.
+     */
+    private int enumMemberBeginLine(BodyDeclaration<?> member) {
+        int declarationBeginLine = CommentIndex.beginLine(member, Integer.MAX_VALUE);
+        return commentPlacement.leadingComment(member)
+                .map(comment -> comment.beginLine(declarationBeginLine))
+                .filter(commentBeginLine -> commentBeginLine < declarationBeginLine)
+                .orElse(declarationBeginLine);
+    }
+
+    /**
+     * The body orphan comments eligible for interleaving: every declaration orphan except one trailing a constant on
+     * its own end line, which belongs to the constant list rather than the member body.
+     */
+    private List<JavaCommentTrivia> bodyOrphanCommentTrivia(EnumDeclaration declaration) {
+        return commentPlacement.orphanCommentsInSourceOrder(declaration).stream()
+                .filter(comment -> declaration.getEntries().stream().noneMatch(
+                    entry -> CommentIndex.startsOnEndLine(entry, comment.comment())
+                ))
+                .toList();
+    }
+
+    /**
+     * Preserves whether source trivia left a blank physical line between two printed body items.
+     */
+    private Doc sourceLineSeparator(int previousEndLine, int currentBeginLine) {
+        return currentBeginLine > previousEndLine + 1 ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
     }
 
     private Optional<EnumEntryList> enumEntryList(EnumDeclaration declaration) {
@@ -673,65 +766,6 @@ final class EnumDeclarationPrinter {
                 .getRange()
                 .map(range -> sourceText.region(range).beginOffset())
                 .orElse(Integer.MAX_VALUE);
-    }
-
-    /**
-     * Chooses the vertical gap between body orphan comments and the first ordinary enum member.
-     *
-     * <p>A semicolon written after body comments already acts as the source separator. Otherwise the formatter preserves
-     * whether the source had a blank line before the first member.
-     */
-    private Doc enumMemberSeparator(EnumDeclaration declaration, List<Doc> bodyComments) {
-        if (bodyComments.isEmpty() || declaration.getMembers().isEmpty()) {
-            return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
-        }
-        if (enumSemicolonFollowsBodyComments(declaration)) {
-            return Doc.HARD_LINE;
-        }
-        return enumBodyCommentsHaveBlankLineBeforeFirstMember(declaration)
-            ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE)
-            : Doc.HARD_LINE;
-    }
-
-    /**
-     * Checks whether body comments were visually separated from the first member by a blank source line.
-     */
-    private boolean enumBodyCommentsHaveBlankLineBeforeFirstMember(EnumDeclaration declaration) {
-        int lastCommentLine = declaration.getOrphanComments()
-                .stream()
-                .flatMap(comment -> comment.getRange().stream())
-                .mapToInt(range -> range.end.line)
-                .max()
-                .orElse(Integer.MAX_VALUE);
-        return declaration.getMembers()
-                .stream()
-                .findFirst()
-                .flatMap(Node::getRange)
-                .map(range -> range.begin.line > lastCommentLine + 1)
-                .orElse(false);
-    }
-
-    /**
-     * Detects the source shape where the enum semicolon is written after body orphan comments and before members.
-     */
-    private boolean enumSemicolonFollowsBodyComments(EnumDeclaration declaration) {
-        String raw = declaration.getTokenRange().map(Object::toString).orElseGet(
-            () -> rawSource.rawWithoutOwnComment(
-                declaration
-            )
-        );
-        int firstMember = declaration.getMembers()
-                .stream()
-                .findFirst()
-                .flatMap(member -> member.getTokenRange().map(Object::toString))
-                .map(raw::indexOf)
-                .filter(index -> index >= 0)
-                .orElse(raw.length());
-        String beforeMember = raw.substring(0, firstMember);
-        int semicolon = beforeMember.lastIndexOf(';');
-        int lineComment = beforeMember.lastIndexOf("//");
-        int blockComment = beforeMember.lastIndexOf("/*");
-        return semicolon > Math.max(lineComment, blockComment);
     }
 
     /**

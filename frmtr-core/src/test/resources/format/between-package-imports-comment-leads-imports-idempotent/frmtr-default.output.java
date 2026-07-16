@@ -3,11 +3,12 @@
  * Licensed under the Example Public License, Version 2.0.
  */
 
+package dev.example.net;
+
 /*
  * Transport layer for the underlying communication channel.
  * Wraps a socket channel and stands in for other channel implementations.
  */
-package dev.example.net;
 
 import dev.example.net.spi.ChannelFactory;
 

@@ -105,22 +105,30 @@ final class CompilationUnitPrinter {
             parts.add(sourceLeadingComments);
         }
         int firstTypeLine = firstTypeLine(unit);
-        // Split orphan comments at the package/imports/module boundary: at/above -> file-boundary content, below ->
-        // first-type docs. No prologue => boundary collapses to the first-type line (behavior unchanged).
+        // Split orphan comments around the structural prologue by source line: at/above `package` -> file header (above
+        // `package`); between `package` and the imports/module -> leading the import section, in place; below the
+        // prologue -> first-type docs. No prologue => the boundary collapses to the first-type line.
         int structuralBoundaryLine = structuralBoundaryLine(unit);
         int typeLeadingBoundaryLine = structuralBoundaryLine == Integer.MIN_VALUE
             ? firstTypeLine
             : structuralBoundaryLine;
+        int packageBoundaryLine = packageBoundaryLine(unit);
         Doc orphanComments = orphanCommentsBeforeFirstType(
             unit,
             firstTypeLine,
             typeLeadingBoundaryLine,
+            packageBoundaryLine,
             importRawGapRegions
         );
-        // Give the raw comment blob its trailing blank only when no file-boundary orphan block follows: a following orphan
-        // block emits its OWN leading blank, so adding one here too would stack three blanks — while the same comment
-        // reclassified as `package`'s leading comment emits just one. Deferring the separator to the next section keeps
-        // every classification at a single blank.
+        Doc importLeadingComments = importLeadingOrphanComments(
+            unit,
+            firstTypeLine,
+            typeLeadingBoundaryLine,
+            packageBoundaryLine,
+            importRawGapRegions
+        );
+        // Give the raw pre-package comment blob its trailing blank only when no file-header orphan block follows above
+        // `package`: a following orphan block emits its own leading blank, so adding one here too would stack blanks.
         if (sourceLeadingComments != Doc.EMPTY && orphanComments == Doc.EMPTY) {
             parts.add(Doc.HARD_LINE);
             parts.add(Doc.HARD_LINE);
@@ -140,12 +148,24 @@ final class CompilationUnitPrinter {
         hasStructuralParts = unit.getPackageDeclaration().isPresent();
         Optional<Doc> imports = imports(unit, importRecoveryPlan, importRawGapRegions);
         if (imports.isPresent()) {
+            // A comment authored between `package` and the imports leads the import section, so it keeps its source
+            // position instead of floating up into the file header above `package`.
+            Doc importsDoc = importLeadingComments == Doc.EMPTY
+                ? imports.orElseThrow()
+                : Doc.concat(importLeadingComments, Doc.HARD_LINE, imports.orElseThrow());
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);
                 parts.add(Doc.HARD_LINE);
             }
-            parts.add(imports.orElseThrow());
+            parts.add(importsDoc);
             hasStructuralParts = true;
+        } else if (importLeadingComments != Doc.EMPTY) {
+            // No imports follow, so a between-`package` comment renders on its own line after `package`.
+            if (!parts.isEmpty()) {
+                parts.add(Doc.HARD_LINE);
+                parts.add(Doc.HARD_LINE);
+            }
+            parts.add(importLeadingComments);
         }
         Optional<ModuleDeclaration> module = unit.getModule();
         module.ifPresent(moduleDeclaration -> {
@@ -197,14 +217,41 @@ final class CompilationUnitPrinter {
      * {@link #detachedFirstTypeLeadingComments}. With no prologue the boundary collapses to the first-type line, so this
      * slot keeps every before-type orphan.
      */
+    /**
+     * The file-header orphan comments: those at or above the {@code package} line (and before the first type). They render
+     * above {@code package}. A comment authored after {@code package} is handled by {@link #importLeadingOrphanComments}
+     * so it stays in place rather than floating up here.
+     */
     private Doc orphanCommentsBeforeFirstType(
             CompilationUnit unit,
             int firstTypeLine,
             int typeLeadingBoundaryLine,
+            int packageBoundaryLine,
             List<RecoveredRawGapPrinter.RawGapRegion> importRawGapRegions
     ) {
         return comments.orphanComments(unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < firstTypeLine
                 && CommentIndex.beginLine(comment, Integer.MAX_VALUE) <= typeLeadingBoundaryLine
+                && CommentIndex.beginLine(comment, Integer.MAX_VALUE) <= packageBoundaryLine
+                && !isContainedByRawGap(comment, importRawGapRegions)
+        );
+    }
+
+    /**
+     * The orphan comments authored between the {@code package} line and the end of the imports/module prologue (and before
+     * the first type). The caller prepends them to the import section so they lead the imports in place, rather than
+     * floating above {@code package} the way the file-header block would. With no {@code package} the window is empty
+     * (every prologue orphan is a file header instead).
+     */
+    private Doc importLeadingOrphanComments(
+            CompilationUnit unit,
+            int firstTypeLine,
+            int typeLeadingBoundaryLine,
+            int packageBoundaryLine,
+            List<RecoveredRawGapPrinter.RawGapRegion> importRawGapRegions
+    ) {
+        return comments.orphanComments(unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < firstTypeLine
+                && CommentIndex.beginLine(comment, Integer.MAX_VALUE) <= typeLeadingBoundaryLine
+                && CommentIndex.beginLine(comment, Integer.MIN_VALUE) > packageBoundaryLine
                 && !isContainedByRawGap(comment, importRawGapRegions)
         );
     }
@@ -249,6 +296,17 @@ final class CompilationUnitPrinter {
             boundary = Math.max(boundary, CommentIndex.endLine(unit.getModule().orElseThrow(), boundary));
         }
         return boundary;
+    }
+
+    /**
+     * The {@code package} declaration's last source line — the divide between file-header comments (at or above it) and
+     * comments that lead the imports (below it). {@link Integer#MAX_VALUE} when there is no {@code package}, so every
+     * prologue orphan stays a file header.
+     */
+    private int packageBoundaryLine(CompilationUnit unit) {
+        return unit.getPackageDeclaration()
+                .map(packageDeclaration -> CommentIndex.endLine(packageDeclaration, Integer.MAX_VALUE))
+                .orElse(Integer.MAX_VALUE);
     }
 
     private boolean isContainedByRawGap(

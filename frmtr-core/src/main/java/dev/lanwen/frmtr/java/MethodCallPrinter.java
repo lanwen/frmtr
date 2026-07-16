@@ -1381,11 +1381,48 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Always empty: a single inner-method-call argument is not hugged onto the opener — it breaks by width through the
-     * generic path. Kept (returning empty) so the dispatch hook stays wired.
+     * Hugs a single inner-method-call argument onto the opener ({@code when(sharePartition.acquire(} ⏎ arguments ⏎
+     * {@code ))}) when the whole call overflows, so a call wrapping one nested call fans the inner argument list under a
+     * shared opener line instead of stranding {@code inner(} on its own indented line.
+     *
+     * <p>Idempotence-by-construction: the hug-versus-exploded verdict is a renderer-measured {@link Doc#bestFitting}
+     * ranked at the live output column (the hug arm carries priority so it wins whenever it fits, the exploded arm is the
+     * narrowest-first representative and the fallback when the opener overflows), never a build-time source-column probe.
+     * The only build-time gate is a source-neutral floor: {@link LayoutWidth#nodeIndentWidth} is a lower bound on the true
+     * column, so {@code nodeIndentWidth + flat} ≤ width means flat may still fit — defer to the generic group, which ranks
+     * flat-versus-break cooperatively with whatever shares the line. The hug fires only once flat overflows even at that
+     * floor, i.e. definitively. Empty also for a comment-bearing call (the generic path preserves them), an inner lambda
+     * argument (owned by the lambda-hug machinery), and a fan-threshold inner chain (owned by
+     * {@link #singleFanChainArgumentBestFitting} above).
      */
     private Optional<Doc> singleMethodCallArgument(String prefix, MethodCallExpr expression) {
-        return Optional.empty();
+        if (
+            expression.getArguments().size() != 1
+            || !(expression.getArgument(0) instanceof MethodCallExpr inner)
+            || inner.getArguments().isEmpty()
+            || sourceShapePolicy.hasContainedComments(expression)
+            || sourceShapePolicy.hasContainedComments(inner)
+            || inner.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
+        ) {
+            return Optional.empty();
+        }
+        String flatCall = prefix + "(" + compactSource.compact(inner) + ")";
+        if (layoutWidth.nodeIndentWidth(expression) + flatCall.length() <= options.lineWidth()) {
+            return Optional.empty();
+        }
+        Doc exploded = Doc.concat(
+            Doc.text(prefix + "("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenMethodCall(inner))),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
+        Doc hugged = Doc.concat(
+            Doc.text(prefix + "(" + methodCallPrefix(inner) + "("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, methodCallArgumentList(inner.getArguments(), Doc.HARD_LINE))),
+            Doc.HARD_LINE,
+            Doc.text("))")
+        );
+        return Optional.of(Doc.bestFitting(List.of(exploded, hugged), new int[] {0, 1}));
     }
 
     /**

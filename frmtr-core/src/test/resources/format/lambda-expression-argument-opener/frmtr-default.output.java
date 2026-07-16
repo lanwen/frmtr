@@ -102,14 +102,12 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StubFlow answerWithRepositoryCall(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {
-        return when(
-            stubSource.fetchPreparedEnvelope(
-                "north-window-ticket",
-                "south-window-ticket",
-                "east-window-ticket",
-                "west-window-ticket"
-            )
-        ).thenAnswer(invocation -> regionalWindowBundleReadGateway.findFirstLaunchBundlesForWindowTickets(
+        return when(stubSource.fetchPreparedEnvelope(
+            "north-window-ticket",
+            "south-window-ticket",
+            "east-window-ticket",
+            "west-window-ticket"
+        )).thenAnswer(invocation -> regionalWindowBundleReadGateway.findFirstLaunchBundlesForWindowTickets(
                 invocation.getArgument(0),
                 invocation.getArgument(1)
         ));
@@ -173,14 +171,12 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StubFlow answerWithLongBodySelector(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {
-        return when(
-            stubSource.fetchPreparedEnvelope(
-                "north-window-ticket",
-                "south-window-ticket",
-                "east-window-ticket",
-                "west-window-ticket"
-            )
-        ).thenAnswer(invocation -> regionalWindowBundleReadGateway
+        return when(stubSource.fetchPreparedEnvelope(
+            "north-window-ticket",
+            "south-window-ticket",
+            "east-window-ticket",
+            "west-window-ticket"
+        )).thenAnswer(invocation -> regionalWindowBundleReadGateway
             .findFirstLaunchBundlesForWindowTicketsWithVerifiedProjectionState(
                 invocation.getArgument(0),
                 invocation.getArgument(1)

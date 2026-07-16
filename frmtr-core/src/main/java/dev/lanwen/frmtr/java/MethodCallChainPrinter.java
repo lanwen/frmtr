@@ -1024,7 +1024,23 @@ final class MethodCallChainPrinter {
                     groupedPromotedRootWithSingleSegment(root, rootDoc, calls.getFirst(), finalSegmentSuffix, layout)
                 );
             }
-            return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)));
+            // Attach the single trailing segment at the root's closing CONTINUATION column, matching the
+            // source-multiline-root path above (`:1010`). Measuring it beside its stale source column instead flips the
+            // segment (esp. an expression-lambda selector like `.mapToObj(v -> …)`) between broken and collapsed across
+            // passes: the flat-source pass reaches here while the re-parsed broken-source pass takes the
+            // source-multiline route, so the two must share the same continuation-column measurement (#137, family E).
+            // Attach the single trailing segment at the column it actually renders at. When the expression-renderer root
+            // BREAKS its method call ({@code IntStream.range(}⏎ args ⏎{@code )}), the segment sits on the root's closing
+            // CONTINUATION line, so measure it there ({@code ")" + segment}) — matching the source-multiline-root path
+            // above (`:1010`) so the flat-source and re-parsed-broken-source passes share one measurement and the segment
+            // (esp. an expression-lambda selector like {@code .mapToObj(v -> …)}) stops flipping broken⇄collapsed (#137,
+            // family E). When the root stays FLAT ({@code Stream.of(a, b, c).forEach(…)}), the segment sits BESIDE the
+            // compact root, not after a bare {@code )}; the continuation measurement would under-count its column by the
+            // whole root width and hug an over-wide lambda opener, so keep the beside-the-root measurement instead.
+            Doc singleSegment = expressionRenderedChainRootBreaksMethodCall(methodRoot, firstLineWidth)
+                ? methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth)
+                : methodCallChainSegment(calls.getFirst(), finalSegmentSuffix);
+            return Optional.of(Doc.concat(rootDoc, singleSegment));
         }
         // Record the width break only here, where the printer has committed to the broken one-segment-per-line chain
         // this method's PrinterWrap describes. The earlier deferral branches hand rendering to a different printer that

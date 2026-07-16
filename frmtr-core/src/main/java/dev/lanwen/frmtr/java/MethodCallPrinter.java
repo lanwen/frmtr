@@ -88,19 +88,7 @@ final class MethodCallPrinter {
 
     private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
 
-    /**
-     * The single break rule for a call wrapping one nested call: whether the {@code outer(inner(} opener-hug applies
-     * (pure AST guards plus a source-neutral break-vs-flat floor) and the renderer-ranked shape it emits. One rule, so
-     * the registry is thin, but it makes the hug a named, {@code --explain}-attributable, fixture-anchored unit in the
-     * reprint-by-default break-rule model instead of an imperative special case.
-     */
-    private final BreakRuleRegistry<SingleCallArgumentRequest> singleCallArgumentRules = BreakRuleRegistry.of(List.of(
-        BreakRule.of(
-            "single-call-argument-opener-hug",
-            this::singleCallArgumentHugApplies,
-            this::singleCallArgumentHugLayout
-        )
-    ));
+    private final SingleCallArgumentOpenerHugLayout singleCallArgumentOpenerHug;
 
     MethodCallPrinter(
             JavaFormatContext context,
@@ -177,6 +165,15 @@ final class MethodCallPrinter {
             unformattedTextBlockRenderer
         );
         this.layoutDecisions = context.layoutDecisions;
+        this.singleCallArgumentOpenerHug = new SingleCallArgumentOpenerHugLayout(
+            context.options,
+            context.sourceShapePolicy,
+            context.compactSource,
+            context.layoutWidth,
+            this::methodCallPrefix,
+            this::methodCallArgumentList,
+            this::brokenMethodCall
+        );
     }
 
     /**
@@ -1395,82 +1392,13 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Hugs a single inner-method-call argument onto the opener ({@code when(sharePartition.acquire(} ⏎ arguments ⏎
-     * {@code ))}) when the whole call overflows, so a call wrapping one nested call fans the inner argument list under a
-     * shared opener line instead of stranding {@code inner(} on its own indented line.
-     *
-     * <p>Idempotence-by-construction: the hug-versus-exploded verdict is a renderer-measured {@link Doc#bestFitting}
-     * ranked at the live output column (the hug arm carries priority so it wins whenever it fits, the exploded arm is the
-     * narrowest-first representative and the fallback when the opener overflows), never a build-time source-column probe.
-     * The only build-time gate is a source-neutral floor: {@link LayoutWidth#nodeIndentWidth} is a lower bound on the true
-     * column, so {@code nodeIndentWidth + flat} ≤ width means flat may still fit — defer to the generic group, which ranks
-     * flat-versus-break cooperatively with whatever shares the line. The hug fires only once flat overflows even at that
-     * floor, i.e. definitively. Empty also for a comment-bearing call (the generic path preserves them), an inner lambda
-     * argument (owned by the lambda-hug machinery), and a fan-threshold inner chain (owned by
-     * {@link #singleFanChainArgumentBestFitting} above).
+     * Hugs a single inner-method-call argument onto a short wrapping call's opener
+     * ({@code when(sharePartition.acquire(} ⏎ arguments ⏎ {@code ))}) via {@link SingleCallArgumentOpenerHugLayout};
+     * empty when that rule declines, so the caller keeps the generic dispatch. The fan-threshold inner chain is handled
+     * ahead of this by {@link #singleFanChainArgumentBestFitting}.
      */
     private Optional<Doc> singleMethodCallArgument(String prefix, MethodCallExpr expression) {
-        SingleCallArgumentRequest request = new SingleCallArgumentRequest(prefix, expression);
-        return singleCallArgumentRules.select(request).map(rule -> rule.layout(request));
-    }
-
-    /** The candidate handed to the single-call-argument break rule: the call's opener prefix plus the call itself. */
-    private record SingleCallArgumentRequest(String prefix, MethodCallExpr expression) {}
-
-    /** A wrapping call is "short" when its selector name is under this many symbols (brackets and dots excluded). */
-    private static final int SHORT_CALL_NAME_LIMIT = 8;
-
-    /**
-     * Whether the opener-hug owns this call: a single inner method-call argument with its own arguments, no comments on
-     * either call, and no inner lambda argument (those keep their own layouts). The <em>hug</em> decision is structural
-     * and indent-independent — only a <em>short</em> wrapping call ({@code when}, {@code verify}, {@code reply}: selector
-     * name under {@link #SHORT_CALL_NAME_LIMIT} symbols) reads well as a {@code short(inner(} opener; a longer wrapper
-     * keeps the exploded list. The remaining {@code nodeIndentWidth} floor is purely the break-versus-flat gate: while
-     * the flat whole-call may fit, defer to the generic group, which alone measures the caller-appended terminator
-     * ({@code ;}) / chain suffix that a {@link Doc#bestFitting} flat arm cannot see. So the hug only fires once flat
-     * overflows even at that lower-bound column. A pure function of the AST — no source-shape read — so the verdict is a
-     * fixpoint across passes.
-     */
-    private boolean singleCallArgumentHugApplies(SingleCallArgumentRequest request) {
-        MethodCallExpr expression = request.expression();
-        if (
-            expression.getArguments().size() != 1
-            || !(expression.getArgument(0) instanceof MethodCallExpr inner)
-            || inner.getArguments().isEmpty()
-            || sourceShapePolicy.hasContainedComments(expression)
-            || sourceShapePolicy.hasContainedComments(inner)
-            || inner.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
-            || expression.getNameAsString().length() >= SHORT_CALL_NAME_LIMIT
-        ) {
-            return false;
-        }
-        String flatCall = request.prefix() + "(" + compactSource.compact(inner) + ")";
-        return layoutWidth.nodeIndentWidth(expression) + flatCall.length() > options.lineWidth();
-    }
-
-    /**
-     * The renderer-ranked broken shape the opener-hug emits: {@link Doc#bestFitting} of the hug and the exploded list,
-     * ranked flattest-first at the live output column. The hug ({@code short(inner(} ⏎ arguments ⏎ {@code ))}) uses
-     * fewer lines than the exploded list, so it wins whenever it fits; the exploded list is the always-valid fallback
-     * when the hug opener overflows. No flat arm — the applies-gate already deferred the fitting case to the generic
-     * group.
-     */
-    private Doc singleCallArgumentHugLayout(SingleCallArgumentRequest request) {
-        String prefix = request.prefix();
-        MethodCallExpr inner = (MethodCallExpr) request.expression().getArgument(0);
-        Doc hugged = Doc.concat(
-            Doc.text(prefix + "(" + methodCallPrefix(inner) + "("),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, methodCallArgumentList(inner.getArguments(), Doc.HARD_LINE))),
-            Doc.HARD_LINE,
-            Doc.text("))")
-        );
-        Doc exploded = Doc.concat(
-            Doc.text(prefix + "("),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenMethodCall(inner))),
-            Doc.HARD_LINE,
-            Doc.text(")")
-        );
-        return Doc.bestFitting(List.of(hugged, exploded));
+        return singleCallArgumentOpenerHug.hug(prefix, expression);
     }
 
     /**

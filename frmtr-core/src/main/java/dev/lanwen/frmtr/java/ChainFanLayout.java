@@ -103,11 +103,10 @@ final class ChainFanLayout {
     private final Function<Expression, Optional<String>> compactSingleLineRoot;
 
     /**
-     * The fan-position break rules, resolved first-match-wins. Stage 0 of the reprint-by-default break-rule model
-     * ({@code docs/proposals/reprint-by-default-break-rules.md}) hosts exactly one — the canonical fan — so
-     * this registry answers the same question {@link #canonicalFanChain} asked inline: fan the chain when the canonical
-     * rule admits it, otherwise (no match &rarr; {@link Optional#empty()}) leave it to the imperative cascade the caller
-     * falls back to. The chain-shaped {@link ChainFanRequest} candidate carries the caller-appended final-segment suffix
+     * The fan-position break rules, resolved first-match-wins — the break-position tier, which hosts exactly one rule, the
+     * canonical fan. This registry answers the same question {@link #canonicalFanChain} asked inline: fan the chain when
+     * the canonical rule admits it, otherwise (no match &rarr; {@link Optional#empty()}) leave it to the imperative
+     * cascade the caller falls back to. The chain-shaped {@link ChainFanRequest} candidate carries the caller-appended final-segment suffix
      * so the general {@link BreakRule}/{@link BreakRuleRegistry} abstraction hosts the chain without a leaky node-level
      * signature. The remaining fan sub-shapes inside {@link #chainFanOut} (factory-root fold, single-selector,
      * trivial-receiver attach, fanned selectors) are hosted by the sibling {@link #fanShapeRules}.
@@ -115,9 +114,8 @@ final class ChainFanLayout {
     private final BreakRuleRegistry<ChainFanRequest> chainFanRules;
 
     /**
-     * The fan SHAPE rules, resolved first-match-wins — the four one-per-line shapes {@link #chainFanOut} chooses among
-     * once a chain is being fanned (reprint-by-default Stage 1, {@code docs/proposals/reprint-by-default-break-rules.md}).
-     * Declaration order is precedence: the factory-root fold is tried first (it can fold a two-selector chain), then the
+     * The fan SHAPE rules, resolved first-match-wins — the shape tier: the four one-per-line shapes {@link #chainFanOut}
+     * chooses among once a chain is being fanned. Declaration order is precedence: the factory-root fold is tried first (it can fold a two-selector chain), then the
      * single-selector fan, then the trivial-receiver first-selector attach, and finally the always-matching
      * fanned-selectors fallback. Each rule is a pure function of its {@link ChainFanCandidate} and emits one
      * source-neutral {@link Doc}, and only the winning rule's layout runs.

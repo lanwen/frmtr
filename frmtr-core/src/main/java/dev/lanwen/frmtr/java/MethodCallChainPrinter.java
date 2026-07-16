@@ -1687,7 +1687,19 @@ final class MethodCallChainPrinter {
         return Doc.group(
             Doc.concat(
                 rootDoc,
-                softChainContinuation(methodCallChainSegment(expression, finalSegmentSuffix))
+                // Measure the segment as on its own continuation line: the softChainContinuation group drops it onto its
+                // own line when it breaks, so its argument-break gate must measure at the continuation column, not the
+                // source-column beside-a-token estimate — the latter reads the author's shape and flips the segment's
+                // argument list between broken and collapsed across passes.
+                softChainContinuation(
+                    methodCallChainSegment(
+                        expression,
+                        Optional.empty(),
+                        finalSegmentSuffix,
+                        layoutWidth::continuationStatement,
+                        true
+                    )
+                )
             )
         );
     }

@@ -315,6 +315,7 @@ final class ExpressionPrinters {
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,
             compactSource::compact,
+            compactSource::commentFree,
             methodCalls::returnChain,
             methodCalls::brokenMethodCallWithClosingLine,
             methodCalls::methodCallPrefix,
@@ -339,6 +340,7 @@ final class ExpressionPrinters {
                     .mapToInt(trivia -> 1 + inlineCommentWidth(JavaFormatter.commentDoc(trivia)))
                     .sum(),
             binaries::hasLineComments,
+            binaries::hasBetweenOperandComments,
             binaries::linesWithComments,
             binaries::flatLineWithComments,
             binaries::flatLineWithCommentsWidth,
@@ -656,6 +658,10 @@ final class ExpressionPrinters {
 
     boolean binaryHasLineComments(BinaryExpr expression) {
         return binaries.hasLineComments(expression);
+    }
+
+    boolean binaryHasBetweenOperandComments(BinaryExpr expression) {
+        return binaries.hasBetweenOperandComments(expression);
     }
 
     Doc binaryLinesWithComments(BinaryExpr expression) {

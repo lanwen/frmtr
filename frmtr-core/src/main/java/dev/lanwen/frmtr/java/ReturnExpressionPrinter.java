@@ -58,6 +58,8 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
+    private final Function<Expression, String> commentFree;
+
     // Return-chain shape cascade delegator: rather than threading the chain shape-callbacks the cascade composes, the
     // return printer hands the one composite entry {@link MethodCallPrinter#returnChain} the two return-flavored inputs
     // — the first-line width shape (the second parameter, a {@code returnLineWidth}-based first-line measure) and the
@@ -91,6 +93,8 @@ final class ReturnExpressionPrinter {
 
     private final Predicate<BinaryExpr> binaryHasLineComments;
 
+    private final Predicate<BinaryExpr> binaryHasBetweenOperandComments;
+
     private final Function<BinaryExpr, Doc> binaryLinesWithComments;
 
     private final Function<BinaryExpr, Optional<Doc>> binaryFlatLineWithComments;
@@ -109,6 +113,7 @@ final class ReturnExpressionPrinter {
             ExpressionTailRenderer expressionWithTail,
             Function<LambdaExpr, Doc> brokenLambdaExpression,
             Function<Expression, String> compact,
+            Function<Expression, String> commentFree,
             ChainWithLayout<ToIntFunction<String>> returnChain,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine,
             Function<MethodCallExpr, String> methodCallPrefix,
@@ -123,6 +128,7 @@ final class ReturnExpressionPrinter {
             BiFunction<Node, Expression, Boolean> trailingValueCommentsAreAllBlock,
             BiFunction<Node, Expression, Integer> trailingValueBlockCommentInlineWidth,
             Predicate<BinaryExpr> binaryHasLineComments,
+            Predicate<BinaryExpr> binaryHasBetweenOperandComments,
             Function<BinaryExpr, Doc> binaryLinesWithComments,
             Function<BinaryExpr, Optional<Doc>> binaryFlatLineWithComments,
             ToIntFunction<BinaryExpr> binaryFlatLineWithCommentsWidth,
@@ -135,6 +141,7 @@ final class ReturnExpressionPrinter {
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
+        this.commentFree = commentFree;
         this.returnChain = returnChain;
         this.brokenMethodCallWithClosingLine = brokenMethodCallWithClosingLine;
         this.methodCallPrefix = methodCallPrefix;
@@ -149,6 +156,7 @@ final class ReturnExpressionPrinter {
         this.trailingValueCommentsAreAllBlock = trailingValueCommentsAreAllBlock;
         this.trailingValueBlockCommentInlineWidth = trailingValueBlockCommentInlineWidth;
         this.binaryHasLineComments = binaryHasLineComments;
+        this.binaryHasBetweenOperandComments = binaryHasBetweenOperandComments;
         this.binaryLinesWithComments = binaryLinesWithComments;
         this.binaryFlatLineWithComments = binaryFlatLineWithComments;
         this.binaryFlatLineWithCommentsWidth = binaryFlatLineWithCommentsWidth;
@@ -189,17 +197,22 @@ final class ReturnExpressionPrinter {
                 expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, layoutWidth::blockStatement)
             );
         }
-        if (expression instanceof BinaryExpr binaryExpr && binaryHasLineComments.test(binaryExpr)) {
+        if (
+            expression instanceof BinaryExpr binaryExpr
+            && binaryHasLineComments.test(binaryExpr)
+            && binaryReturnNeedsCommentAwareRender(binaryExpr)
+        ) {
             return commentBearingBinaryReturn(binaryExpr, layout);
         }
         Doc preSemicolonComment = preSemicolonValueComment(expression);
         if (preSemicolonComment != Doc.EMPTY) {
             // A pre-semicolon line comment forces the terminator onto its own line, so the whole return already breaks.
-            // The value's flat-versus-broken choice here is made by the imperative oracle (the trailing comment does not
-            // enter its width gate).
+            // The value renders on its own, so its flat-versus-broken fit is judged comment-free — the trailing comment
+            // sits on a separate line and must not push the value over width nor make the fit depend on the source line
+            // the comment happened to share with an operand.
             return Doc.concat(
                 Doc.text("return "),
-                returnExpression(expression, layout),
+                commentFreeFitReturnValue(expression, layout),
                 preSemicolonComment,
                 Doc.concat(Doc.HARD_LINE, Doc.text(";"))
             );
@@ -286,6 +299,24 @@ final class ReturnExpressionPrinter {
      * {@code trailingInitializerCommentsBeforeSemicolon} bucket and appended inline before the {@code ;} so it reads
      * {@code lastOperand /* note *}{@code /;}.
      */
+    /**
+     * Decides whether a comment-bearing binary return must use the comment-aware render rather than the ordinary
+     * pre-semicolon terminator path.
+     *
+     * <p>A comment between two operands, or an inline {@code /* ... *}{@code /} block trailing the last operand, can only
+     * be placed by the comment-aware render. A {@code //} that merely trails the whole chain is placed by the terminator
+     * ({@link #preSemicolonValueComment}) on its own line, so the value renders comment-free and its flat-versus-broken
+     * choice no longer depends on the source line the trailing comment sat on.
+     */
+    private boolean binaryReturnNeedsCommentAwareRender(BinaryExpr binaryExpr) {
+        if (binaryHasBetweenOperandComments.test(binaryExpr)) {
+            return true;
+        }
+        Node semicolonOwner = binaryExpr.getParentNode().orElse(null);
+        return semicolonOwner != null
+            && Boolean.TRUE.equals(trailingValueCommentsAreAllBlock.apply(semicolonOwner, binaryExpr));
+    }
+
     private Doc commentBearingBinaryReturn(BinaryExpr binaryExpr, LayoutContext layout) {
         Node semicolonOwner = binaryExpr.getParentNode().orElse(null);
         // A trailing comment after the final operand is an inline block comment only when source kept it before the ;
@@ -389,6 +420,38 @@ final class ReturnExpressionPrinter {
             return rendering.render(expression);
         }
         return brokenReturnValue(expression, layout);
+    }
+
+    /**
+     * Renders a return value whose trailing comment the terminator places on its own line, judging flat-versus-broken on
+     * the value's comment-free width so the choice does not depend on whether source kept the trailing comment on an
+     * operand line (where it is a contained comment) or its own line (where it is not).
+     */
+    private Doc commentFreeFitReturnValue(Expression expression, LayoutContext layout) {
+        Optional<Doc> preempted = preemptedReturnValue(expression, layout);
+        if (preempted.isPresent()) {
+            return preempted.orElseThrow();
+        }
+        String line = "return " + commentFree.apply(expression) + ";";
+        if (returnLineWidth(expression, line, layout) <= options.lineWidth()) {
+            // The value's own comment renders separately on the terminator line, so render a comment-stripped clone: the
+            // clone carries no contained comment, so the binary printer's flat gate (which refuses to flatten a chain
+            // holding a `//`) keeps it on one line whatever line the source put the trailing comment on.
+            return rendering.render(commentStrippedClone(expression));
+        }
+        return brokenReturnValue(expression, layout);
+    }
+
+    /**
+     * A clone of the value with every attached, orphan, and contained comment removed, for rendering a value whose
+     * comments another slot already owns and renders.
+     */
+    private static Expression commentStrippedClone(Expression expression) {
+        Expression clone = expression.clone();
+        clone.removeComment();
+        List.copyOf(clone.getOrphanComments()).forEach(clone::removeOrphanComment);
+        List.copyOf(clone.getAllContainedComments()).forEach(Node::remove);
+        return clone;
     }
 
     /**

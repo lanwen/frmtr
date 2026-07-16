@@ -519,6 +519,17 @@ final class VariableInitializerLayout {
                 variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, true),
                 groupTerminator
             );
+            // For an OBJECT-CREATION value that force-breaks (e.g. `new X(new Y[]{...})` whose array arg breaks by rule),
+            // the flat arm is really the opener-hug shape (`NAME = new X(` + broken body); a conditionalGroup treats it as
+            // a dead alternative (it carries a forced break) and always falls to the break-after-`=` arm, which disagrees
+            // with the preempt tier's over-width object-creation shape (opener-hug) and flips across passes when the
+            // array-spacing width wobbles across the gate. Ranking by line count (bestFitting) keeps opener-hug when its
+            // opener fits and still picks the true single-line flat when the value fits flat — a source-neutral fixpoint.
+            // Scoped to object creation: other value kinds (an unbreakable over-width string literal) must keep the
+            // conditionalGroup, whose fit-first choice never keeps a genuinely over-width single line.
+            if (initializer instanceof ObjectCreationExpr) {
+                return Doc.bestFitting(List.of(flatInitializer, brokenInitializer));
+            }
             return Doc.conditionalGroup(List.of(flatInitializer, brokenInitializer));
         }
         return Doc.concat(

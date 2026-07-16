@@ -356,7 +356,7 @@ final class LambdaExpressionPrinter {
         if (objectCreationBodyWithOpener.isPresent()) {
             return objectCreationBodyWithOpener.orElseThrow();
         }
-        // PR #279 review (arrow-hug rule): a method-call chain body whose receiver carries a BLOCK lambda
+        // Arrow-hug rule: a method-call chain body whose receiver carries a BLOCK lambda
         // ({@code Try.of(a, () -> { … }).getOrElseThrow(…)}, the {@code createInstance} shape) renders through the full
         // chain printer as {@code Try.of(a, () -> {}⏎ block ⏎{@code }).getOrElseThrow(…)} — a short opener head above an
         // already-multi-line block. Breaking the outer lambda after {@code ->} would orphan the arrow above that head, so
@@ -449,10 +449,9 @@ final class LambdaExpressionPrinter {
             String parameters,
             ObjectCreationExpr objectCreation
     ) {
-        // D3 flip-assembly (Read retirement): drop the {@code lambdaBodyStartsAfterHeader} source-shape disjunct so the
-        // broken-object-creation body is chosen purely when the flat form does not fit ({@code objectCreationLambdaBodyFits}
-        // false). Keying on whether the author broke the body forced a broken layout on a body whose flat form fits,
-        // oscillating with the flat gate above.
+        // Choose the broken-object-creation body purely when the flat form does not fit
+        // ({@code objectCreationLambdaBodyFits} false). Keying on whether the author broke the body would force a broken
+        // layout on a body whose flat form fits, oscillating with the flat gate above.
         if (
             objectCreation.getArguments().isEmpty()
             || objectCreationLambdaBodyFits(parameters, objectCreation)
@@ -587,7 +586,7 @@ final class LambdaExpressionPrinter {
      * <p>The compact receiver reconstruction has no {@link com.github.javaparser.ast.expr.LambdaExpr} case, so a receiver
      * that carries a BLOCK lambda ({@code Try.of(a, () -> { … }).getOrElseThrow(…)}, the {@code createInstance} shape) would
      * flatten its {@code { … }} onto one over-wide line, and a contained comment would de-indent and merge into the
-     * following token — the malformed shapes PR #279 flagged. When the receiver carries either, this yields {@code false} so
+     * following token — both malformed shapes. When the receiver carries either, this yields {@code false} so
      * {@link #brokenNonBinaryLambdaBody} falls through to {@link JavaFormatRule#format} — the full method-chain printer,
      * which renders the block lambda / comment through their own multi-line printers. This mirrors the identical guard
      * {@code ExpressionLambdaArgumentLayout#brokenMethodCallReceiverCompactsCleanly} applies on the call-argument side.
@@ -715,8 +714,8 @@ final class LambdaExpressionPrinter {
      * collapsed onto the opener.
      *
      * <p>JavaParser attaches such a comment differently depending on the source shape: a comment written on the line
-     * before the lambda becomes the lambda's own comment (the issue #131 shape,
-     * {@code forEach(\n  // note\n  (a, b) -> { ... })}), while collapsing the surrounding whitespace can re-home the same
+     * before the lambda becomes the lambda's own comment
+     * ({@code forEach(\n  // note\n  (a, b) -> { ... })}), while collapsing the surrounding whitespace can re-home the same
      * comment onto the call selector's {@code SimpleName}. Both shapes are caught here. When such a comment is present the
      * hug is suppressed and the call falls through to the comment-preserving broken argument-list path, which prints the
      * comment before the argument on its own line.
@@ -1243,10 +1242,9 @@ final class LambdaExpressionPrinter {
     /**
      * Exposes {@link ExpressionLambdaArgumentLayout#plan} to the call and chain printers.
      *
-     * <p>D1g threads {@code layout} so the true continuation column is available to the lambda-hug admission gate.
-     * It is not yet consulted (byte-identical); see the {@code plan} Javadoc for why the internal hug-renderer caller
-     * keeps {@link LayoutContext#root()} while the return / assignment / initializer / single-segment-root positions
-     * thread their real context.
+     * <p>Threads {@code layout} so the true continuation column is available to the lambda-hug admission gate. It is not
+     * yet consulted; see the {@code plan} Javadoc for why the internal hug-renderer caller keeps {@link LayoutContext#root()}
+     * while the return / assignment / initializer / single-segment-root positions thread their real context.
      */
     Optional<ExpressionLambdaArgumentLayout.Plan> huggableExpressionLambdaArgumentPlan(
             String prefix,

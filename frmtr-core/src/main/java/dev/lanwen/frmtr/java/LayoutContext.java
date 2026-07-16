@@ -31,8 +31,8 @@ package dev.lanwen.frmtr.java;
  *     unconditionally instead of gating on its own width — canonically an assignment or initializer right-hand side
  *     whose surrounding line was already decided too wide to keep flat. {@code false} when no such decision has been
  *     made and the receiver may stay compact if it fits (the common case). A positional fact — <em>whether this node's
- *     position is already inside a broken line</em> — so {@link EnclosedSuffixDispatcher} reads it from here (#189)
- *     rather than as a separate dispatch argument
+ *     position is already inside a broken line</em> — so {@link EnclosedSuffixDispatcher} reads it from here rather than
+ *     as a separate dispatch argument
  */
 record LayoutContext(
     EnclosingConstruct enclosing,
@@ -43,8 +43,8 @@ record LayoutContext(
 
     /**
      * The compilation-unit-level starting context: at the root, with no left-edge prefix, no caller-emitted trailing
-     * content, and no committed leading break. This reproduces the defaults every call site assumed before
-     * {@code LayoutContext} existed, so threading it through changes no formatting decision.
+     * content, and no committed leading break — the neutral defaults a call site uses when it has no positional
+     * information to add.
      */
     static LayoutContext root() {
         return new LayoutContext(EnclosingConstruct.ROOT, "", "", false);

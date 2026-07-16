@@ -81,10 +81,10 @@ final class VariableInitializerLayout {
     /**
      * The initializer's explicit layout classification: one constant per arm of the width-driven
      * broken-or-flat cascade in {@link #variableInitializerBrokenOrFlat}. {@link #classifyBrokenOrFlat} selects the arm
-     * from AST shape and rendered width alone -- reproducing the exact ordered conditions of the former imperative ladder
-     * -- and {@link #renderBrokenOrFlat} dispatches each arm to the unchanged shape emitters.
+     * from AST shape and rendered width alone, in a fixed order of conditions, and {@link #renderBrokenOrFlat} dispatches
+     * each arm to its shape emitter.
      *
-     * <p>{@link #METHOD_CALL_BROKEN} and {@link #LAMBDA} still delegate to an ordered {@code Optional<Doc>} sub-cascade
+     * <p>{@link #METHOD_CALL_BROKEN} and {@link #LAMBDA} delegate to an ordered {@code Optional<Doc>} sub-cascade
      * (canonical fan, packed / compact object-creation chain, forced chain, broken arguments; expression- vs block-lambda),
      * because each sub-arm's selection depends on the previous emitter returning empty -- a fall-through that cannot be
      * reproduced as a pure classification without re-probing (and re-claiming) comments. Splitting those finer arms into
@@ -162,13 +162,13 @@ final class VariableInitializerLayout {
 
     private final Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain;
 
-    // Output-seam slice #2: the initializer's single forced method-call-chain shape entry, owned by
+    // The initializer's single forced method-call-chain shape entry, owned by
     // {@link MethodCallPrinter#initializerChain} (initializer analogue of {@link ReturnExpressionPrinter}'s
     // {@code returnChain}). The initializer's chain-shape SELECTION stays here — it interleaves each shape with
     // break-after-{@code =} and {@code NAME = } prefix gating — but the forced-chain shape itself is delegated through this
     // one entry from all three forced-chain positions (direct chain, expression-lambda body, broken-after-{@code =}
     // fallback). The caller threads the {@code NAME = } left-edge prefix (or {@link LayoutContext#root()}) and the
-    // first-line width probe, exactly as the former raw forced-chain callback did.
+    // first-line width probe.
     private final ForcedChainWithLayout initializerChain;
 
     private final CanonicalFanChain canonicalFanChain;
@@ -378,7 +378,7 @@ final class VariableInitializerLayout {
             // attaches the comment as a {@code lineSuffix} after the {@code ;} — without this route the comment falls to
             // the generic declarator-trailing path, which drops it onto its own line above a dangling {@code ;}.
             String flatName = declarationPrefix + variable.getNameAsString();
-            // PR #279 review (#11): a comment-carrying, single-empty-tail object-creation chain whose constructor root
+            // A comment-carrying, single-empty-tail object-creation chain whose constructor root
             // fits on the assignment line dot-breaks (constructor on the {@code = } line, tail selector on its own dotted
             // continuation line) rather than breaking after {@code =}. This must be decided BEFORE the chain doc is built:
             // the fan claims the trailing comment itself, and {@code methodCallWithSemicolon} would otherwise claim it first
@@ -404,10 +404,10 @@ final class VariableInitializerLayout {
         Doc trailingLineComment = trailingCommentLayout.trailingDeclaratorLineComment(variable);
         Doc preSemicolonInitializerComment = trailingCommentLayout.preSemicolonInitializerComment(variable);
         // When the terminating `;` stays on the declaration line (no pre-`;` comment forcing it down), thread it into the
-        // initializer so the (A) conditional group measures the flat form's fit *with* its `;` at the true column — the
-        // same one column the old `compact + ";"` gate counted. When a pre-`;` comment drops the `;` onto its own line the
-        // group terminator is empty and the initializer stays on the imperative cascade, with the HARD_LINE + `;` appended
-        // after the shape exactly as before.
+        // initializer so the renderer-measured conditional-group gate measures the flat form's fit *with* its `;` at the
+        // true column — the same one column the `compact + ";"` projection counts. When a pre-`;` comment drops the `;`
+        // onto its own line the group terminator is empty and the initializer stays on the imperative cascade, with the
+        // HARD_LINE + `;` appended after the shape.
         boolean semicolonOnDeclarationLine = preSemicolonInitializerComment == Doc.EMPTY;
         Doc groupTerminator = semicolonOnDeclarationLine ? Doc.text(";") : Doc.EMPTY;
         Doc declaration = variable.getInitializer()
@@ -439,7 +439,8 @@ final class VariableInitializerLayout {
     /**
      * Chooses the initializer shape for a declarator whose terminator is emitted separately (a non-last multi-declarator
      * variable, whose {@code ,} the joining printer inserts). Passing {@link Doc#EMPTY} as the group terminator keeps this
-     * path on the historical imperative cascade, byte-identical to before the {@code (A)} renderer-measured gate.
+     * path on the imperative cascade, where the terminator is appended after the chosen shape rather than folded into the
+     * renderer-measured conditional-group gate.
      */
     Doc variableWithInitializer(
             VariableDeclarator variable,
@@ -455,9 +456,9 @@ final class VariableInitializerLayout {
      *
      * <p>{@code groupTerminator} is the same-line terminator ({@code ;}) that the caller would otherwise append after the
      * whole declaration. When it is non-{@link Doc#EMPTY} and the initializer is eligible (see
-     * {@link #canMeasureInitializerAtRenderedColumn}), it is folded into both arms of the {@code (A)} conditional group so
-     * the renderer measures the flat form's fit <em>with</em> its terminator at the true column — reproducing the old
-     * {@code compact + ";"} gate width. Otherwise it is appended after the imperative shape, exactly as before.
+     * {@link #canMeasureInitializerAtRenderedColumn}), it is folded into both arms of the renderer-measured
+     * conditional-group gate so the renderer measures the flat form's fit <em>with</em> its terminator at the true column —
+     * matching the {@code compact + ";"} projection width. Otherwise it is appended after the imperative shape.
      */
     Doc variableWithInitializer(
             VariableDeclarator variable,
@@ -468,15 +469,15 @@ final class VariableInitializerLayout {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact.apply(initializer) + ";";
         String name = variableName(variable);
         // Checked FIRST — ahead of BOTH the source-shape preempt tier and
-        // the (A) renderer-measured gate — because the oscillation it closes is exactly those source-shape-gated routes
-        // disagreeing across passes for a fan-carrying initializer. The source-shape tier's chain branches (the
-        // object-creation source-multiline branches) fire on a source-multiline pass and produce a shape the (A) gate's
-        // flat-source pass does not, so a fan-threshold chain routed through them oscillates. Claiming the fan-carrying
-        // initializer here — with a Doc.bestFitting whose two
+        // the renderer-measured conditional-group gate — because the oscillation it closes is exactly those
+        // source-shape-gated routes disagreeing across passes for a fan-carrying initializer. The source-shape tier's chain
+        // branches (the object-creation source-multiline branches) fire on a source-multiline pass and produce a shape the
+        // gate's flat-source pass does not, so a fan-threshold chain routed through them oscillates. Claiming the
+        // fan-carrying initializer here — with a Doc.bestFitting whose two
         // AST-derived arms (attach after `NAME = ` versus break after `=`) are ranked at the true column — makes the
         // break-after-`=` verdict a fixpoint by construction and pre-empts the source-shape routes for exactly these
         // chains. It self-gates to comment-free fan carriers (returns empty otherwise), so every comment-bearing or
-        // non-fan initializer still reaches the preempt tier and (A) gate below byte-identically.
+        // non-fan initializer still reaches the preempt tier and conditional-group gate below unchanged.
         if (groupTerminator != Doc.EMPTY) {
             Optional<Doc> fanBestFitting = variableInitializerFanBestFitting(
                 variable,
@@ -492,8 +493,8 @@ final class VariableInitializerLayout {
         }
         // Comment-around-`=`, source-leading comments, and the source-shape/self-breaking preempts run first and, when one
         // fires, own the whole shape. They are terminator-agnostic, so the caller's same-line terminator is appended after
-        // whichever shape they return (byte-identical to the historical `concat(declaration, ";")`). Only when none fires
-        // does control reach the (A) renderer-measured gate below.
+        // whichever shape they return (the `concat(declaration, ";")` shape). Only when none fires does control reach the
+        // renderer-measured conditional-group gate below.
         Optional<Doc> commentOrPreempt = variableInitializerCommentAndSourceShapeTier(
             variable,
             initializer,
@@ -504,14 +505,10 @@ final class VariableInitializerLayout {
         if (commentOrPreempt.isPresent()) {
             return Doc.concat(commentOrPreempt.orElseThrow(), groupTerminator);
         }
-        // (A) Master over-width gate at the real rendered column. The ~10 repeated
-        // `variableInitializer(variable, flat) > lineWidth` tests below (all comparing the same reconstructed
-        // AST-nesting-depth baseline) collapse into a single Doc.conditionalGroup: the renderer decides flat-versus-broken
-        // at the true running column. The flat arm is ordinary expression dispatch; the broken arm is the existing
-        // construct-kind broken-shape dispatch (the same cascade bodies, only reached now when the renderer judges the
-        // flat form too wide). The earlier reconstructed baseline could disagree with the column write reaches (the
-        // #137/#155 width-at-wrong-column family) and print a genuinely over-width initializer flat, then break it on a
-        // later pass; measuring at the real column makes the decision a fixpoint by construction rather than by tuning.
+        // Master over-width gate at the real rendered column: a single Doc.conditionalGroup lets the renderer decide
+        // flat-versus-broken at the true running column. The flat arm is ordinary expression dispatch; the broken arm is
+        // the construct-kind broken-shape dispatch, reached when the renderer judges the flat form too wide. Measuring at
+        // the real column makes the decision a fixpoint by construction rather than by tuning a reconstructed baseline.
         if (canMeasureInitializerAtRenderedColumn(initializer, groupTerminator)) {
             Doc flatInitializer = Doc.concat(
                 Doc.text(name + " = "),
@@ -543,15 +540,15 @@ final class VariableInitializerLayout {
 
     /**
      * Runs the comment-around-{@code =}, source-leading-comment, and source-shape/self-breaking preempt tier, returning the
-     * chosen shape when one branch owns the initializer or {@link Optional#empty()} to fall through to the {@code (A)}
-     * renderer-measured gate.
+     * chosen shape when one branch owns the initializer or {@link Optional#empty()} to fall through to the
+     * renderer-measured conditional-group gate.
      *
      * <p>This is the initializer's analogue of {@code ReturnExpressionPrinter}'s {@code preemptedReturnValue}: everything
      * whose broken shape is chosen by width-ranking or by a preserved source shape (a source-multiline object creation or
      * chain, a conditional whose broken ternary shape is ranked, a block-lambda-argument receiver break, an over-width
-     * {@code blockStatement}-gated array/object/binary/complement break) is decided here, imperatively, exactly as before.
-     * Keeping this tier untouched means the {@code (A)} conditional group only ever moves the flat-versus-broken verdict
-     * for the residual, single-line-flat, comment-free initializers — never a ranked or source-preserved shape. The
+     * {@code blockStatement}-gated array/object/binary/complement break) is decided here, imperatively.
+     * This tier owns those shapes, so the renderer-measured conditional-group gate only ever moves the flat-versus-broken
+     * verdict for the residual, single-line-flat, comment-free initializers — never a ranked or source-preserved shape. The
      * returned shape carries no trailing terminator; the caller appends it.
      */
     private Optional<Doc> variableInitializerCommentAndSourceShapeTier(
@@ -668,11 +665,11 @@ final class VariableInitializerLayout {
         }
         // Route on the CANONICAL width (bare compact plus the clarity parens frmtr adds around nested binary operands),
         // not the source form: measuring the parens the renderer inserts either way makes this over-width gate invariant
-        // to whether the source already carries them, so a binary initializer no longer flips tiers (and shapes) between
-        // passes (#137, family D).
+        // to whether the source already carries them, so a binary initializer routes to the same tier and shape
+        // regardless of source parens.
         if (layoutWidth.blockStatement(flat) + binaryParentheses.clarityParenWidth(initializer) > options.lineWidth()) {
             // The initializer line is already over width, so the enclosed suffix receiver must lead with a break; that
-            // positional fact rides on the LayoutContext (#189) rather than a loose boolean argument.
+            // positional fact rides on the LayoutContext rather than a loose boolean argument.
             Optional<Doc> suffixedEnclosedInitializer =
                 suffixedEnclosedExpression.apply(initializer, LayoutContext.root().withLeadingBreak(true));
             if (suffixedEnclosedInitializer.isPresent()) {
@@ -749,26 +746,26 @@ final class VariableInitializerLayout {
 
     /**
      * Decides whether a comment-free initializer's flat-versus-broken verdict may be handed to the renderer-measured
-     * {@link Doc#conditionalGroup} (A), or must stay on the historical imperative cascade to remain byte-identical.
+     * {@link Doc#conditionalGroup}, or must stay on the imperative cascade to keep byte-identical output.
      *
      * <p>The conditional group measures its flat arm at the real running column and picks the broken arm when the flat
-     * arm does not fit. That only reproduces the old {@code variableInitializer(variable, compact + ";")} gate when two
-     * conditions hold, so both are required here:
+     * arm does not fit. That matches the imperative cascade's {@code variableInitializer(variable, compact + ";")} width
+     * gate only when two conditions hold, so both are required here:
      *
      * <ul>
-     *   <li><b>The flat arm is a single line.</b> The old gate measured the <em>compact</em> (single-line) projection,
-     *       whereas the group measures the actual flat {@link Doc}. For a construct that renders its own internal breaks
-     *       even when narrow — an own-break initializer (array/switch/anonymous-class), a source-multiline shape the
-     *       policy preserves, or a cast wrapping either — the flat {@code Doc} carries a forced break, so the group would
-     *       read it as never-fitting and always pick the broken arm, diverging from the old compact-measured verdict. A
-     *       comment-bearing initializer is excluded for a different reason (both arms would claim its comments), so the
-     *       comment guard is folded in here too. These stay on the imperative cascade, which renders the initializer
-     *       exactly once via {@code expression.apply} (its own break intact) and reproduces the old per-branch gate.</li>
+     *   <li><b>The flat arm is a single line.</b> The compact-projection gate measures the <em>compact</em> (single-line)
+     *       projection, whereas the group measures the actual flat {@link Doc}. For a construct that renders its own
+     *       internal breaks even when narrow — an own-break initializer (array/switch/anonymous-class), a source-multiline
+     *       shape the policy preserves, or a cast wrapping either — the flat {@code Doc} carries a forced break, so the
+     *       group would read it as never-fitting and always pick the broken arm, diverging from the compact-measured
+     *       verdict. A comment-bearing initializer is excluded for a different reason (both arms would claim its comments),
+     *       so the comment guard is folded in here too. These stay on the imperative cascade, which renders the initializer
+     *       exactly once via {@code expression.apply} (its own break intact) and applies the per-branch gate.</li>
      *   <li><b>The trailing terminator is measurable inline.</b> The {@code ;} (or {@code ,}) that follows the initializer
-     *       on the same line is one column the old gate counted (its {@code flat} ended with {@code ;}); the group only
-     *       counts it when it is part of the measured arm. The statement-terminator caller threads {@code Doc.text(";")}
-     *       here so both arms carry it; the multi-declarator comma path and the pre-{@code ;}-comment path pass
-     *       {@link Doc#EMPTY} and stay imperative, where the terminator is appended after the shape exactly as before.</li>
+     *       on the same line is one column the compact-projection gate counts (its {@code flat} ends with {@code ;}); the
+     *       group only counts it when it is part of the measured arm. The statement-terminator caller threads
+     *       {@code Doc.text(";")} here so both arms carry it; the multi-declarator comma path and the pre-{@code ;}-comment
+     *       path pass {@link Doc#EMPTY} and stay imperative, where the terminator is appended after the shape.</li>
      * </ul>
      */
     private boolean canMeasureInitializerAtRenderedColumn(Expression initializer, Doc groupTerminator) {
@@ -821,7 +818,7 @@ final class VariableInitializerLayout {
                 && !methodCallChainRootIsObjectCreation.test(methodCall)) {
             // Direct fan-threshold chain: render the fan through the SOURCE-NEUTRAL canonicalFanChain (chainFanOut) — not
             // the imperative forcedMethodCallChain, whose canAttachFirstSegmentToSimpleRoot reads the author's
-            // source-multiline shape and flips the first-selector attach across passes (bucket D). chainFanOut renders the
+            // source-multiline shape and flips the first-selector attach across passes. chainFanOut renders the
             // root at LayoutContext.root() and each selector on its own dotted line, a pure AST function; canonicalFanChain
             // emits it regardless of sourceMultilineArguments (the same delegate the return path uses, why return has zero
             // oscillations). Both arms wrap that ONE fan, so the only remaining choice is attach-versus-break-after-`=`,
@@ -918,16 +915,16 @@ final class VariableInitializerLayout {
             );
             return Optional.of(Doc.bestFitting(List.of(attached, brokenAfterEquals)));
         }
-        // Binary/logical/string-concat initializer whose operand is a fan-threshold chain (the "G bucket":
-        // {@code long newOffset = log.segments().activeSegment().baseOffset() + 1},
+        // Binary/logical/string-concat initializer whose operand is a fan-threshold chain (for example
+        // {@code long newOffset = log.segments().activeSegment().baseOffset() + 1} or
         // {@code String appId = getClass().getSimpleName().toLowerCase(...) + testId}). The dispatched flat rendering
         // ({@code expression.apply}) already fans that operand by the canonical-fan rule (its inner {@code chainFanOut} is a
         // pure AST function, operator kept inline), so — exactly like the object-creation-argument arm above — both arms
         // are AST-pure and the only remaining choice is attach-after-{@code NAME = } versus break-after-{@code =}, ranked by
-        // {@code Doc.bestFitting} at the true column. Without this arm the binary initializer falls to the {@code (A)}
+        // {@code Doc.bestFitting} at the true column. Without this arm the binary initializer falls to the renderer-measured
         // conditionalGroup gate, whose flat arm carries the operand's hard break and can never be chosen, so it can only
         // break after {@code =}; ranking both AST-pure shapes here lets the attach shape win when it fits. Comment-bearing
-        // binaries are excluded above; non-fan binaries return empty here and keep the {@code (A)} gate.
+        // binaries are excluded above; non-fan binaries return empty here and keep the conditional-group gate.
         if (initializer instanceof BinaryExpr binaryExpr && binaryFansChainOperand.test(binaryExpr)) {
             Doc attached = Doc.concat(Doc.text(name + " = "), expression.apply(initializer), groupTerminator);
             Doc brokenAfterEquals = Doc.concat(
@@ -940,7 +937,7 @@ final class VariableInitializerLayout {
         // The initializer is a method call ({@code .id()}) whose receiver descends through a parenthesized cast to a
         // fan-threshold chain ({@code createResult.records().get(0).message()}). That inner chain fans by the canonical rule
         // on both passes (its {@code chainFanOut} is a pure AST function), so the value's flat rendering
-        // ({@code expression.apply}) carries a hard break the {@code (A)} conditionalGroup flat arm can never absorb.
+        // ({@code expression.apply}) carries a hard break the renderer-measured conditionalGroup flat arm can never absorb.
         // Ranking the same {@code expression.apply} flat shape against the
         // break-after-{@code =} shape with {@code Doc.bestFitting} at the true column makes the verdict a fixpoint. Guarded to
         // a cast whose inner chain fans source-neutrally ({@code canonicalFanChain} non-empty — comment / block-lambda /
@@ -1004,8 +1001,8 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Dispatches the construct-specific broken initializer shape, reached from the {@code (A)} master gate's broken arm
-     * and from the comment-bearing imperative path.
+     * Dispatches the construct-specific broken initializer shape, reached from the renderer-measured conditional-group
+     * gate's broken arm and from the comment-bearing imperative path.
      *
      * <p>{@code forceBroken} carries the renderer's flat-versus-broken verdict into the per-construct broken-shape branches
      * below. When the caller is the {@link Doc#conditionalGroup} broken arm it passes {@code true} — the renderer already
@@ -1035,7 +1032,7 @@ final class VariableInitializerLayout {
 
     /**
      * Selects the {@link InitializerLayoutArm} for the width-driven broken-or-flat cascade from AST shape and rendered
-     * width alone, reproducing the former imperative ladder's exact order and conditions. Every predicate here is pure
+     * width alone, in a fixed order of conditions. Every predicate here is pure
      * (AST inspection plus width probes), so the classification is a fixpoint: the same input always maps to the same arm.
      * The within-arm {@code Optional} fall-throughs of {@link InitializerLayoutArm#METHOD_CALL_OWN_BREAK_CHAIN},
      * {@link InitializerLayoutArm#METHOD_CALL_BROKEN}, and {@link InitializerLayoutArm#LAMBDA} are resolved by
@@ -1058,8 +1055,8 @@ final class VariableInitializerLayout {
             case LambdaExpr lambda when !initializerHasOwnBreak(lambda) -> InitializerLayoutArm.LAMBDA;
             case StringLiteralExpr string -> InitializerLayoutArm.STRING_LITERAL_BREAK;
             case ArrayInitializerExpr array -> InitializerLayoutArm.ARRAY_INITIALIZER_BREAK;
-            // A text block is excluded from the generic break (the former {@code !TextBlockLiteralExpr} guard), so
-            // it stays flat rather than falling into GENERIC_BROKEN like other non-string non-own-break values.
+            // A text block is excluded from the generic break, so it stays flat rather than falling into GENERIC_BROKEN
+            // like other non-string non-own-break values.
             case TextBlockLiteralExpr textBlock -> InitializerLayoutArm.FLAT;
             default -> initializerHasOwnBreak(initializer)
                 ? InitializerLayoutArm.FLAT
@@ -1068,11 +1065,10 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Dispatches a classified {@link InitializerLayoutArm} to the unchanged shape emitters, returning the identical
-     * {@link Doc} the former imperative cascade produced. The three cascade arms preserve their ordered
-     * {@code Optional<Doc>} fall-through: {@link InitializerLayoutArm#METHOD_CALL_OWN_BREAK_CHAIN} falls back to the flat
-     * shape, while {@link InitializerLayoutArm#METHOD_CALL_BROKEN} and {@link InitializerLayoutArm#LAMBDA} fall back to the
-     * generic break -- exactly the targets the fall-through reached in the old ladder.
+     * Dispatches a classified {@link InitializerLayoutArm} to its shape emitter. The three cascade arms preserve their
+     * ordered {@code Optional<Doc>} fall-through: {@link InitializerLayoutArm#METHOD_CALL_OWN_BREAK_CHAIN} falls back to the
+     * flat shape, while {@link InitializerLayoutArm#METHOD_CALL_BROKEN} and {@link InitializerLayoutArm#LAMBDA} fall back to
+     * the generic break.
      */
     private Doc renderBrokenOrFlat(
             InitializerLayoutArm arm,
@@ -1136,9 +1132,8 @@ final class VariableInitializerLayout {
 
     /**
      * The {@link InitializerLayoutArm#METHOD_CALL_BROKEN} arm: the ordered broken-method-call sub-cascade for an
-     * over-width, no-own-break method-call initializer, moved verbatim from the former imperative ladder. Each shape is
-     * probed in order and the first non-empty one wins; when every probe declines, the call falls back to the generic
-     * break -- the exact Block 9 target the old fall-through reached.
+     * over-width, no-own-break method-call initializer. Each shape is probed in order and the first non-empty one wins;
+     * when every probe declines, the call falls back to the generic break.
      */
     private Doc methodCallBrokenInitializer(
             VariableDeclarator variable,
@@ -1146,18 +1141,18 @@ final class VariableInitializerLayout {
             String declarationPrefix,
             MethodCallExpr methodCall
     ) {
-        // C10 (B) — #191. The single-selector, simple-attachable-root fan-out-versus-argument-break convergence
+        // The single-selector, simple-attachable-root fan-out-versus-argument-break convergence
         // (NAME = Collections.newSetFromMap(...)) runs through Doc.bestFitting([argumentBreak@1, collapse@0]), which is
         // idempotent for two reasons: (1) the collapse arm is built source-neutrally (whole call flat on
         // the continuation line, a pure AST function present on every input, so both passes rank the same two
         // candidates — no source-multiline-versus-flat oscillation); and (2) opener-attachment is expressed by the
-        // per-alternative priority (convergence-redesign Mechanism 2, slice 1), placed after the fit gate and before
+        // per-alternative priority, placed after the fit gate and before
         // line count, so the opener-attached argument-break is preferred whenever it fits even though the collapse uses
         // fewer lines, and the collapse wins only when the opener overflows the fit gate. Comment-bearing single calls
         // stay on the imperative cascade below (the ranked node is emitted only when the call is comment-free), so no
-        // comment is double-claimed. Object-creation-rooted single calls (the #48 case) keep their existing imperative
+        // comment is double-claimed. Object-creation-rooted single calls keep their existing imperative
         // branches below — their collapse is a broken-constructor/dot-split shape, not this whole-call collapse, so they
-        // are out of this arm's scope (as is the single-simple-arg tail dot-split, #221 Case B / slice 4).
+        // are out of this arm's scope (as is the single-simple-argument tail dot-split).
         Optional<Doc> rankedConvergence = rankedSimpleRootSingleCallConvergence(
             variable,
             name,
@@ -1177,14 +1172,15 @@ final class VariableInitializerLayout {
         // fails that same source-line test, falls through to variableWithForcedMethodCallChain, and renders the +8 fan
         // — so the two passes disagree forever. Routing through variableWithForcedMethodCallChain (which threads the
         // `NAME = ` leftEdgePrefix and reaches MethodCallChainPrinter.chainFanOut, a pure function of the AST) makes
-        // both passes rebuild the identical fan. This extends the #191 pattern (rankedSimpleRootSingleCallConvergence,
-        // above): #191 withheld the source-sensitive conditionalGroup arms for a SINGLE-call initializer and emitted one
-        // deterministic ranked shape; this withholds them for the MULTI-LINK fan-threshold case and emits the one
-        // deterministic fan shape. Object-creation-rooted chains are intentionally excluded — their dedicated
-        // packed / compact / broken-constructor branches below (and the #48 / #221 Case B convergence) own their shape,
-        // and chainFanOut renders an object-creation root differently than those branches; widening the fan to them is
-        // a later seam. Comment- and block-lambda-bearing chains stay on the imperative cascade (re-rendering a
-        // comment-bearing root through the fan would double-claim its comments — the same guard the landed rankers use).
+        // both passes rebuild the identical fan. This is the multi-link sibling of the single-call convergence
+        // (rankedSimpleRootSingleCallConvergence, above): that ranker withholds the source-sensitive conditionalGroup
+        // arms for a SINGLE-call initializer and emits one deterministic ranked shape; this withholds them for the
+        // MULTI-LINK fan-threshold case and emits the one deterministic fan shape. Object-creation-rooted chains are
+        // intentionally excluded — their dedicated packed / compact / broken-constructor branches below (and the
+        // object-creation-rooted single-call / single-simple-argument tail convergence) own their shape, and chainFanOut
+        // renders an object-creation root differently than those branches; widening the fan to them is a later seam.
+        // Comment- and block-lambda-bearing chains stay on the imperative cascade (re-rendering a comment-bearing root
+        // through the fan would double-claim its comments — the same guard the other rankers use).
         Optional<Doc> canonicalFan = variableInitializerCanonicalFan(
             variable,
             name,
@@ -1201,24 +1197,24 @@ final class VariableInitializerLayout {
                 declarationPrefix + variable.getNameAsString()
             )
         ) {
-            // #221 Case B / slice 4. An over-width object-creation-rooted single call whose selector's argument list is
-            // exactly one simple argument (a name, field access, this/super, or literal) and whose opener still fits on
-            // the assignment line ({@code NAME = new X(...).selector(} within budget) would otherwise reach the
-            // object-creation argument-break branch below, which keeps the whole opener on the assignment line and breaks
-            // that single argument onto its own line ({@code new X(...).selector(}⏎{@code arg}⏎{@code )}) — opening one
-            // simple argument across three lines when {@code .selector(arg)} routinely fits on its own dotted
+            // The single-simple-argument tail dot-split. An over-width object-creation-rooted single call whose selector's
+            // argument list is exactly one simple argument (a name, field access, this/super, or literal) and whose opener
+            // still fits on the assignment line ({@code NAME = new X(...).selector(} within budget) would otherwise reach
+            // the object-creation argument-break branch below, which keeps the whole opener on the assignment line and
+            // breaks that single argument onto its own line ({@code new X(...).selector(}⏎{@code arg}⏎{@code )}) — opening
+            // one simple argument across three lines when {@code .selector(arg)} routinely fits on its own dotted
             // continuation line. Route it through the
-            // initializer's existing chain-continuation (+8) fan-out ({@link #variableWithPackedMethodCallChain}) instead —
-            // the same path a long-constructor single-selector tail already takes when its opener overflows (the
+            // initializer's chain-continuation (+8) fan-out ({@link #variableWithPackedMethodCallChain}) instead —
+            // the same path a long-constructor single-selector tail takes when its opener overflows (the
             // {@code buildLongConstructorStrategy}/{@code buildShortConstructorStrategy} goldens). That path keeps the
             // constructor root on the assignment line and fans the lone selector compact onto its own continuation line at
-            // the chain-continuation indent, so Case 1 is byte-for-byte consistent with its opener-overflow siblings rather
-            // than taking the argument-open shape or the shallower {@code objectRootSingleSegmentChain} indent. Emitting it
-            // here — before the source-shape-sensitive {@code variableWithCompactObjectCreationChain} collapse below — keys
-            // the shape on AST + the opener's fit at the rendered column only, so it wins on every pass and is idempotent:
-            // {@code packedMethodCallChain} is a pure width function of the AST, so a re-format of the already-split source
-            // re-derives the same packed fan-out rather than collapsing the (now-fitting) whole chain onto the
-            // continuation line.
+            // the chain-continuation indent, so this shape is byte-for-byte consistent with its opener-overflow siblings
+            // rather than taking the argument-open shape or the shallower {@code objectRootSingleSegmentChain} indent.
+            // Emitting it here — before the source-shape-sensitive {@code variableWithCompactObjectCreationChain} collapse
+            // below — keys the shape on AST + the opener's fit at the rendered column only, so it wins on every pass and is
+            // idempotent: {@code packedMethodCallChain} is a pure width function of the AST, so a re-format of the
+            // already-split source re-derives the same packed fan-out rather than collapsing the (now-fitting) whole chain
+            // onto the continuation line.
             Optional<Doc> dotSplitTail = variableWithPackedMethodCallChain(
                 variable,
                 name,
@@ -1237,7 +1233,7 @@ final class VariableInitializerLayout {
             // assignment line and break its argument list. Multi-segment constructor chains fall through to the
             // one-per-line chain below so the root sits alone and every .call() gets its own line, instead of
             // greedy-packing the root plus the leading calls onto the assignment line. The single-simple-argument
-            // tail is handled above by the dot-split (#221 Case B), so only multi-argument and lambda tails (and
+            // tail is handled above by the dot-split, so only multi-argument and lambda tails (and
             // single-simple-arg tails whose opener overflows, which the dot-split gate declines) reach this
             // argument-break branch.
             Optional<Doc> directObjectCreationCall = variableWithBrokenMethodCallArguments(
@@ -1270,13 +1266,13 @@ final class VariableInitializerLayout {
         }
         MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
             methodCallChainInitializerShape.apply(methodCall);
-        // The single-selector simple-attachable-root fan-out-versus-argument-break convergence (#191) is resolved
-        // above by rankedSimpleRootSingleCallConvergence, so this force-wide gate now only reaches MULTI-SEGMENT
+        // The single-selector simple-attachable-root fan-out-versus-argument-break convergence is resolved
+        // above by rankedSimpleRootSingleCallConvergence, so this force-wide gate only reaches MULTI-SEGMENT
         // type-like chains (NAME = a.b.C.first(...).second(...)), whose one-per-line forced chain the ranked
         // single-call arm does not build. singleCallConvergesOnArgumentBreak still guards the object-creation single
-        // call (the #48 case, whose collapse is a broken-constructor shape rendered by its own branches, not this
+        // call (whose collapse is a broken-constructor shape rendered by its own branches, not this
         // whole-call collapse); for that shape the predicate keeps the deterministic argument-break decision. It keys
-        // purely on AST shape + measured width, never source line breaks, so this remaining path stays idempotent.
+        // purely on AST shape + measured width, never source line breaks, so this path stays idempotent.
         if (
             initializerChainShape.shouldForceWideInitializerChain()
             && !singleCallConvergesOnArgumentBreak(
@@ -1350,9 +1346,8 @@ final class VariableInitializerLayout {
 
     /**
      * The {@link InitializerLayoutArm#LAMBDA} arm: the ordered broken-lambda sub-cascade (expression body, block body,
-     * broken parameters) for an over-width, no-own-break lambda initializer, moved verbatim from the former imperative
-     * ladder. When every probe declines, the lambda falls back to the generic break -- the exact Block 9 target the old
-     * fall-through reached.
+     * broken parameters) for an over-width, no-own-break lambda initializer. When every probe declines, the lambda falls
+     * back to the generic break.
      */
     private Doc lambdaBrokenInitializer(
             VariableDeclarator variable,
@@ -1486,16 +1481,16 @@ final class VariableInitializerLayout {
             !methodCallChainRootIsObjectCreation.test(methodCall)
             || !(
                 chainShape.canUseCompactObjectCreationInitializer(chainSpansMultipleSourceLines)
-                // #221 Case B / slice 4. A single-selector object-creation root with a single simple-argument tail whose
-                // opener fits on the assignment line is admitted to this +8 fan-out too, so it fans the constructor root on
-                // the assignment line and {@code .selector(simpleArg)} compact on its own continuation line — the same shape a
-                // long-constructor tail produces when its opener overflows. Without this the shape gate below rejects it
-                // (a single-line-source single call is not a compact-object-creation shape), which is what forced the old
-                // argument-open. The width gate that follows also stops rejecting a single-simple-arg tail as an
-                // argument-break candidate. The {@code initializerSingleSimpleArgTailDotSplits} branch of
-                // {@code variableInitializerBrokenOrFlat} routes exactly this shape here ahead of the argument-break branch;
-                // multi-argument and lambda tails never match {@link #tailHasSingleSimpleArgument} and keep their existing
-                // argument-break / opener-fits behavior.
+                // The single-simple-argument tail dot-split. A single-selector object-creation root with a single
+                // simple-argument tail whose opener fits on the assignment line is admitted to this +8 fan-out too, so it
+                // fans the constructor root on the assignment line and {@code .selector(simpleArg)} compact on its own
+                // continuation line — the same shape a long-constructor tail produces when its opener overflows. Without
+                // this the shape gate below rejects it (a single-line-source single call is not a compact-object-creation
+                // shape) and the call takes the argument-open shape. The width gate that follows also does not reject a
+                // single-simple-arg tail as an argument-break candidate. The {@code initializerSingleSimpleArgTailDotSplits}
+                // branch of {@code variableInitializerBrokenOrFlat} routes exactly this shape here ahead of the
+                // argument-break branch; multi-argument and lambda tails never match {@link #tailHasSingleSimpleArgument}
+                // and keep their argument-break / opener-fits behavior.
                 || tailHasSingleSimpleArgument(methodCall)
             )
             || (!methodCall.getArguments().isEmpty()
@@ -1576,8 +1571,8 @@ final class VariableInitializerLayout {
         }
         String prefix = arrayCreationPrefix.apply(arrayCreation);
         ArrayInitializerExpr initializer = arrayCreation.getInitializer().orElseThrow();
-        // C10-c: measure the {@code NAME = new T[] {} opener on the assignment line at the initializer's true rendered
-        // block/type depth ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
+        // Measure the {@code NAME = new T[] {} opener on the assignment line at the initializer's true rendered
+        // block/type depth ({@link LayoutWidth#nodeLine}) rather than a fixed current-column baseline.
         if (layoutWidth.nodeLine(arrayCreation, flatName + " = " + prefix + " {") <= options.lineWidth()) {
             return Optional.of(
                 Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer.apply(initializer, true))
@@ -1695,10 +1690,10 @@ final class VariableInitializerLayout {
 
     /**
      * Routes the over-width, single-selector, simple-attachable-root initializer through the ranked
-     * {@link Doc#bestFitting(java.util.List, int[]) bestFitting} engine, replacing the imperative fan-out-versus-argument-
-     * break convergence that #191 (LDM-3) deferred as "non-idempotent to route" (see the {@code // C10 (B)} note in
-     * {@link #variableInitializerBrokenOrFlat}). Present only for the exact shape the imperative
-     * {@link #singleCallConvergesOnArgumentBreak} predicate governed for a name/type-like/field-access root
+     * {@link Doc#bestFitting(java.util.List, int[]) bestFitting} engine instead of the imperative
+     * fan-out-versus-argument-break convergence, which is not idempotent to route directly (see the note in
+     * {@link #variableInitializerBrokenOrFlat}). Present only for the exact shape the
+     * {@link #singleCallConvergesOnArgumentBreak} predicate identifies for a name/type-like/field-access root
      * ({@code NAME = Collections.newSetFromMap(new WeakHashMap<>(4))}): a single selector segment, a simple attachable
      * root, breakable non-empty non-lambda arguments, no own or contained comment, and a scope the chain renders inline.
      *
@@ -1709,14 +1704,14 @@ final class VariableInitializerLayout {
      *       renderer's fit gate, upstream of priority): its first line is the opener {@code NAME = ROOT.method(},
      *       so it fits iff the opener fits at the real rendered column.</li>
      *   <li><b>collapse, priority 0 (fewer lines).</b> {@code NAME =}⏎{@code ROOT.method(whole)} — the whole call flat on
-     *       the continuation line, the same shape the imperative fall-through built via {@code brokenInitializer} for a
+     *       the continuation line, the same shape the imperative fall-through builds via {@code brokenInitializer} for a
      *       single simple call (whose {@code forcedMethodCallChain} is empty, so it renders the call flat). This is the
-     *       "single-selector fan-out / root on the continuation line, no dot-split" the convergence-redesign names; it is
+     *       single-selector fan-out with the root on the continuation line and no dot-split; it is
      *       built directly here rather than through {@code MethodCallChainPrinter.chainFanOut}, because {@code chainFanOut}
      *       fans a single selector onto its own dotted continuation line ({@code ROOT}⏎{@code .method(...)}), which is a
      *       different (dot-split) shape than this initializer's whole-call collapse and would move the
-     *       {@code field-init-typelike-root-idempotence} {@code qualifiedRootProviders} golden. (The single-simple-arg tail
-     *       dot-split is deliberately out of scope here — that is #221 Case B / slice 4.)</li>
+     *       {@code field-init-typelike-root-idempotence} {@code qualifiedRootProviders} golden. (The single-simple-argument
+     *       tail dot-split is deliberately out of scope here.)</li>
      * </ul>
      *
      * <p><strong>Why this reproduces the golden by mechanism.</strong> When the opener fits, both arms fit and priority
@@ -1729,7 +1724,7 @@ final class VariableInitializerLayout {
      *
      * <p><strong>Comment safety.</strong> Emitted only when the call is comment-free (no own comment, no contained
      * comments). Both arms render the call once, and this returns a single {@link Doc}, so it never double-claims a comment;
-     * comment-bearing single calls stay on the imperative cascade below, exactly as the landed rankers require.
+     * comment-bearing single calls stay on the imperative cascade below, exactly as the other rankers require.
      */
     private Optional<Doc> rankedSimpleRootSingleCallConvergence(
             VariableDeclarator variable,
@@ -1767,7 +1762,7 @@ final class VariableInitializerLayout {
      * rule), the root is not an object creation (those keep their dedicated packed / broken-constructor branches, whose
      * collapse shapes {@code chainFanOut} would not reproduce), and the chain carries no own or contained comment and no
      * block-lambda argument (a fan re-renders the root once, so a comment- or block-lambda-bearing root would be
-     * double-claimed — the guard the landed {@code chainFanOut} rankers share).
+     * double-claimed — the guard the {@code chainFanOut} rankers share).
      *
      * <p><strong>Why it is a fixpoint.</strong> The forced-chain path threads the initializer's {@code NAME = }
      * {@link LayoutContext#leftEdgePrefix() leftEdgePrefix} and lands in {@code MethodCallChainPrinter.methodCallChain},
@@ -1812,11 +1807,11 @@ final class VariableInitializerLayout {
      * <p>This predicate keys the decision on AST shape (single selector segment, an attachable root) and width (the
      * argument-break opener fits) only, never on the source line breaks. Two root kinds converge here:
      * <ul>
-     *   <li>An object-creation root ({@code new X(ctorArgs).method(...)}) — the original #48 case. This root kind is still
-     *       argument-broken imperatively (its collapse is a broken-constructor / dot-split shape, not a whole-call
+     *   <li>An object-creation root ({@code new X(ctorArgs).method(...)}). This root kind is argument-broken imperatively
+     *       (its collapse is a broken-constructor / dot-split shape, not a whole-call
      *       collapse), so this predicate remains its convergence signal.</li>
      *   <li>A simple attachable name/type-like or field-access root ({@code Collections.newSetFromMap(...)},
-     *       {@code this.foo(...)}) — the #191 case, whose argument-break-versus-collapse choice now runs through the ranked
+     *       {@code this.foo(...)}), whose argument-break-versus-collapse choice runs through the ranked
      *       engine ({@link #rankedSimpleRootSingleCallConvergence}, {@code Doc.bestFitting([argument-break@1, collapse@0])}).
      *       That ranked arm pre-empts this shape in {@link #variableInitializerBrokenOrFlat}, so here the predicate does not
      *       <em>choose</em> the layout for it; it serves as the AST+width eligibility signal the source-shape gates
@@ -1848,18 +1843,11 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Measures the {@code NAME = ROOT.method(} argument-break opener at the declaration's real rendered column (the
-     * C10 "measure at the rendered column" pattern), floored by the historical {@link LayoutWidth#currentIndented}
-     * baseline so it never measures narrower than before.
-     *
-     * <p>The opener stays on the assignment line only when it fits; the fixed {@code currentIndented} budget counted one
-     * indentation unit (plus, for a local, the extra unit folded into {@code flatName}), which matches a top-level field
-     * or a method-body local but under-counts a field in a nested type or a local nested inside further blocks. At those
-     * deeper positions the fixed baseline kept an opener that renders past the line-width limit, then a re-format from the
-     * now-deeper rendered column would break it (the #137/#155 width-at-wrong-column family). {@link
-     * LayoutWidth#variableInitializer} counts the declarator's real block/type nesting depth, so the keep-opener decision
-     * matches the column the opener is actually written at; flooring by {@code currentIndented} keeps every already-correct
-     * shallow position byte-identical.
+     * Measures the {@code NAME = ROOT.method(} argument-break opener at the declaration's real rendered column via
+     * {@link LayoutWidth#variableInitializer} (which counts the declarator's block/type nesting depth), floored by
+     * {@link LayoutWidth#currentIndented} so it never measures narrower than one indentation unit. The opener stays on the
+     * assignment line only when it fits there; measuring at the true column keeps the keep-opener decision stable at deep
+     * nesting positions where a one-unit budget would under-count and admit an over-width opener.
      */
     private int openerLineWidth(VariableDeclarator variable, String openerLine) {
         return Math.max(
@@ -1886,25 +1874,25 @@ final class VariableInitializerLayout {
 
     /**
      * Decides whether an over-width object-creation-rooted single-call initializer should fan its tail compact onto its own
-     * dotted continuation line instead of opening the tail's single argument (#221 Case B / slice 4). It holds only for the
-     * exact shape that would otherwise arg-open:
+     * dotted continuation line instead of opening the tail's single argument. It holds only for the exact shape that would
+     * otherwise arg-open:
      * <ul>
      *   <li>an object-creation root ({@code new X(...)}) with exactly one selector segment — the same
      *       {@code rootIsObjectCreation && singleCall} shape the object-creation argument-break branch owns;</li>
      *   <li>a tail whose argument list is a single <em>simple</em> argument ({@link #tailHasSingleSimpleArgument}); a
-     *       multi-argument or lambda tail is out of #221's scope and keeps opening; and</li>
+     *       multi-argument or lambda tail is not a single-simple-argument tail and keeps opening; and</li>
      *   <li>an opener that still fits on the assignment line ({@link #argumentBreakOpenerFits}, {@code NAME = new X(...).selector(}
-     *       within budget). This is the precise boundary that scopes the flip to the cases that <em>currently</em> arg-open.
+     *       within budget). This is the precise boundary that scopes this shape to the calls that would otherwise arg-open.
      *       When the opener-with-selector overflows (a long constructor whose {@code new X(...).selector(} does not fit) the
      *       call already fans onto its own continuation line through {@link #variableWithPackedMethodCallChain} — declining
-     *       here leaves that (identical-looking) shape to the unchanged overflow path.</li>
+     *       here leaves that (identical-looking) shape to the overflow path.</li>
      * </ul>
      *
      * <p>The chosen shape is the same chain-continuation (+8) fan-out {@link #variableWithPackedMethodCallChain} already
      * produces for an opener-overflow single-selector tail (the {@code buildLongConstructorStrategy}/
-     * {@code buildShortConstructorStrategy} goldens), so Case 1 fans at the same indent as its opener-overflow siblings
+     * {@code buildShortConstructorStrategy} goldens), so this shape fans at the same indent as its opener-overflow siblings
      * rather than at the shallower {@code MethodCallChainPrinter.objectRootSingleSegmentChain} indent the {@code return}
-     * chain's #236 dot-split uses. Every input is an AST-shape or rendered-column-width fact, never a source line break, so
+     * chain's dot-split uses. Every input is an AST-shape or rendered-column-width fact, never a source line break, so
      * the decision is a fixpoint: re-formatting the produced fan-out re-derives the same facts and re-emits it (see the call
      * site for why emitting here — ahead of the source-shape-sensitive collapse branches — is what makes it idempotent).
      */
@@ -1922,7 +1910,7 @@ final class VariableInitializerLayout {
     /**
      * Identifies a call whose argument list is exactly one <em>simple</em> argument — a bare name, field access,
      * {@code this}/{@code super}, or literal. This mirrors {@code MethodCallChainPrinter.singleSimpleMethodCallSegmentArgument}
-     * (the classification the return chain's #236 dot-split and {@code objectRootSingleSegmentChain}'s compact-tail branch
+     * (the classification the return chain's dot-split and {@code objectRootSingleSegmentChain}'s compact-tail branch
      * use) so the initializer's single-simple-arg tail gate keeps the same notion of "simple" as the chain segment renderer
      * it ultimately routes through; a lambda, nested call, or multi-argument tail is not simple and keeps opening its
      * argument list. It is the inverse of {@code ControlConditionMethodCallLayout.hasComplexArgument} for the single-argument
@@ -2210,7 +2198,7 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * PR #279 review (#17): reports a comment-carrying, single-selector object-creation-rooted chain whose tail call
+     * Reports a comment-carrying, single-selector object-creation-rooted chain whose tail call
      * takes no arguments ({@code new X(...).build()} / {@code new RelaySubject<>(...).withoutAuthentication()}) that has
      * no interior break point — the constructor already fits on its own line and the empty tail cannot open an argument
      * list — yet overruns when attached after {@code NAME = } at a deep column (a wide declaration prefix such as a
@@ -2251,14 +2239,14 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * PR #279 review (#11): renders the {@link #attachedSingleSegmentChainMustBreakAfterEquals} shape as a DOT-BREAK — the
+     * Renders the {@link #attachedSingleSegmentChainMustBreakAfterEquals} shape as a DOT-BREAK — the
      * constructor root on the assignment line and the zero-argument tail selector fanned onto its own dotted continuation
      * line ({@code = new RelaySubject<>(...)}⏎{@code .withoutAuthentication(); // note}) — whenever the constructor opener
      * fits on the assignment line. This supersedes break-after-{@code =} for exactly this comment-bearing, empty-tail
-     * object-creation chain: the width-driven no-comment sibling already dot-breaks (its {@code (A)} conditional group fans
-     * the tail at the true column), so reproducing that shape byte-for-byte on the comment sink makes the two converge — a
-     * flat-source pass fans through {@code (A)}, and the re-parsed broken-source pass, which parks the trailing comment on
-     * the selector line, reaches here and lands the identical fan (a one-pass fixpoint).
+     * object-creation chain: the width-driven no-comment sibling already dot-breaks (its renderer-measured conditional
+     * group fans the tail at the true column), so reproducing that shape byte-for-byte on the comment sink makes the two
+     * converge — a flat-source pass fans through that gate, and the re-parsed broken-source pass, which parks the trailing
+     * comment on the selector line, reaches here and lands the identical fan (a one-pass fixpoint).
      *
      * <p>Built HERE, ahead of {@code variableWithMethodCallChain}, rather than by attaching the pre-built chain doc: the fan
      * must claim the trailing comment itself. The chain doc ({@code methodCallWithSemicolon}) renders the comment-bearing
@@ -2331,15 +2319,11 @@ final class VariableInitializerLayout {
             methodCallChainRootIsObjectCreation.test(methodCall)
             && openerLineWidth(variable, flatName + " = " + firstLine + ";") > options.lineWidth()
         ) {
-            // PR #279: prefer breaking the constructor's argument list over breaking after `=`. The chain root's
-            // constructor renders through a column-aware Doc.group (ObjectCreationPrinter.widthDrivenObjectCreation),
-            // so when the whole flat constructor cannot start after `NAME = ` we still attach the chain — provided the
-            // constructor OPENER (`new X(`) itself fits on the assignment line — and let the renderer break the argument
-            // list at the true rendered column (the same column the emitted `NAME = ` already advanced to). The attach
-            // probe's `firstLine` is the full compact constructor, measured by the planner at the base indent (a
-            // wrong-column read, the #137/#155 family), so it over-reports the fit and forces break-after-`=`; measuring
-            // the opener here at the real `NAME = ` column recovers the constructor-arg break. Only when even the opener
-            // cannot start after `NAME = ` do we break after `=`.
+            // Prefer breaking the constructor's argument list over breaking after `=`. The chain root's constructor
+            // renders through a column-aware Doc.group (ObjectCreationPrinter.widthDrivenObjectCreation), so when the flat
+            // constructor cannot start after `NAME = ` we still attach the chain — provided the constructor OPENER
+            // (`new X(`) fits on the assignment line, measured here at the real `NAME = ` column — and let the renderer
+            // break the argument list. Only when even the opener cannot start after `NAME = ` do we break after `=`.
             Optional<String> constructorOpener = objectCreationChainRootOpener(methodCall);
             if (
                 constructorOpener.isPresent()
@@ -2358,7 +2342,7 @@ final class VariableInitializerLayout {
 
     /**
      * Returns the constructor opener ({@code new X(}) of an object-creation-rooted chain, so the initializer can probe
-     * whether the constructor can start on the assignment line and its argument list break below it (PR #279). The opener
+     * whether the constructor can start on the assignment line and its argument list break below it. The opener
      * is only offered when the root constructor actually carries an argument list to break; a no-argument constructor has
      * nothing to reflow, so it stays on the break-after-{@code =} path. The root is located by walking the receiver spine
      * (through method-call and field-access selectors) to the {@link ObjectCreationExpr} that
@@ -2394,7 +2378,7 @@ final class VariableInitializerLayout {
     /**
      * Chooses the conditional initializer shape, preferring to break the ternary itself over breaking after {@code =}.
      *
-     * <p>Break-after-{@code =} is a last resort (PR #279 review): when {@code NAME = <whole ternary>} overflows we would
+     * <p>Break-after-{@code =} is a last resort: when {@code NAME = <whole ternary>} overflows we would
      * rather keep the condition on the {@code NAME = <condition>} line and let the ternary own its {@code ?}/{@code :}
      * break than strand {@code =} at end of line. So the condition-stays-on-the-{@code =}-line shapes (a condition that
      * fits after {@code =}, or a parenthesized condition whose opener fits) are chosen ahead of the break-after-{@code =}
@@ -2434,8 +2418,8 @@ final class VariableInitializerLayout {
 
     private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
         return initializer.getCondition() instanceof EnclosedExpr
-            // C10-c: measure the {@code NAME = (} opener at the initializer's true rendered block/type depth instead of
-            // the fixed CURRENT baseline.
+            // Measure the {@code NAME = (} opener at the initializer's true rendered block/type depth rather than a fixed
+            // current-column baseline.
             && layoutWidth.nodeLine(initializer, flatName + " = (") <= options.lineWidth();
     }
 
@@ -2462,8 +2446,8 @@ final class VariableInitializerLayout {
         String lambdaPrefix = parameters + " ->";
         // The chain here is an expression-lambda body (NAME = params -> chain), a distinct position from the direct
         // initializer chain: its same-line prefix is NAME = params -> , not NAME = . Threading a non-empty leftEdgePrefix
-        // here would newly activate the object-creation dot-split for lambda-body chains too, which is out of the
-        // initializer-chain slice's scope (mirroring #236 keeping return scoped to the direct return chain).
+        // here would activate the object-creation dot-split for lambda-body chains too, which is out of the
+        // initializer chain's scope (mirroring how the return chain keeps its dot-split scoped to the direct return chain).
         // Pass root(); the firstLineWidth probe still folds the lambda prefix in, so this stays byte-identical.
         Doc body = initializerChain
                 .apply(
@@ -2472,8 +2456,8 @@ final class VariableInitializerLayout {
                     LayoutContext.root()
                 )
                 .orElseGet(() -> expression.apply(methodCall));
-        // C10-c: measure the {@code NAME = params -> body} first line at the declarator's true rendered block/type depth
-        // ({@link LayoutWidth#variableInitializer}) instead of the fixed CURRENT baseline.
+        // Measure the {@code NAME = params -> body} first line at the declarator's true rendered block/type depth
+        // ({@link LayoutWidth#variableInitializer}) rather than a fixed current-column baseline.
         if (
             layoutWidth.variableInitializer(variable, flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
                 <= options.lineWidth()
@@ -2509,7 +2493,7 @@ final class VariableInitializerLayout {
         // assignment line) does NOT reach here — variableInitializerBrokenOrFlat pre-empts it with the argument-break
         // shape under singleCallConvergesOnArgumentBreak, a deliberate idempotence-preserving convergence choice. Rerouting
         // it to the dot-split fan-out is non-idempotent for initializers (unlike return, the initializer layout space has a
-        // break-after-= collapse the fan-out oscillates with), so it is left as-is and deferred.
+        // break-after-= collapse the fan-out oscillates with), so it keeps the argument-break shape.
         return initializerChain.apply(
             methodCall,
             firstLineWidth(variable, flatName + " = "),
@@ -2534,7 +2518,7 @@ final class VariableInitializerLayout {
         if (
             !lambdaExpr.getBody().isBlockStmt()
             || !lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            // C10-c: measure the {@code NAME = (} opener at the lambda's true rendered block/type depth instead of CURRENT.
+            // Measure the {@code NAME = (} opener at the lambda's true rendered block/type depth, not the current column.
             || layoutWidth.nodeLine(lambdaExpr, flatName + " = (") > options.lineWidth()
         ) {
             return Optional.empty();
@@ -2556,8 +2540,8 @@ final class VariableInitializerLayout {
         String parameters = lambdaParameters.apply(lambdaExpr);
         if (
             lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            // C10-c: measure the {@code NAME = params -> {} opener at the lambda's true rendered block/type depth instead
-            // of the fixed CURRENT baseline.
+            // Measure the {@code NAME = params -> {} opener at the lambda's true rendered block/type depth rather than a
+            // fixed current-column baseline.
             || layoutWidth.nodeLine(lambdaExpr, flatName + " = " + parameters + " -> {") > options.lineWidth()
         ) {
             return Optional.empty();
@@ -2635,7 +2619,7 @@ final class VariableInitializerLayout {
     }
 
     private boolean castTypeNeedsBreak(String flatName, Type type) {
-        // C10-c: measure the cast opener at the type's true rendered block/type depth instead of the fixed CURRENT
+        // Measure the cast opener at the type's true rendered block/type depth rather than a fixed current-column
         // baseline. The cast type sits directly under the declarator (no intervening block/type), so it shares the
         // declarator's rendered depth.
         return castTypeCanBreak(type)
@@ -2643,7 +2627,7 @@ final class VariableInitializerLayout {
     }
 
     private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {
-        // C10-c: measure the {@code NAME = (Type)} opener at the type's true rendered block/type depth instead of CURRENT.
+        // Measure the {@code NAME = (Type)} opener at the type's true rendered block/type depth, not the current column.
         return layoutWidth.nodeLine(type, flatName + " = " + castTypeOpener(type)) <= options.lineWidth();
     }
 

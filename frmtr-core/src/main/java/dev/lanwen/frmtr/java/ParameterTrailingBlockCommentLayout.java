@@ -23,7 +23,7 @@ import java.util.function.Function;
  * comments in the window after the last parameter ends and before that {@code ")"} ({@link #precedesCloseParen}).
  * Selecting by source order (not same-line) keeps the comment owned by the parameter under a collapsed/expanded layout,
  * while bounding strictly at {@code ")"} (never the body) keeps the recovery from stealing a following member's leading
- * comment (PR #20's narrowing).
+ * comment.
  *
  * <p>The boundary lets the parameter renderer ask one authority for the trailing-comment text
  * ({@link #parameterTrailingBlockCommentText}) instead of carrying the close-paren token scan and window checks inline.
@@ -72,7 +72,7 @@ final class ParameterTrailingBlockCommentLayout {
      * belong to the last parameter.
      *
      * <p>By source order, not same-line: a {@code param /* note *​/)} comment and an expanded layout that keeps it before
-     * {@code ")"} both qualify, while bounding strictly at {@code ")"} (never the body) preserves PR #20's narrowing —
+     * {@code ")"} both qualify, while bounding strictly at {@code ")"} (never the body) keeps the recovery narrow —
      * a following member's leading block a collapse slides onto the parameter's line begins after {@code ")"} and is
      * rejected. The closing paren is the first {@code RPAREN} at or after the parameter ends (a {@code ")"} from the
      * parameter's own annotation/type ends earlier and is skipped); a missing source range keeps the gate closed.

@@ -128,10 +128,9 @@ final class NestedBinaryParenthesesLayout {
      * The extra columns the flat render adds as clarity parentheses over the bare {@code compact} form: two per nested
      * binary operand that {@link #shouldParenthesizeLeftBinary} / {@link #shouldParenthesizeNestedBinary} wrap. A width
      * gate adds this to the compact width to measure the <em>canonical</em> parenthesized form, so its verdict is
-     * invariant to whether the source already carries those parens (frmtr inserts them either way) — the fix for a
-     * routing gate that otherwise oscillated between passes (#137, family D). An operand already wrapped as an
-     * {@code EnclosedExpr} is not a {@code BinaryExpr} here, so its parens are counted through the compact text rather
-     * than added twice.
+     * invariant to whether the source already carries those parens (frmtr inserts them either way). An operand already
+     * wrapped as an {@code EnclosedExpr} is not a {@code BinaryExpr} here, so its parens are counted through the compact
+     * text rather than added twice.
      */
     int clarityParenWidth(Expression expression) {
         int pairs = 0;

@@ -205,12 +205,11 @@ final class IfStatementLayout {
      * source shape, as a single together-rendered cluster.
      *
      * <p>A block between the then {@code }} and {@code else}/{@code else if} is split across nodes (trailing lines as the
-     * {@code if}'s orphans, the line above {@code else} as that node's own trivia); reading either slot alone split the
-     * block and rotated the lines every pass (re-parsing re-split them differently), mangling {@code else if} into
+     * {@code if}'s orphans, the line above {@code else} as that node's own trivia); reading either slot alone splits the
+     * block and rotates the lines every pass (re-parsing re-splits them differently), mangling {@code else if} into
      * {@code else //\n if}. Claiming the whole gap block in one slot
      * ({@link JavaCommentPlacementPolicy#gapLeadingLineCommentBlock(Node, Node, java.util.Collection)}) renders it once,
-     * together, above {@code else} (#115). At {@code @default} the block is one contiguous run, rendered in the same
-     * order.
+     * together, above {@code else}. At {@code @default} the block is one contiguous run, rendered in the same order.
      *
      * <p>{@code elseKeywordUpperBound}, when present, restricts this slot to the separator gap (comments before the
      * {@code else} keyword). It is supplied only for a braceless else body, whose own leading {@code //} block lives

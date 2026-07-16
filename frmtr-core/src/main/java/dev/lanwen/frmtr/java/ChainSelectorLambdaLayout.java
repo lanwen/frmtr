@@ -171,8 +171,8 @@ final class ChainSelectorLambdaLayout {
      * fluent chain whose scope links carry no inter-link comment and whose final call is another comment-carrying
      * huggable lambda (the {@code route.parcels().forEach(parcel -> …)} shape), its scope links pack flat and the nested
      * lambda hugs in turn, so the whole head stays on one line and only the comment-driven body breaks. An inter-link
-     * comment between scope links (the {@code #94} {@code Optional.of(x) // note .map(y)} shape) instead falls through to
-     * the ordinary chain renderer, which lays the scope one-per-line with that comment preserved.
+     * comment between scope links (the {@code Optional.of(x) // note .map(y)} shape) instead falls through to the
+     * ordinary chain renderer, which lays the scope one-per-line with that comment preserved.
      */
     private Optional<Doc> huggedCommentLambdaTail(LambdaExpr lambdaExpr) {
         LambdaExpr innermost = lambdaExpr;
@@ -242,7 +242,7 @@ final class ChainSelectorLambdaLayout {
      * {@code route.parcels().forEach(parcel -> …)} of a {@code manifest.routes().forEach(route -> …)} fan). When the hugged
      * body already breaks across lines — a gap comment, a broken body call, or a deeper nested hug — the enclosing call's
      * {@code )} dedents onto its own line so it aligns under the fanned selector rather than gluing at the body's inner
-     * indent ({@code merge(…}⏎{@code )}⏎{@code ))} instead of {@code merge(…}⏎{@code )))}), matching PR #279 review. The
+     * indent ({@code merge(…}⏎{@code )}⏎{@code ))} instead of {@code merge(…}⏎{@code )))}). The
      * outermost {@link #huggedCommentCarryingExpressionLambdaSegment} closer then glues to this dedented line, so the whole
      * run of enclosing closers lands together under the selector. A body that renders on a single line (nothing forced it
      * to break) keeps the collapsed {@code …)} shape. The dedented closer re-parses to the same chain and comment
@@ -446,7 +446,7 @@ final class ChainSelectorLambdaLayout {
             // in a method body renders {@code .map(p -> …)} at {@code 16 + len} but the budget reads {@code 12 + len}), so
             // a body whose flat selector overflows the real column yet fits the under-counted budget reads as "fits", the
             // shared renderer withholds the hug, and the selector breaks its argument list / drops the lambda arrow onto
-            // its own line (PR #279 review, expression-lambda argument-opener cluster — {@code .flatMap(record -> …)} and
+            // its own line (the expression-lambda argument-opener cluster — {@code .flatMap(record -> …)} and
             // {@code .map(plan -> plan.firstLineFits(…))}). Single-call-safe bodies keep the fixed budget so their
             // established opener-hug shapes ({@code .forEach((tp, pd) -> add(…))}) do not churn.
             ToIntFunction<String> hugColumnWidth =
@@ -551,7 +551,7 @@ final class ChainSelectorLambdaLayout {
         // A conditional group (NOT bestFitting) chooses flat-vs-hug purely by whether the flat selector fits at the live
         // column. This is deliberate: the fan-carrying selector nests inside the enclosing chain fan (itself a bestFitting on
         // the return/initializer seams), and a per-selector {@code bestFitting} would sit past the {@code MAX_BEST_FITTING_DEPTH}
-        // linear-time bound (D16) — beyond which {@code chooseBestFitting} silently keeps the FIRST (flat) arm, flattening an
+        // linear-time bound — beyond which {@code chooseBestFitting} silently keeps the FIRST (flat) arm, flattening an
         // over-wide chain body onto one line. A conditional group is not depth-bounded: it flat-fit-probes {@code flatBody} and
         // renders the {@code hugBody} (which carries forced breaks and so never "fits flat") as the unconditional fallback when
         // {@code flatBody} overflows. The verdict is a pure function of the AST (compact flat width vs. the live column), so the
@@ -683,7 +683,7 @@ final class ChainSelectorLambdaLayout {
         }
         // The shared renderer withheld the body (or handed back a degenerate flat one-liner) and the direct opener did not
         // claim it either: yield so the caller keeps the {@link #brokenMethodCallSegment} shape, the same fallback the
-        // sibling method-call branch and the pre-D3 seam reach for every body this hug does not own.
+        // sibling method-call branch reaches for every body this hug does not own.
         return Optional.empty();
     }
 

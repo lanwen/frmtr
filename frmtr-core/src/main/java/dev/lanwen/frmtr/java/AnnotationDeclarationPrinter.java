@@ -126,11 +126,11 @@ final class AnnotationDeclarationPrinter {
      *
      * <p>Once parse-error recovery has been ruled out, both the empty and the populated member list are delegated to the
      * shared member-block renderer rather than rendered locally. The shared renderer is the single place that preserves
-     * brace-line trailing comments and orphan comments that no member owns; rendering members locally dropped those
-     * comments because nothing scanned the annotation body trivia. Delegating keeps comment, pragma, and blank-line
-     * decisions identical to class, interface, enum, and record bodies, including the established single-line gap after
-     * the opening brace that {@link MemberBlockPrinter} now applies to annotation owners. Only the parse-error recovery
-     * branch stays local because it owns the annotation-specific raw-gap recovery contract.
+     * brace-line trailing comments and orphan comments that no member owns; rendering members locally would drop those
+     * comments because nothing scans the annotation body trivia. Delegating keeps comment, pragma, and blank-line
+     * decisions identical to class, interface, enum, and record bodies, including the single-line gap after the opening
+     * brace that {@link MemberBlockPrinter} applies to annotation owners. Only the parse-error recovery branch stays
+     * local because it owns the annotation-specific raw-gap recovery contract.
      */
     private Doc annotationMemberBlock(AnnotationDeclaration declaration) {
         Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan = recoveryPlan(declaration);
@@ -302,7 +302,7 @@ final class AnnotationDeclarationPrinter {
             + " "
             + declaration.getNameAsString()
             + "()";
-        // C10-c: measure the annotation member signature at its true rendered type-body depth
+        // Measure the annotation member signature at its true rendered type-body depth
         // ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
         if (layoutWidth.nodeLine(declaration, modifierText + flatSignature) <= options.lineWidth()) {
             return Doc.text(flatSignature);

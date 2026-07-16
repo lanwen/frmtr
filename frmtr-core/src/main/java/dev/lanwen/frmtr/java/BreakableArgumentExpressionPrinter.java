@@ -46,8 +46,8 @@ final class BreakableArgumentExpressionPrinter {
      *
      * <p>The flat/broken choice is a {@link Doc#conditionalGroup(List)} ranked by the renderer at
      * the argument's true output column, not a precomputed {@link LayoutWidth} continuation-budget probe. Because both
-     * arms are pure functions of the AST, the choice is a fixpoint (the pre-flip {@code CONTINUATION}-probe-to-group
-     * conversion oscillated because the surrounding hub still read source shape; post-flip it does not), and the renderer
+     * arms are pure functions of the AST, the choice is a fixpoint — a fixed {@link LayoutWidth} continuation-budget
+     * probe would instead oscillate, because it reads the surrounding source shape — and the renderer
      * measures the real column so a deeply nested argument breaks instead of freezing flat over width. The trailing
      * comma/tail the caller appends after this Doc is accounted for by the renderer's line-fit lookahead, so no width
      * suffix needs to be threaded here.
@@ -62,7 +62,7 @@ final class BreakableArgumentExpressionPrinter {
         // them forever (KafkaConsumerTest {@code chain + 1}, SinglePointMetricTest {@code chain || chain}). {@code flat}
         // is itself a pure function of the AST — the chain fans by the width-independent link-count rule on every pass —
         // so returning it unconditionally is the fixpoint. Chains the rule does not fan (a plain-receiver 1–2-link
-        // operand, the #119 {@code binary-chain-wrap-converge} guard) and comment / lambda chains are excluded by
+        // operand, the source-shape-independent {@code binary-chain-wrap-converge} guard) and comment / lambda chains are excluded by
         // {@code binaryFansChainOperand}, so those arguments keep the width-driven {@code broken} arm below. The carve-out
         // predicate is the shared {@link MethodCallChainPrinter#binaryFansChainOperand}, so every binary-operand carrier
         // (this argument path, the single-binary-argument path, the broken object-creation binary argument) applies one

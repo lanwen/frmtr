@@ -209,7 +209,7 @@ final class TryStatementLayout {
         // The flat-collapse decision must be width-driven, not source-shape-driven, or the section never converges. For a
         // single resource, a broken initializer call is incidental (not a deliberate one-per-line shape), so honoring
         // spansMultipleLines there would flip-flop the section between opener-break and attached-argument-break every
-        // pass (issue #98); with two or more resources it does capture a deliberate one-per-line layout and still gates.
+        // pass; with two or more resources it does capture a deliberate one-per-line layout and still gates.
         boolean preserveAuthorMultiline = statement.getResources().size() > 1 && resourceShape.spansMultipleLines();
         if (
             !preserveAuthorMultiline
@@ -251,8 +251,8 @@ final class TryStatementLayout {
      *
      * <p>The fit gates ask whether the flat opener ({@code try (…) {}} for the whole-section collapse, or
      * {@code try (Type name = scope.call(} for a single attached method-call resource) fits on one line. The fixed
-     * {@link LayoutWidth#currentIndented} baseline under-counted the {@code try}'s real block/type nesting, collapsing
-     * resource lists that overflowed their true column past the width limit (#219); {@link LayoutWidth#nodeLine}
+     * {@link LayoutWidth#currentIndented} baseline under-counts the {@code try}'s real block/type nesting, which would
+     * collapse resource lists that overflow their true column past the width limit; {@link LayoutWidth#nodeLine}
      * reproduces the rendered column regardless of source layout. {@code currentIndentedWidth} is kept as a floor so a
      * {@code try} directly under a member (no enclosing block) still measures against at least one unit.
      */
@@ -462,8 +462,8 @@ final class TryStatementLayout {
      *
      * <p>A line comment directly above {@code try (} is the statement's own leading comment (attached to the
      * {@link TryStmt}, rendered before {@code try} by the enclosing block) that only looks adjacent to the first
-     * resource. Counting it forced the section to stay broken even when the flat form fit, so it never converged
-     * (issue #98). Filtering to comments at or after the {@code try} keyword keeps genuine in-section comments (openers,
+     * resource. Counting it would force the section to stay broken even when the flat form fits, so it would never
+     * converge. Filtering to comments at or after the {@code try} keyword keeps genuine in-section comments (openers,
      * inter-resource notes, non-first-resource comments) while ignoring the own leading comment.
      */
     private boolean tryResourcesHaveLeadingComments(TryStmt statement) {
@@ -496,7 +496,7 @@ final class TryStatementLayout {
      * ({@link CommentTracker#trailingLineCommentBlockAfter(Node, Node, Optional)}) keeps the same ownership via the
      * {@code try} orphans source-ordered between this body's end and the next clause. A recovered multi-line {@code //}
      * block between two {@code catch} clauses renders {@link Doc#HARD_LINE}-separated, since fusing it into the next
-     * clause body as one line corrupts the comment (issue #128).
+     * clause body as one line corrupts the comment.
      */
     private Doc clauseTrailingComment(TryStmt statement, Node body, Optional<? extends Node> next) {
         Doc own = comments.trailingLineComment(body);
@@ -513,7 +513,7 @@ final class TryStatementLayout {
      *
      * <p>Both halves can be present when a {@code //} block between two {@code catch} clauses is split by JavaParser into
      * {@code try} orphans and a final line on the next clause; a {@link Doc#HARD_LINE} separates them so the orphan
-     * block's last line does not fuse onto the clause's own line (issue #128). One half alone passes through unchanged.
+     * block's last line does not fuse onto the clause's own line. One half alone passes through unchanged.
      */
     private Doc clauseLeadingComment(Doc previousTrailing, Doc ownLeading) {
         if (previousTrailing == Doc.EMPTY) {
@@ -601,8 +601,8 @@ final class TryStatementLayout {
     /**
      * Prints a try-related block after optional comment docs have been handed off from the previous clause.
      *
-     * <p>Empty try blocks keep the historic multi-line {@code {\n}} shape, but comments handed in from an adjacent
-     * catch or finally force the normal block-with-leading path so the comment has an inside-the-block home.
+     * <p>Empty try blocks keep the multi-line {@code {\n}} shape, but comments handed in from an adjacent catch or
+     * finally force the normal block-with-leading path so the comment has an inside-the-block home.
      */
     private Doc tryBlock(BlockStmt block, Doc leadingInside) {
         if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty() && leadingInside == Doc.EMPTY) {

@@ -703,7 +703,7 @@ final class SwitchPrinter {
      * partitioned by {@link #caseLabelLine(SwitchEntry)}: only comments on the label's line genuinely trail it and are
      * offered here (claimed once, rendered as a {@link Doc#lineSuffix(Doc)} by {@link #switchStatementGroupEntry}); a
      * {@code //} block on lines below the label is a leading comment of the body, owned by
-     * {@link #caseLabelLeadingBodyComments} rather than hoisted onto the {@code case} line (issue #88). Only old-style
+     * {@link #caseLabelLeadingBodyComments} rather than hoisted onto the {@code case} line. Only old-style
      * {@code case:}/{@code default:} statement groups reach this; rule entries keep their own trailing handling.
      */
     private Doc caseLabelTrailingComment(SwitchEntry entry) {
@@ -724,10 +724,10 @@ final class SwitchPrinter {
      *
      * <p>The own-line counterpart of {@link #caseLabelTrailingComment}: same gap recovery, but keeps only comments that do
      * <em>not</em> begin on the label's line ({@link #caseLabelLine(SwitchEntry)}). In every parser shape these are not the
-     * body's own trivia, so the body renderer never prints them; left unclaimed they were dropped, and older code that
-     * hoisted them onto the {@code case} line corrupted the attachment (issue #88). Rendering them once as their own
-     * indented lines before the body places them where leading comments render elsewhere. Does not overlap the body's own
-     * leading comments ({@link #switchEntryStatements}), which the gap recovery already excludes.
+     * body's own trivia, so the body renderer never prints them; left unclaimed they drop, and hoisting them onto the
+     * {@code case} line corrupts the attachment. Rendering them once as their own indented lines before the body places
+     * them where leading comments render elsewhere. Does not overlap the body's own leading comments
+     * ({@link #switchEntryStatements}), which the gap recovery already excludes.
      */
     private List<Doc> caseLabelLeadingBodyComments(SwitchEntry entry) {
         int labelLine = caseLabelLine(entry);
@@ -961,8 +961,8 @@ final class SwitchPrinter {
      * break.
      *
      * <p>Statements are sequenced through {@link SourceOrderedCommentInterleaver} like an ordinary block; the interleaver
-     * restores a standalone inter-statement {@code //} comment that JavaParser parked as entry orphan trivia (which the
-     * plain separator loop dropped, most visibly when a blank line detached it from the next statement — issue #133).
+     * restores a standalone inter-statement {@code //} comment that JavaParser parked as entry orphan trivia, which a
+     * plain separator loop would drop — most visibly when a blank line detaches it from the next statement.
      * Claim-coupling keeps comments already placed by {@link #caseLabelTrailingComment}/{@link #caseLabelLeadingBodyComments}
      * from rendering twice; blank-line spacing stays source-driven, matching the regular block path.
      */
@@ -994,7 +994,7 @@ final class SwitchPrinter {
      * label) alongside genuine inter-statement comments. The label-region ones are already rendered by the label printer
      * ({@link SwitchCaseLabelLayout#defaultSwitchEntryLabel}/{@link SwitchCaseLabelLayout#commentPreservingCaseLabel}) and
      * {@link #caseLabelLeadingBodyComments}, so bounding to comments not before the first statement avoids re-emitting them
-     * while still restoring the dropped inter-statement orphan (issue #133).
+     * while still restoring the otherwise-dropped inter-statement orphan.
      */
     private List<JavaCommentTrivia> interStatementOrphanComments(SwitchEntry entry, NodeList<Statement> statements) {
         List<JavaCommentTrivia> orphans = commentPlacementPolicy.orphanCommentsOutsideChildRanges(entry, statements);

@@ -156,13 +156,12 @@ final class ExpressionLambdaArgumentLayout {
     /**
      * Column-carrying overload of {@link #methodCallBodyWithOpener(String, MethodCallExpr)}.
      *
-     * <p>D3 keystone (consumed): {@code columnWidth} carries the true segment column the chain-segment call-site threads.
-     * The opener-fit comparison below now takes the wider of the fixed-budget {@link #expressionFirstLineWidth} /
+     * <p>{@code columnWidth} carries the true segment column the chain-segment call-site threads. The opener-fit
+     * comparison below takes the wider of the fixed-budget {@link #expressionFirstLineWidth} /
      * {@link #brokenArgumentListLambdaBodyWidth} probes and the true-column {@code columnWidth} reading (monotone: it can
      * only ever break an opener that overflows at its real fanned continuation column, never relax the gate for a shallow
      * call), so the object-creation-rooted-chain-in-lambda-body opener fans width-driven at its real segment column. The
-     * 2-arg form defaults {@code columnWidth} to {@link #expressionFirstLineWidth}, so shallow call-arg sites reproduce
-     * today's value.
+     * 2-arg form defaults {@code columnWidth} to {@link #expressionFirstLineWidth} for shallow call-arg sites.
      */
     Optional<Doc> methodCallBodyWithOpener(
             String parameters,
@@ -247,8 +246,8 @@ final class ExpressionLambdaArgumentLayout {
      *
      * <p>The opener line is built from {@code methodCallPrefix} — the call scope and selector compacted to a single line —
      * which strips comments, while only the argument list is rendered through a comment-preserving path. A line comment
-     * that sits between the body chain's scope and selector (the issue #94 shape, {@code Optional.of(x) // note .map(y)})
-     * therefore lives outside every argument subtree and would be silently dropped by this opener shape. Detecting that
+     * that sits between the body chain's scope and selector ({@code Optional.of(x) // note .map(y)}) therefore lives
+     * outside every argument subtree and would be silently dropped by this opener shape. Detecting that
      * lets the caller fall through to the comment-preserving renderers (the source-multiline header shape and the broken
      * body fallback, both of which render the body through the full chain printer). A comment that lies inside an argument
      * is unaffected, so a body whose only comments are nested in a lambda argument keeps the compact opener layout.
@@ -334,15 +333,11 @@ final class ExpressionLambdaArgumentLayout {
     /**
      * Column-carrying overload of {@link #huggableMethodCallArguments(String, NodeList)}.
      *
-     * <p>D3 keystone (see {@code docs/proposals/layout-decision-model.md}): {@code columnWidth} carries the true segment
-     * column — the width oracle the chain-segment call-site threads (its {@code compactSegmentWidth}), measuring at the
-     * real fanned continuation column rather than the fixed shallow baseline the internal probes assume. It is
-     * threaded-but-NOT-consulted here (byte-identical): every body-shape probe below still decides flat-vs-break with the
-     * fixed-budget {@link #expressionFirstLineWidth} / {@code nodeIndentWidth}-based expressions exactly as before, and the
-     * 2-arg form above defaults {@code columnWidth} to {@link #expressionFirstLineWidth} so
-     * {@code columnWidth.applyAsInt(text)} reproduces today's value. Consuming it — routing the hug body-shape gates
-     * ({@link #openerOverflows}, {@link #compactBodyWithClosingLine}, the fan probes) through the true column — is the
-     * atomic D3 flip, out of scope for this slice.
+     * <p>{@code columnWidth} carries the true segment column — the width oracle the chain-segment call-site threads (its
+     * {@code compactSegmentWidth}), measuring at the real fanned continuation column rather than the fixed shallow
+     * baseline the internal probes assume. The body-shape probes below decide flat-vs-break with the fixed-budget
+     * {@link #expressionFirstLineWidth} / {@code nodeIndentWidth}-based expressions rather than this oracle; the 2-arg
+     * form above defaults {@code columnWidth} to {@link #expressionFirstLineWidth}.
      */
     Optional<Doc> huggableMethodCallArguments(
             String prefix,
@@ -412,11 +407,9 @@ final class ExpressionLambdaArgumentLayout {
         }
         if (logicalBinaryBody(bodyExpression).isPresent()) {
             if (logicalBinaryFirstLineFits(firstLine, bodyExpression)) {
-                // Source-neutral (G3): the enclosing call's {@code )} always dedents onto its own line below a broken
-                // logical lambda body. This matches the sibling {@link #logicalBinaryLambdaBodyOpenerHug}, which builds the
-                // same shape directly and always dedents the close so the render is a fixpoint; the retired
-                // {@code ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine} used to attach the close on the
-                // body's last line when the author's source put it there, which flipped the shape across passes.
+                // Source-neutral: the enclosing call's {@code )} always dedents onto its own line below a broken logical
+                // lambda body. This matches the sibling {@link #logicalBinaryLambdaBodyOpenerHug}, which builds the same
+                // shape directly and always dedents the close, so the render is a fixpoint.
                 return Optional.of(
                     Doc.concat(
                         Doc.text(firstLine + " "),
@@ -438,13 +431,13 @@ final class ExpressionLambdaArgumentLayout {
         // The lambda-body-position canonical fan. A method-call chain that IS a lambda
         // body and reaches the structural fan threshold ({@code lambdaBodyChainFansByCanonicalRule}) fans one selector per
         // line — root on the {@code ->} line, each {@code .call(...)} on its own continuation line — the same
-        // source-neutral shape every other chain position already cuts over to, even when the flat body would fit. This
-        // runs BEFORE the fitting {@code compactBodyWithClosingLine} shape so a fan-threshold chain fans instead of staying
-        // flat, matching gjf/prettier's "one segment per line once the chain is a builder" convention. Comment-bearing,
-        // block-lambda, and lambda-arrow (attachable expression-lambda-body) chains are withheld by the shared canonical
-        // rule; object-creation-rooted chains ({@code new X().setA(...)}) are additionally withheld by the lambda-body gate
-        // because the hugged fan renders that root at column zero and would oscillate the {@code new X()} hug across passes
-        // (the deferred nested-root slice). All withheld shapes fall through to the unchanged layouts below.
+        // source-neutral shape every other chain position uses, even when the flat body would fit. This runs BEFORE the
+        // fitting {@code compactBodyWithClosingLine} shape so a fan-threshold chain fans instead of staying flat, matching
+        // gjf/prettier's "one segment per line once the chain is a builder" convention. Comment-bearing, block-lambda, and
+        // lambda-arrow (attachable expression-lambda-body) chains are withheld by the shared canonical rule;
+        // object-creation-rooted chains ({@code new X().setA(...)}) are additionally withheld by the lambda-body gate
+        // because the hugged fan renders that root at column zero and would oscillate the {@code new X()} hug across
+        // passes. All withheld shapes fall through to the layouts below.
         if (
             bodyExpression instanceof MethodCallExpr chainBody
             && lambdaBodyChainFansByCanonicalRule.test(chainBody)
@@ -467,11 +460,11 @@ final class ExpressionLambdaArgumentLayout {
                 return huggedChain;
             }
         }
-        // D3 flip-assembly (the object-creation-rooted-chain-in-lambda-body over-width family — {@code .map(e -> new X()
-        // ...)}, {@code .forEach(t -> results.add(new X()...))}). Route an object-creation-rooted chain body that overflows
+        // The object-creation-rooted-chain-in-lambda-body over-width family — {@code .map(e -> new X()
+        // ...)}, {@code .forEach(t -> results.add(new X()...))}. Route an object-creation-rooted chain body that overflows
         // at its real column through the SAME width-driven forced-chain fan the bare-call family above uses
         // ({@link #huggedLambdaBodyChain} threads {@code firstLine + " "} as the chain's {@code leftEdgePrefix}), so the
-        // {@code new X()} root renders width-driven per D1c and each selector fans onto its own continuation line instead
+        // {@code new X()} root renders width-driven and each selector fans onto its own continuation line instead
         // of the whole chain packing flat on the arrow line and over-widthing. Placed after the bare-call branch and gated
         // on overflow so a fitting body stays on the compact/opener shapes below.
         if (
@@ -493,7 +486,7 @@ final class ExpressionLambdaArgumentLayout {
         ) {
             return Optional.empty();
         }
-        // PR #279 review (arrow-hug rule): a lambda body that is a method-call CHAIN — its scope is itself a call, so
+        // Arrow-hug rule: a lambda body that is a method-call CHAIN — its scope is itself a call, so
         // there is at least one {@code .selector(...)} to fan — must NOT leave the lambda arrow alone at the end of the
         // argument's opener line with the whole chain dumped on the next line ({@code .map(rows ->}⏎{@code receiver.stream()}).
         // Route it through {@link #huggedLambdaBodyChain}, which threads {@code firstLine + " "} as the chain's
@@ -505,7 +498,7 @@ final class ExpressionLambdaArgumentLayout {
         // this arrow-alone fallback.
         //
         // Scoped so only a chain that genuinely must break is fanned — a body whose flat form still FITS on its own
-        // continuation line ({@code assertThat(a.b().c()).isTrue()} laid out flat under the arrow) is left on the unchanged
+        // continuation line ({@code assertThat(a.b().c()).isTrue()} laid out flat under the arrow) is left on the
         // arrow-alone-with-flat-body fallback, because force-fanning an already-fitting body through
         // {@code huggedLambdaBodyChain} would break it (mis-rendering an empty trailing selector like {@code .isTrue()}) and
         // oscillate flat⇄fanned across passes. Two admit signals, both pass-invariant functions of the AST:
@@ -548,19 +541,17 @@ final class ExpressionLambdaArgumentLayout {
     /**
      * Builds the shared expression-lambda argument plan used by call and chain printers for width decisions.
      *
-     * <p>D1g threads {@code layout} so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
-     * available to this lambda-hug admission gate for the eventual reflow-by-width flip. It is NOT yet consulted: the
-     * entry gate below still decides admit-vs-withhold with the fixed-budget {@link #expressionFirstLineWidth} and
-     * {@code nodeIndentWidth}-based {@link #expressionLineWidth} probes exactly as before, so threading it is
-     * byte-identical. The external callers (return / assignment / initializer / statement-call and single-segment-root
-     * positions) already thread a real {@link LayoutContext} — carrying the {@code "return "} / {@code NAME = } /
-     * segment prefix — into their own Plan-consuming first-line predicates ({@code methodCallRootLineWidth},
-     * {@code compactRootLineWidth}); this makes the SAME context available to the plan's own internal admission probe so
-     * it can measure at the identical rendered column once C10 activates. The internal caller
-     * ({@link #huggableMethodCallArguments}) passes {@link LayoutContext#root()}: it owns the hug body-shape column
-     * decisions ({@link #openerOverflows}, {@link #compactBodyWithClosingLine}, the fan probes) separately from this
-     * admission gate, and its own chain-segment / attach entry points are the chain-track / D2d-owned positions whose
-     * true column is a segment column, not a {@code leftEdgePrefix} (see the flip-map).
+     * <p>{@code layout} carries the true continuation column ({@link LayoutContext#leftEdgePrefix()}) to this
+     * lambda-hug admission gate. The entry gate below decides admit-vs-withhold with the fixed-budget
+     * {@link #expressionFirstLineWidth} and {@code nodeIndentWidth}-based {@link #expressionLineWidth} probes rather than
+     * consulting {@code layout}. The external callers (return / assignment / initializer / statement-call and
+     * single-segment-root positions) thread a real {@link LayoutContext} — carrying the {@code "return "} /
+     * {@code NAME = } / segment prefix — into their own Plan-consuming first-line predicates
+     * ({@code methodCallRootLineWidth}, {@code compactRootLineWidth}), so the SAME context is available to the plan's own
+     * internal admission probe. The internal caller ({@link #huggableMethodCallArguments}) passes
+     * {@link LayoutContext#root()}: it owns the hug body-shape column decisions ({@link #openerOverflows},
+     * {@link #compactBodyWithClosingLine}, the fan probes) separately from this admission gate, and its own
+     * chain-segment / attach entry points measure at a segment column, not a {@code leftEdgePrefix}.
      */
     Optional<Plan> plan(String prefix, NodeList<Expression> arguments) {
         return plan(prefix, arguments, LayoutContext.root());
@@ -573,15 +564,13 @@ final class ExpressionLambdaArgumentLayout {
     /**
      * Column-carrying overload of {@link #plan(String, NodeList, LayoutContext)}.
      *
-     * <p>D3 keystone: {@code columnWidth} carries the true segment column the chain-segment call-site threads (its
-     * {@code compactSegmentWidth}), so the eventual reflow-by-width flip can admit-vs-withhold and shape the hug body at
-     * the real fanned continuation column. It is threaded-but-NOT-consulted (byte-identical): the admission gate below
-     * still decides with the fixed-budget {@link #expressionFirstLineWidth} and {@code nodeIndentWidth}-based
-     * {@link #expressionLineWidth} probes exactly as before, and the 3-arg form defaults {@code columnWidth} to
-     * {@link #expressionFirstLineWidth}. It is threaded on to the body-shape probes ({@link #methodCallBodyWithOpener},
-     * the {@code packed*} openers) purely so they carry the same oracle. Consuming it is the atomic D3 flip, out of scope
-     * for this slice — this seam is distinct from the D1g {@link LayoutContext} plumbing, which threads the
-     * {@code leftEdgePrefix} column instead.
+     * <p>{@code columnWidth} carries the true segment column the chain-segment call-site threads (its
+     * {@code compactSegmentWidth}). The admission gate below decides with the fixed-budget
+     * {@link #expressionFirstLineWidth} and {@code nodeIndentWidth}-based {@link #expressionLineWidth} probes rather than
+     * this oracle, and the 3-arg form defaults {@code columnWidth} to {@link #expressionFirstLineWidth}. It is threaded
+     * on to the body-shape probes ({@link #methodCallBodyWithOpener}, the {@code packed*} openers) so they carry the same
+     * oracle. This seam is distinct from the {@link LayoutContext} plumbing, which threads the {@code leftEdgePrefix}
+     * column instead.
      */
     Optional<Plan> plan(
             String prefix,
@@ -705,8 +694,8 @@ final class ExpressionLambdaArgumentLayout {
      * <p>The compact receiver reconstruction has no {@code LambdaExpr} case, so a receiver-nested lambda falls to
      * {@code compactTokenText}, which only collapses whitespace RUNS. A BLOCK lambda ({@code .map(w -> { return … })}) then
      * flattens its {@code { … }} onto one line and leaks a stray {@code " ."} everywhere its body chain wrapped before a
-     * selector; a contained line comment de-indents to column one and merges the following token into itself. Both are the
-     * malformed shapes PR #279 flagged. When the receiver carries either, this yields {@code false} so
+     * selector; a contained line comment de-indents to column one and merges the following token into itself. Both are
+     * malformed shapes. When the receiver carries either, this yields {@code false} so
      * {@link #huggableExpressionLambdaBody} falls through to {@link JavaFormatRule#format} — the full method-chain printer,
      * which fans the receiver at its dots and renders the block lambda / comment through their own multi-line printers.
      * The outermost call's own arguments are unaffected: {@code brokenMethodCallRenderer} renders them through the
@@ -723,10 +712,10 @@ final class ExpressionLambdaArgumentLayout {
             Expression bodyExpression,
             ToIntFunction<String> columnWidth
     ) {
-        // D3 keystone (consumed): take the wider of the fixed lambda-argument-closing floor (four units) and the threaded
-        // true segment column ({@code columnWidth}). Monotone: a compact body that overflows at its real fanned
-        // continuation column is withheld here so the caller falls through to a genuinely broken body shape, but a shallow
-        // body still renders compact exactly as before.
+        // Take the wider of the fixed lambda-argument-closing floor (four units) and the threaded true segment column
+        // ({@code columnWidth}). Monotone: a compact body that overflows at its real fanned continuation column is
+        // withheld here so the caller falls through to a genuinely broken body shape, but a shallow body still renders
+        // compact.
         String line = firstLine + " " + compact.apply(bodyExpression) + ")";
         if (
             Math.max(layoutWidth.lambdaArgumentClosing(line), columnWidth.applyAsInt(line)) > options.lineWidth()
@@ -918,10 +907,9 @@ final class ExpressionLambdaArgumentLayout {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getScope().isEmpty()
-            // Source-neutral (G3): a scope that is itself a method-call chain fans one selector per line through the chain
+            // Source-neutral: a scope that is itself a method-call chain fans one selector per line through the chain
             // renderer, so decline the packed scope-on-own-line shape here (which would otherwise pack the whole scope
-            // chain flat on the arrow line and overflow). This replaces the retired {@code bodyFirstSourceLine} read, which
-            // used the author's first source line to keep a chain scope off this shape.
+            // chain flat on the arrow line and overflow).
             || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
         ) {
             return Optional.empty();
@@ -955,9 +943,8 @@ final class ExpressionLambdaArgumentLayout {
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getScope().isEmpty()
             || !methodCall.getArguments().isEmpty()
-            // Source-neutral (G3): a chain scope fans through the chain renderer rather than packing flat on the arrow
-            // line (see {@link #packedBodyCallScopeWithoutClosingLine}); this replaces the retired {@code bodyFirstSourceLine}
-            // read that kept a chain scope off this shape via the author's first source line.
+            // Source-neutral: a chain scope fans through the chain renderer rather than packing flat on the arrow line
+            // (see {@link #packedBodyCallScopeWithoutClosingLine}).
             || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
         ) {
             return Optional.empty();
@@ -1027,10 +1014,8 @@ final class ExpressionLambdaArgumentLayout {
      * DIRECTLY here — reusing the source-neutral {@link #logicalBinaryBodyDoc} render (a pure {@code nestedLines} function of
      * the AST) and always dedenting the close ({@link PackedLambdaBody#closingOnOwnLine}) — rather than routing through the
      * shared {@code plan}/{@link #huggableMethodCallArguments} path the object-creation and ternary hugs use. The shared
-     * broken-logical-body path {@code huggableExpressionLambdaArgumentWithOpener} now also always dedents the close (its
-     * former {@code ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine} source read, which attached the close on
-     * the body's last line when the author's source put it there, was retired in G3), so both paths agree. Building directly
-     * makes this a fixpoint: the render is a pure function of the AST and the close placement is fixed. The separately-gated
+     * broken-logical-body path also always dedents the close, so both paths agree. Building directly makes this a
+     * fixpoint: the render is a pure function of the AST and the close placement is fixed. The separately-gated
      * {@code binaryMethodCallBodyWithOpener} is never touched.
      *
      * <p>Scoped to LOGICAL ({@code &&}/{@code ||}) bodies: a top-level RELATIONAL body ({@code x -> f(...) == ALLOWED}) is not
@@ -1050,11 +1035,9 @@ final class ExpressionLambdaArgumentLayout {
     /**
      * Column-carrying overload of {@link #logicalBinaryLambdaBodyOpenerHug(String, MethodCallExpr)}.
      *
-     * <p>D3 keystone: {@code columnWidth} carries the true segment column the chain-segment call-site threads. It is
-     * threaded-but-NOT-consulted (byte-identical): the first-operand-fits guard below still uses the depth-aware
-     * {@link #openerOverflows} probe exactly as before, and the 2-arg form defaults {@code columnWidth} to
-     * {@link #expressionFirstLineWidth}. Consuming it — measuring the opener at the true segment column — is the atomic
-     * D3 flip, out of scope for this slice.
+     * <p>{@code columnWidth} carries the true segment column the chain-segment call-site threads. The first-operand-fits
+     * guard below uses the depth-aware {@link #openerOverflows} probe rather than this oracle, and the 2-arg form
+     * defaults {@code columnWidth} to {@link #expressionFirstLineWidth}.
      */
     Optional<Doc> logicalBinaryLambdaBodyOpenerHug(
             String prefix,
@@ -1143,18 +1126,17 @@ final class ExpressionLambdaArgumentLayout {
      * {@code if}/{@code for} body is measured with every enclosing level counted, so an opener that overflows at its true
      * depth is caught instead of attaching visibly over width. Measuring at the lambda's rendered indentation
      * ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type and block) makes the hug-vs-break decision
-     * width-deterministic, mirroring the depth-aware first-line probe threaded into method-chain layout (#162) and the
-     * prefix/depth-aware single-argument hug gate (#164).
+     * width-deterministic, mirroring the depth-aware first-line probe threaded into method-chain layout and the
+     * prefix/depth-aware single-argument hug gate.
      *
      * <p>The probe takes the wider of the fixed baseline and the real rendered column, so it can only ever break a
      * hug that genuinely overflows at its true depth; it never relaxes the gate for shallow calls, keeping fitting hugs
      * unchanged.
      */
     private boolean openerOverflows(LambdaExpr lambdaExpr, String openerLine, ToIntFunction<String> columnWidth) {
-        // D3 keystone (consumed): the probe now also takes the threaded true segment column ({@code columnWidth}) into the
-        // widest-of, alongside the fixed baseline and the {@code nodeIndentWidth}-based rendered column. Monotone: it can
-        // only ever break a packed body opener that genuinely overflows at its real fanned segment column, never relax the
-        // gate for a shallow call.
+        // The probe also takes the threaded true segment column ({@code columnWidth}) into the widest-of, alongside the
+        // fixed baseline and the {@code nodeIndentWidth}-based rendered column. Monotone: it can only ever break a packed
+        // body opener that genuinely overflows at its real fanned segment column, never relax the gate for a shallow call.
         int renderedWidth = layoutWidth.nodeIndentWidth(lambdaExpr) + openerLine.length();
         return Math.max(
             Math.max(expressionFirstLineWidth(openerLine), renderedWidth),
@@ -1171,9 +1153,9 @@ final class ExpressionLambdaArgumentLayout {
      * source-column reconstruction is only correct while the lambda's source column equals its rendered column: a call
      * nested a few blocks deep — or a source that indented the call more shallowly than the formatter will — makes the
      * source column understate the real one, so an opener that overflows at its true depth measures as fitting, is hugged
-     * over-width on one pass, then breaks onto its own line on the next ({@code format(format(x)) != format(x)}, #217).
+     * over-width on one pass, then breaks onto its own line on the next ({@code format(format(x)) != format(x)}).
      * Measuring at the rendered indentation makes the hug-vs-break decision width-deterministic, mirroring the sibling
-     * opener probe {@link #openerOverflows} (#165) and the depth-aware method-chain and single-argument gates (#162, #164).
+     * opener probe {@link #openerOverflows} and the depth-aware method-chain and single-argument gates.
      *
      * <p>The probe takes the wider of the fixed baseline and the real rendered column, so it can only ever
      * break a hug that genuinely overflows at its true depth; it never relaxes the gate for shallow calls, keeping
@@ -1408,10 +1390,9 @@ final class ExpressionLambdaArgumentLayout {
      * The cross-printer boundary for {@link #plan}: the shape the call and chain printers hold so they can build a
      * {@link Plan} at the true continuation column.
      *
-     * <p>D1g widened this from the earlier {@code BiFunction<String, NodeList<Expression>, Optional<Plan>>} to
-     * carry the caller's {@link LayoutContext}. The context is threaded-but-not-consulted today (byte-identical); it
-     * exists so the lambda-hug admission gate can measure at the same rendered column its callers already use for their
-     * Plan-consuming first-line predicates once C10 activates.
+     * <p>This boundary carries the caller's {@link LayoutContext} so the lambda-hug admission gate can measure at the same
+     * rendered column its callers use for their Plan-consuming first-line predicates. The admission gate does not consult
+     * the context.
      */
     @FunctionalInterface
     interface PlanFactory {
@@ -1422,10 +1403,9 @@ final class ExpressionLambdaArgumentLayout {
      * The cross-printer boundary for {@link #huggableMethodCallArguments}: the shape the call and chain printers hold so
      * they can render a hugged expression-lambda argument list at the true segment column.
      *
-     * <p>D3 keystone: this widens the earlier {@code BiFunction<String, NodeList<Expression>, Optional<Doc>>} to carry
-     * {@code columnWidth}, the true-segment-column oracle the chain-segment call-site threads. It is
-     * threaded-but-NOT-consulted today (byte-identical); the hug body-shape probes still measure at the fixed budget (see
-     * {@link #huggableMethodCallArguments(String, NodeList, ToIntFunction)}). Consuming it is the atomic D3 flip.
+     * <p>This boundary carries {@code columnWidth}, the true-segment-column oracle the chain-segment call-site threads.
+     * The hug body-shape probes measure at the fixed budget rather than this oracle (see
+     * {@link #huggableMethodCallArguments(String, NodeList, ToIntFunction)}).
      */
     @FunctionalInterface
     interface HuggableExpressionLambdaArguments {
@@ -1436,9 +1416,8 @@ final class ExpressionLambdaArgumentLayout {
      * The cross-printer boundary for {@link #methodCallBodyWithOpener}: the shape the chain printer holds so a fanned
      * chain selector can hug a single-method-call-body lambda opener at the true segment column.
      *
-     * <p>D3 keystone: widens the earlier {@code BiFunction<String, MethodCallExpr, Optional<Doc>>} to carry
-     * {@code columnWidth}. Threaded-but-NOT-consulted today (byte-identical); the opener-fit probe still measures at the
-     * fixed budget (see {@link #methodCallBodyWithOpener(String, MethodCallExpr, ToIntFunction)}). Consuming it is the D3 flip.
+     * <p>This boundary carries {@code columnWidth}. The opener-fit probe measures at the fixed budget rather than this
+     * oracle (see {@link #methodCallBodyWithOpener(String, MethodCallExpr, ToIntFunction)}).
      */
     @FunctionalInterface
     interface ExpressionLambdaMethodCallBodyOpener {
@@ -1459,10 +1438,8 @@ final class ExpressionLambdaArgumentLayout {
      * The cross-printer boundary for {@link #logicalBinaryLambdaBodyOpenerHug}: the shape the chain printer holds so a
      * fanned chain selector can hug a logical-binary-body lambda opener at the true segment column.
      *
-     * <p>D3 keystone: widens the earlier {@code BiFunction<String, MethodCallExpr, Optional<Doc>>} to carry
-     * {@code columnWidth}. Threaded-but-NOT-consulted today (byte-identical); the first-operand-fits guard still measures
-     * at the fixed budget (see {@link #logicalBinaryLambdaBodyOpenerHug(String, MethodCallExpr, ToIntFunction)}).
-     * Consuming it is the D3 flip.
+     * <p>This boundary carries {@code columnWidth}. The first-operand-fits guard measures at the fixed budget rather than
+     * this oracle (see {@link #logicalBinaryLambdaBodyOpenerHug(String, MethodCallExpr, ToIntFunction)}).
      */
     @FunctionalInterface
     interface ExpressionLambdaLogicalBinaryBodyOpenerHug {

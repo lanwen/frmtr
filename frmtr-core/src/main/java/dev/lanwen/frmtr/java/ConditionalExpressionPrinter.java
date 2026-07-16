@@ -215,10 +215,9 @@ final class ConditionalExpressionPrinter {
             return brokenConditionalExpression(expression);
         }
         // Auto path: defer the flat-versus-broken decision to the renderer, which measures the flat arm at the true
-        // running column via Doc.conditionalGroup. The earlier gate probed a reconstructed indented width that disagreed
-        // with the real column (the #137/#155 width-at-wrong-column family), so it could print an over-width ternary flat
-        // and let a later pass break it. Measuring at the real column removes that; DocExplainRenderer reports the group
-        // decision at available = lineWidth - column, so no separate width-break recorder is needed.
+        // running column via Doc.conditionalGroup. Measuring at the real column keeps the verdict a fixpoint;
+        // DocExplainRenderer reports the group decision at available = lineWidth - column, so no separate width-break
+        // recorder is needed.
         return Doc.conditionalGroup(
             List.of(flatConditionalExpression(expression), brokenConditionalExpression(expression))
         );

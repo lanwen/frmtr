@@ -253,13 +253,10 @@ final class ReturnExpressionPrinter {
                 Doc.text(";")
             );
         }
-        // Judge "does `return value;` fit on one line" at the true rendered column: build the flat return line and the
-        // broken return line and let the renderer choose via Doc.conditionalGroup. The earlier gate compared a
-        // reconstructed nodeLine/budget width, which could disagree with the column write reaches (the #137/#155
-        // width-at-wrong-column family) and print a genuinely over-width return flat, then break it on a later pass. The
-        // broken arm keeps the ranked/imperative broken-shape selection (forced chain, forced ternary, lambda break,
-        // logical-complement break, parenthesized/binary continuation); the conditional group only moves the
-        // flat-versus-broken verdict to the renderer.
+        // Judge "does `return value;` fit on one line" at the true rendered column: build the flat and broken return
+        // lines and let the renderer choose via Doc.conditionalGroup. The broken arm keeps the ranked broken-shape
+        // selection (forced chain/ternary, lambda break, logical-complement break, parenthesized/binary continuation);
+        // the conditional group only moves the flat-versus-broken verdict to the renderer.
         Doc flatReturn = Doc.concat(
             Doc.text("return "),
             rendering.render(expression),
@@ -472,28 +469,11 @@ final class ReturnExpressionPrinter {
     }
 
     /**
-     * Measures a candidate {@code return value;} line at the indentation it will actually render at, not at the source
-     * column the value sat in.
-     *
-     * <p>The earlier estimate derived the second term from {@code expression.getRange().begin.column}, which is the
-     * value's <em>source</em> column. When a {@code return} was co-located after a label prefix
-     * ({@code case "x": return obj.getX();}), that column was large, so the estimate overshot 120, the value broke, and a
-     * later pass — with the {@code case} and {@code return} now on their own lines and the source column small — saw the
-     * estimate drop back under budget and collapsed it. That is the {@code begin.column}-driven break-then-collapse cycle
-     * tracked in #137. The return value always renders at a deterministic column: the statement's rendered indentation
-     * plus {@code "return "}. Counting the enclosing block/type nesting through {@link LayoutWidth#nodeLine} reproduces
-     * that indentation regardless of where the value sat in source, so the fit/break decision is identical on every pass
-     * (the same source-column-to-rendered-column correction made for {@code if} conditions in #155 and for hugged call
-     * openers in #161). The {@link LayoutWidth#currentIndented} floor is kept so a {@code return} nested directly under a
-     * member (no enclosing block) is still measured against at least one indentation unit.
-     *
-     * <p>The transitional fixed-baseline floor ({@code max(baseline, renderedColumn)}) is retired: a
-     * {@code return} always renders at least two block/type levels deep, so the rendered-column term already dominates the
-     * two-unit block baseline, and the only deeper baseline (a return nested in a block-lambda body under a broken chain,
-     * about five units) is not load-bearing here — the return value's own renderer (object creation, binary, chain)
-     * re-gates its width, so an optimistic fit verdict is caught downstream. Dropping the floor is byte-identical across
-     * the format-fixture suite and the kafka/camel/cayenne/tomcat/zookeeper corpora, and removes a return-path read of the
-     * transitional fixed-baseline selector.
+     * Measures a candidate {@code return value;} line at the indentation it renders at — the block indent plus
+     * {@code "return "} via {@link LayoutWidth#nodeLine} — not the value's source column, which overshoots when a
+     * {@code return} sits after a label prefix ({@code case "x": return obj.getX();}), giving an identical fit/break
+     * verdict on every pass. The {@link LayoutWidth#currentIndented} floor still measures a member-level {@code return}
+     * against at least one indentation unit.
      */
     private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
         return Math.max(layoutWidth.nodeLine(expression, line), layoutWidth.currentIndented(line));

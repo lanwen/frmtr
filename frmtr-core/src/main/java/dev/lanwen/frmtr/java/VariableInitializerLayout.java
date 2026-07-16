@@ -504,14 +504,10 @@ final class VariableInitializerLayout {
         if (commentOrPreempt.isPresent()) {
             return Doc.concat(commentOrPreempt.orElseThrow(), groupTerminator);
         }
-        // (A) Master over-width gate at the real rendered column. The ~10 repeated
-        // `variableInitializer(variable, flat) > lineWidth` tests below (all comparing the same reconstructed
-        // AST-nesting-depth baseline) collapse into a single Doc.conditionalGroup: the renderer decides flat-versus-broken
-        // at the true running column. The flat arm is ordinary expression dispatch; the broken arm is the existing
-        // construct-kind broken-shape dispatch (the same cascade bodies, only reached now when the renderer judges the
-        // flat form too wide). The earlier reconstructed baseline could disagree with the column write reaches (the
-        // #137/#155 width-at-wrong-column family) and print a genuinely over-width initializer flat, then break it on a
-        // later pass; measuring at the real column makes the decision a fixpoint by construction rather than by tuning.
+        // Master over-width gate at the real rendered column: a single Doc.conditionalGroup lets the renderer decide
+        // flat-versus-broken at the true running column. The flat arm is ordinary expression dispatch; the broken arm is
+        // the construct-kind broken-shape dispatch, reached when the renderer judges the flat form too wide. Measuring at
+        // the real column makes the decision a fixpoint by construction rather than by tuning a reconstructed baseline.
         if (canMeasureInitializerAtRenderedColumn(initializer, groupTerminator)) {
             Doc flatInitializer = Doc.concat(
                 Doc.text(name + " = "),
@@ -668,11 +664,11 @@ final class VariableInitializerLayout {
         }
         // Route on the CANONICAL width (bare compact plus the clarity parens frmtr adds around nested binary operands),
         // not the source form: measuring the parens the renderer inserts either way makes this over-width gate invariant
-        // to whether the source already carries them, so a binary initializer no longer flips tiers (and shapes) between
-        // passes (#137, family D).
+        // to whether the source already carries them, so a binary initializer routes to the same tier and shape
+        // regardless of source parens.
         if (layoutWidth.blockStatement(flat) + binaryParentheses.clarityParenWidth(initializer) > options.lineWidth()) {
             // The initializer line is already over width, so the enclosed suffix receiver must lead with a break; that
-            // positional fact rides on the LayoutContext (#189) rather than a loose boolean argument.
+            // positional fact rides on the LayoutContext rather than a loose boolean argument.
             Optional<Doc> suffixedEnclosedInitializer =
                 suffixedEnclosedExpression.apply(initializer, LayoutContext.root().withLeadingBreak(true));
             if (suffixedEnclosedInitializer.isPresent()) {
@@ -1848,18 +1844,11 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Measures the {@code NAME = ROOT.method(} argument-break opener at the declaration's real rendered column (the
-     * C10 "measure at the rendered column" pattern), floored by the historical {@link LayoutWidth#currentIndented}
-     * baseline so it never measures narrower than before.
-     *
-     * <p>The opener stays on the assignment line only when it fits; the fixed {@code currentIndented} budget counted one
-     * indentation unit (plus, for a local, the extra unit folded into {@code flatName}), which matches a top-level field
-     * or a method-body local but under-counts a field in a nested type or a local nested inside further blocks. At those
-     * deeper positions the fixed baseline kept an opener that renders past the line-width limit, then a re-format from the
-     * now-deeper rendered column would break it (the #137/#155 width-at-wrong-column family). {@link
-     * LayoutWidth#variableInitializer} counts the declarator's real block/type nesting depth, so the keep-opener decision
-     * matches the column the opener is actually written at; flooring by {@code currentIndented} keeps every already-correct
-     * shallow position byte-identical.
+     * Measures the {@code NAME = ROOT.method(} argument-break opener at the declaration's real rendered column via
+     * {@link LayoutWidth#variableInitializer} (which counts the declarator's block/type nesting depth), floored by
+     * {@link LayoutWidth#currentIndented} so it never measures narrower than one indentation unit. The opener stays on the
+     * assignment line only when it fits there; measuring at the true column keeps the keep-opener decision stable at deep
+     * nesting positions where a one-unit budget would under-count and admit an over-width opener.
      */
     private int openerLineWidth(VariableDeclarator variable, String openerLine) {
         return Math.max(
@@ -2331,15 +2320,11 @@ final class VariableInitializerLayout {
             methodCallChainRootIsObjectCreation.test(methodCall)
             && openerLineWidth(variable, flatName + " = " + firstLine + ";") > options.lineWidth()
         ) {
-            // PR #279: prefer breaking the constructor's argument list over breaking after `=`. The chain root's
-            // constructor renders through a column-aware Doc.group (ObjectCreationPrinter.widthDrivenObjectCreation),
-            // so when the whole flat constructor cannot start after `NAME = ` we still attach the chain — provided the
-            // constructor OPENER (`new X(`) itself fits on the assignment line — and let the renderer break the argument
-            // list at the true rendered column (the same column the emitted `NAME = ` already advanced to). The attach
-            // probe's `firstLine` is the full compact constructor, measured by the planner at the base indent (a
-            // wrong-column read, the #137/#155 family), so it over-reports the fit and forces break-after-`=`; measuring
-            // the opener here at the real `NAME = ` column recovers the constructor-arg break. Only when even the opener
-            // cannot start after `NAME = ` do we break after `=`.
+            // Prefer breaking the constructor's argument list over breaking after `=`. The chain root's constructor
+            // renders through a column-aware Doc.group (ObjectCreationPrinter.widthDrivenObjectCreation), so when the flat
+            // constructor cannot start after `NAME = ` we still attach the chain — provided the constructor OPENER
+            // (`new X(`) fits on the assignment line, measured here at the real `NAME = ` column — and let the renderer
+            // break the argument list. Only when even the opener cannot start after `NAME = ` do we break after `=`.
             Optional<String> constructorOpener = objectCreationChainRootOpener(methodCall);
             if (
                 constructorOpener.isPresent()

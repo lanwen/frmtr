@@ -177,23 +177,11 @@ final class ReturnBinaryExpressionLayout {
     }
 
     /**
-     * Measures a candidate binary {@code return value;} line at the indentation it will actually render at, not at the
-     * source column the value sat in.
-     *
-     * <p>This mirrors {@link ReturnExpressionPrinter}'s width gate: the earlier estimate derived the second term from
-     * {@code expression.getRange().begin.column}, the value's <em>source</em> column, so a {@code return} co-located
-     * after a label prefix overshot 120 on the first pass and collapsed once the {@code return} moved onto its own line —
-     * the {@code begin.column}-driven break-then-collapse cycle tracked in #137. {@link LayoutWidth#nodeLine} counts the
-     * enclosing block/type nesting to reproduce the deterministic rendered indentation ({@code "return "} at the block
-     * indent) regardless of source column, matching the source-column-to-rendered-column correction from #155/#161.
-     *
-     * <p>The transitional fixed-baseline floor ({@code max(baseline, renderedColumn)}) is retired
-     * here too (U2, #190), for the same reason as the sibling {@link ReturnExpressionPrinter} gate: a {@code return}
-     * renders at least two block/type levels deep so the {@code nodeLine} term already dominates the two-unit block
-     * baseline, and the deeper block-lambda-body baseline is not load-bearing because the direct-binary layout's own
-     * continuation/first-line probes re-gate the shape. Byte-identical across the fixture suite and corpora; removes a
-     * return-path read of the transitional fixed-baseline selector. {@link #directBinaryReturnMethodCallFirstLineFits}
-     * now folds its bare first-line probe into this same rendered-column measurement rather than the fixed budget.
+     * Measures a candidate binary {@code return value;} line at the indentation it renders at — {@code "return "} at the
+     * block indent via {@link LayoutWidth#nodeLine} (which counts the enclosing block/type nesting) — not at the value's
+     * source column, which overshoots when a {@code return} sits after a label prefix. A {@code return} renders at least
+     * two block/type levels deep, so {@code nodeLine} dominates and needs no baseline floor;
+     * {@link #directBinaryReturnMethodCallFirstLineFits} folds its first-line probe into this same measurement.
      */
     private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
         return layoutWidth.nodeLine(expression, line);

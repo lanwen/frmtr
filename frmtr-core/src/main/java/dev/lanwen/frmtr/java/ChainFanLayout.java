@@ -238,7 +238,7 @@ final class ChainFanLayout {
         MethodCallExpr expression = request.expression();
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis.apply(expression);
         // Record the width-break for {@code --explain} exactly as the in-{@code methodCallChain} early canonical-fan route
-        // does before it fans (`:748`): a chain fanned here that overflows its rendered line is a width-driven break, and the
+        // does before it fans: a chain fanned here that overflows its rendered line is a width-driven break, and the
         // explain report must attribute it as "method chain … flat width … > N available … segments, one per line" rather
         // than dropping to a bare rule-driven break. {@code ChainWidthBreakExplain#record} self-gates on {@code flatWidth > lineWidth},
         // so a chain fanned purely by the link-count/root-kind rule while it still fits records nothing (it is not a width

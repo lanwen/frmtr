@@ -117,10 +117,10 @@ final class CompilationUnitPrinter {
             typeLeadingBoundaryLine,
             importRawGapRegions
         );
-        // Give the raw comment blob its trailing blank only when no file-boundary orphan block follows: a following
-        // orphan block emits its OWN leading blank, so adding one here too stacks to three blank lines — while the same
-        // comment reclassified as `package`'s own leading comment next pass emits a single leading blank, flipping 3
-        // blanks to 1 (#137, family F). Deferring the separator to the next section keeps both passes at one blank.
+        // Give the raw comment blob its trailing blank only when no file-boundary orphan block follows: a following orphan
+        // block emits its OWN leading blank, so adding one here too would stack three blanks — while the same comment
+        // reclassified as `package`'s leading comment emits just one. Deferring the separator to the next section keeps
+        // every classification at a single blank.
         if (sourceLeadingComments != Doc.EMPTY && orphanComments == Doc.EMPTY) {
             parts.add(Doc.HARD_LINE);
             parts.add(Doc.HARD_LINE);

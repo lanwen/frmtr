@@ -758,9 +758,42 @@ final class StatementPrinter {
         if (statementTrailing != Doc.EMPTY) {
             return Doc.lineSuffix(Doc.concat(Doc.text(" "), statementTrailing));
         }
+        Doc recoveredNextSiblingTrailing = nextStatementLeadingTrailingComment(statement);
+        if (recoveredNextSiblingTrailing != Doc.EMPTY) {
+            return Doc.lineSuffix(Doc.concat(Doc.text(" "), recoveredNextSiblingTrailing));
+        }
         return conditionalElseStatementTrailingComment(statement)
                 .map(comment -> Doc.lineSuffix(Doc.concat(Doc.text(" "), comments.comment(comment))))
                 .orElse(Doc.EMPTY);
+    }
+
+    /**
+     * Recovers a {@code //} that trails this statement's closing {@code );} but which JavaParser attributes to the
+     * following statement's leading trivia once the call's arguments break one-per-line. Claiming it here as this
+     * statement's {@link OwnerSlot#TRAILING} keeps the inline {@code ); // note} placement stable across a re-format.
+     */
+    private Doc nextStatementLeadingTrailingComment(ExpressionStmt statement) {
+        if (!(statement.getParentNode().orElse(null) instanceof BlockStmt block)) {
+            return Doc.EMPTY;
+        }
+        NodeList<Statement> siblings = block.getStatements();
+        for (int index = 0; index + 1 < siblings.size(); index++) {
+            if (siblings.get(index) != statement) {
+                continue;
+            }
+            Statement next = siblings.get(index + 1);
+            int nextBeginLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
+            return commentPlacement.leadingComment(next)
+                    .filter(JavaCommentTrivia::isLine)
+                    .filter(trivia -> trivia.startsAfterNodeOnSameLine(statement))
+                    // Require the next statement to start on a later line than the comment: when a run of statements
+                    // collapses onto one line, only the last — whose sibling begins below — actually trails the comment,
+                    // so this claims it exactly once instead of for every statement sharing the line.
+                    .filter(trivia -> nextBeginLine > trivia.beginLine(Integer.MAX_VALUE))
+                    .map(trivia -> comments.comment(trivia, statement, OwnerSlot.TRAILING))
+                    .orElse(Doc.EMPTY);
+        }
+        return Doc.EMPTY;
     }
 
     /**

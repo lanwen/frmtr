@@ -144,7 +144,7 @@ final class CommentedMethodSignaturePrinter {
         List<String> gapComments = signatureGapComments(gap);
         // The same `)`-to-`{` gap also carries the `throws` clause. Comments go to the gap-comment channel above; the
         // remaining non-comment tokens (`throws Ex1, Ex2`) are signature content that must stay attached to the `)`, or
-        // the method loses its checked-exception declaration and no longer compiles (issue #142).
+        // the method loses its checked-exception declaration and no longer compiles.
         String throwsClause = signatureThrowsClause(gap);
         String prefix = CommentedTokenText.tokenLine(CommentedTokenText.tokens(signature.substring(0, open)));
         String parameters = signature.substring(open + 1, close);
@@ -272,11 +272,11 @@ final class CommentedMethodSignaturePrinter {
      * <p>Two comment channels feed in: {@code suffixComments} (parameter-trailing/leading {@code //} comments; the first
      * renders on the signature line, the {@code foo(int x) // note} shape) and {@code gapComments} (comments written
      * alone between {@code )} and {@code {}, each on its own line below the signature with the {@code {} dropped to the
-     * next line — the issue #23 shape, since a brace sharing a {@code //} line would be commented out).
+     * next line, since a brace sharing a {@code //} line would be commented out).
      *
-     * <p>With no {@code gapComments} the rendering is byte-identical to the historical behavior. A gap comment and an
-     * {@code inlineOpeningComment} come from mutually exclusive regions; if both appear the gap comment wins its own line
-     * and the inline opening comment is dropped (a brace-line {@code //} cannot render safely).
+     * <p>With no {@code gapComments} the signature and body render with no extra comment lines between them. A gap comment
+     * and an {@code inlineOpeningComment} come from mutually exclusive regions; if both appear the gap comment wins its own
+     * line and the inline opening comment is dropped (a brace-line {@code //} cannot render safely).
      */
     private String formatMethodWithBody(
             String signature,
@@ -453,8 +453,8 @@ final class CommentedMethodSignaturePrinter {
      *
      * <p>A {@code //} or {@code /* *}{@code /} comment between the parameter-list {@code )} and the body {@code &#123;} may
      * contain braces ({@code // marks &#123; the bit &#125;}); a plain {@code indexOf('&#123;')} would point at the
-     * comment's brace and de-comment the rest into the body (non-compiling, issue #23). With no comment before the brace
-     * it returns the same offset as {@code indexOf('&#123;')}, so the normal case is byte-identical.
+     * comment's brace and de-comment the rest into the body (non-compiling). With no comment before the brace it returns
+     * the same offset as {@code indexOf('&#123;')}, so the normal case is unaffected.
      */
     private int bodyOpeningBrace(String text) {
         int cursor = 0;
@@ -550,9 +550,9 @@ final class CommentedMethodSignaturePrinter {
      * {@code &#123;}, dropping any comment tokens that share the gap.
      *
      * <p>Comments go to {@link #signatureGapComments(String)}; the remaining tokens are the {@code throws} clause, real
-     * signature content whose loss removed the checked-exception declaration and produced non-compiling output (issue
-     * #142). They are rebuilt through {@link CommentedTokenText#tokenLine(List)} (normalizing to {@code throws A, B}); an
-     * empty result means no checked exceptions and the caller leaves the signature untouched.
+     * signature content whose loss would strip the checked-exception declaration and produce non-compiling output. They
+     * are rebuilt through {@link CommentedTokenText#tokenLine(List)} (normalizing to {@code throws A, B}); an empty result
+     * means no checked exceptions and the caller leaves the signature untouched.
      */
     private String signatureThrowsClause(String gap) {
         List<String> tokens = CommentedTokenText.tokens(gap).stream()

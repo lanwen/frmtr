@@ -251,7 +251,7 @@ final class BlockLambdaArgumentLayout {
         }
         // A "heavy" root constructor breaks its argument list even when it fits the width (see ArgumentHeaviness), so a
         // trailing lambda must not hug it flat onto the opener; suppress the hug so the enclosing call explodes its
-        // arguments and the constructor root breaks on its own line (PR #279 cascade).
+        // arguments and the constructor root breaks on its own line.
         if (argumentHeaviness.isHeavy(objectCreation.getArguments(), true)) {
             return true;
         }

@@ -77,8 +77,8 @@ final class LambdaBodyChainFanLayout {
      * <p>The fan itself is built by {@code huggedLambdaBodyChainRenderer} — the shared method-chain printer, which threads
      * {@code firstLine + " "} as the chain's {@link LayoutContext#leftEdgePrefix()} so every width gate measures at the
      * real rendered column and re-derives the identical source-neutral fan across passes. Both the canonical fan
-     * (which fans a fan-threshold chain even when it fits) and the historical over-width bare-root branch reuse
-     * this one shape so the two triggers produce byte-identical layouts for the chains they share.
+     * (which fans a fan-threshold chain even when it fits) and the over-width bare-root branch reuse this one shape so
+     * the two triggers produce byte-identical layouts for the chains they share.
      *
      * <p>The close dedents to its own line at the opener's column, the same shape a broken argument list renders
      * ({@code foo(}⏎{@code arg}⏎{@code )}) and the packed lambda-body shapes' {@code PackedLambdaBody.CLOSING_ON_OWN_LINE}
@@ -101,8 +101,8 @@ final class LambdaBodyChainFanLayout {
      * lambda header's <em>real rendered column</em>, so it should fan onto dotted continuation lines while hugging the
      * lambda header ({@code someCall(x -> assertThat(x)}\n{@code .extracting(...)}\n{@code .containsOnly(...))}).
      *
-     * <p>The gate is deliberately narrow so it moves only genuine {@code #221} Case-A chains and leaves every other
-     * lambda-body shape to the existing opener-packing and greedy-pack paths:
+     * <p>The gate is deliberately narrow so it moves only clean bare-call-rooted chains that overflow and leaves every
+     * other lambda-body shape to the existing opener-packing and greedy-pack paths:
      *
      * <ul>
      *   <li><strong>It is a chain.</strong> The receiver is itself a method call, so there is at least one {@code .call(...)}
@@ -158,12 +158,12 @@ final class LambdaBodyChainFanLayout {
      * ({@code .map(tp -> new TopicPartitions().setTopicId(tp.getKey())}⏎{@code .setPartitions(...))}) rather than keep the
      * whole {@code new X().setA().setB()} chain packed on the arrow line and over-run it.
      *
-     * <p>D3 flip-assembly, the object-creation-root analogue of {@link #overflowingHuggedBareRootChainBody}: same clean-chain
+     * <p>The object-creation-root analogue of {@link #overflowingHuggedBareRootChainBody}: same clean-chain
      * scope ({@link #chainCallsCanStayFlat} — no argument lambda/comment/source-multiline) and same real-column overflow probe
      * ({@link #chainOverflowsHuggedColumn}, threaded true segment column), keyed on an OBJECT-CREATION root with at least one
      * selector to fan. The outermost-call-has-arguments guard mirrors the sibling chain-selector gate
      * ({@code MethodCallChainPrinter#bodyIsObjectCreationRootedChain}): a chain ending in an EMPTY {@code .build()} has no
-     * argument list to break, so it stays on its unchanged shape.
+     * argument list to break, so it stays on its existing shape.
      */
     boolean overflowingHuggedObjectCreationRootChainBody(
             String firstLine,
@@ -190,9 +190,9 @@ final class LambdaBodyChainFanLayout {
             MethodCallExpr methodCall,
             ToIntFunction<String> columnWidth
     ) {
-        // D3 keystone (consumed): take the wider of the historical {@code nodeIndentWidth}-based rendered column and the
-        // threaded true segment column ({@code columnWidth} over the header prefix plus the compact chain). Monotone: the
-        // fan can only fire for a chain that overflows at its real fanned column, never relax for a shallow one.
+        // Take the wider of the {@code nodeIndentWidth}-based rendered column and the threaded true segment column
+        // ({@code columnWidth} over the header prefix plus the compact chain). Monotone: the fan can only fire for a
+        // chain that overflows at its real fanned column, never relax for a shallow one.
         String chainLine = firstLine + " " + compact.apply(methodCall);
         return Math.max(
             layoutWidth.nodeIndentWidth(methodCall) + firstLine.length() + 1 + compact.apply(methodCall).length(),
@@ -214,9 +214,8 @@ final class LambdaBodyChainFanLayout {
      * and re-derives identically whether the input arrived flat or already fanned.
      */
     private boolean huggedFanFits(String firstLine, MethodCallExpr methodCall, ToIntFunction<String> columnWidth) {
-        // D3 keystone: {@code columnWidth} (the true segment column) is threaded-but-NOT-consulted; every width gate
-        // below still measures at the {@code nodeIndentWidth}-based rendered column exactly as before. The D3 flip is
-        // what will route these gates through the true segment column.
+        // {@code columnWidth} (the true segment column) is threaded but not consulted here; every width gate below
+        // measures at the {@code nodeIndentWidth}-based rendered column.
         MethodCallExpr root = bareCallRoot(methodCall);
         List<MethodCallExpr> segments = chainSegmentsAboveRoot(methodCall, root);
         if (segments.size() < 2) {

@@ -58,11 +58,11 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
-    // Return-chain shape cascade delegator (printer-contract-inversion, output-seam slice #1): the return printer no
-    // longer threads the ~nine chain shape-callbacks the cascade used to compose. It hands the one composite entry
-    // {@link MethodCallPrinter#returnChain} the two return-flavored inputs — the first-line width shape (the second
-    // parameter, a {@code returnLineWidth}-based first-line measure) and the {@code withLeftEdgePrefix("return ")}
-    // chainLayout (the third parameter) — and the chain printer owns the shape selection internally.
+    // Return-chain shape cascade delegator: rather than threading the chain shape-callbacks the cascade composes, the
+    // return printer hands the one composite entry {@link MethodCallPrinter#returnChain} the two return-flavored inputs
+    // — the first-line width shape (the second parameter, a {@code returnLineWidth}-based first-line measure) and the
+    // {@code withLeftEdgePrefix("return ")} chainLayout (the third parameter) — and the chain printer owns the shape
+    // selection internally.
     private final ChainWithLayout<ToIntFunction<String>> returnChain;
 
     private final BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine;
@@ -195,8 +195,8 @@ final class ReturnExpressionPrinter {
         Doc preSemicolonComment = preSemicolonValueComment(expression);
         if (preSemicolonComment != Doc.EMPTY) {
             // A pre-semicolon line comment forces the terminator onto its own line, so the whole return already breaks.
-            // The value's flat-versus-broken choice here is made by the imperative oracle exactly as before (the trailing
-            // comment does not enter its width gate), keeping this comment-bearing shape byte-identical.
+            // The value's flat-versus-broken choice here is made by the imperative oracle (the trailing comment does not
+            // enter its width gate).
             return Doc.concat(
                 Doc.text("return "),
                 returnExpression(expression, layout),
@@ -208,7 +208,7 @@ final class ReturnExpressionPrinter {
         // or an enclosed binary the direct-binary/parenthesized layout owns) keep the imperative oracle for that
         // broken-shape selection; they pre-empt the renderer-measured gate below. The object-creation-rooted method-call
         // chain routes through the renderer instead: it falls through to the flat-versus-broken conditional group, whose
-        // broken arm is the chain's ranked Doc.bestFitting (LDM-3g, #210).
+        // broken arm is the chain's ranked Doc.bestFitting.
         Optional<Doc> preempted = preemptedReturnValue(expression, layout);
         if (preempted.isPresent()) {
             return Doc.concat(
@@ -375,11 +375,10 @@ final class ReturnExpressionPrinter {
      * Renders the return value on the comment-bearing terminator path, where a pre-semicolon comment already forces the
      * statement to break, so the flat-versus-broken verdict stays on the imperative oracle.
      *
-     * <p>This reproduces the historical branch order — the source-shape/width-ranked pre-empt branches, then the
-     * {@link #returnLineFits} width gate, then the imperative broken tree — so a return that carries a trailing pre-{@code
-     * ;} comment is byte-identical to before. The renderer-measured gate that replaces {@code returnLineFits} lives in
-     * {@link #returnStatement}, on the ordinary (no pre-{@code ;} comment) path where the whole {@code return value;} line
-     * can be handed to a {@link Doc#conditionalGroup(java.util.List)}.
+     * <p>Uses the pre-{@code ;} comment branch order — the source-shape/width-ranked pre-empt branches, then the
+     * {@link #returnLineFits} width gate, then the imperative broken tree. The renderer-measured gate used on the
+     * ordinary (no pre-{@code ;} comment) path lives in {@link #returnStatement}, where the whole {@code return value;}
+     * line can be handed to a {@link Doc#conditionalGroup(java.util.List)}.
      */
     private Doc returnExpression(Expression expression, LayoutContext layout) {
         Optional<Doc> preempted = preemptedReturnValue(expression, layout);
@@ -399,19 +398,18 @@ final class ReturnExpressionPrinter {
      *
      * <p>These are the source-multiline enclosed binary (broken through the direct-binary/parenthesized layout) and the
      * source-multiline object creation. Each internally decides flat-versus-broken and, when broken, which broken shape to
-     * use; the renderer-measured gate cannot express that until those printers expose their own ranked candidates
-     * (layout-decision-model milestone LDM-4, context-as-data → enum), so they pre-empt it. The object-creation-rooted
-     * method-call chain falls through to the flat-versus-broken conditional group in {@link #returnStatement}, whose
-     * broken arm is the chain's ranked {@link Doc#bestFitting(java.util.List)} (LDM-3g, #210). Everything else falls
-     * through to that conditional group too.
+     * use; the renderer-measured gate cannot express that until those printers expose their own ranked candidates, so
+     * they pre-empt it. The object-creation-rooted method-call chain falls through to the flat-versus-broken conditional
+     * group in {@link #returnStatement}, whose broken arm is the chain's ranked {@link Doc#bestFitting(java.util.List)}.
+     * Everything else falls through to that conditional group too.
      */
     private Optional<Doc> preemptedReturnValue(Expression expression, LayoutContext layout) {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
         if (sourceMultilineEnclosedBinary.isPresent()) {
             BinaryExpr binaryExpr = sourceMultilineEnclosedBinary.orElseThrow();
-            // LDM-4 (deferred): the enclosed-binary broken shape is chosen among source-preserved layouts (direct-binary
-            // continuation versus parenthesized break) that the binary printer does not yet expose as ranked candidates,
-            // so this stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
+            // The enclosed-binary broken shape is chosen among source-preserved layouts (direct-binary continuation
+            // versus parenthesized break) that the binary printer does not yet expose as ranked candidates, so this
+            // stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
             return Optional.of(
                 binaryReturns.directBinaryReturn(binaryExpr, expression, layout)
                         .orElseGet(() -> parenthesizedBreak.apply(binaryExpr, true))
@@ -425,12 +423,11 @@ final class ReturnExpressionPrinter {
      * {@link #returnStatement}: the shape the return takes once the renderer has judged the flat {@code return value;}
      * too wide for the columns left.
      *
-     * <p>This keeps the historical ranked/imperative broken-shape selection reached when the old {@code returnLineFits}
-     * gate failed: a source-multiline or lambda-bodied method-call value forces its chain shape, a string concatenation
-     * around a source-multiline call argument stays on ordinary expression dispatch, and everything else routes through
-     * {@link #brokenReturnExpression} (forced chain, forced ternary, lambda break, logical-complement break,
-     * parenthesized/binary continuation). The flat arm is ordinary expression dispatch; only the flat-versus-broken
-     * verdict moved to the renderer.
+     * <p>The ranked/imperative broken-shape selection: a source-multiline or lambda-bodied method-call value forces its
+     * chain shape, a string concatenation around a source-multiline call argument stays on ordinary expression dispatch,
+     * and everything else routes through {@link #brokenReturnExpression} (forced chain, forced ternary, lambda break,
+     * logical-complement break, parenthesized/binary continuation). The flat arm is ordinary expression dispatch; the
+     * renderer owns only the flat-versus-broken verdict.
      */
     private Doc brokenReturnValue(Expression expression, LayoutContext layout) {
         if (expression instanceof MethodCallExpr methodCall && methodCallChainIsSourceMultiline.test(methodCall)) {

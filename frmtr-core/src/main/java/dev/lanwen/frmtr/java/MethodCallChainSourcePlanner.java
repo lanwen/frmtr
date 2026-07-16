@@ -138,12 +138,10 @@ final class MethodCallChainSourcePlanner {
         }
 
         /**
-         * The {@code initializerStartsOnContinuationLine} and {@code tailArgumentsSpanMultipleSourceLines}
-         * source-shape inputs were retired. The former is now treated as always true — a fitting single-selector
-         * object-creation-chain initializer packs flat rather than fanning by the author's line break, matching the
-         * below-threshold fan rule — which makes the source-multiline-initializer disjunction constant-true and collapses
-         * both the {@code tailHasArguments} and the {@code tailArgumentsSpanMultipleSourceLines} guards (the latter was
-         * already always passed {@code false}). The compact shape stays width-gated at the call site.
+         * Reports whether an object-creation-rooted initializer can keep its compact chain form: a single-selector chain
+         * packs flat rather than fanning on the author's line break (matching the below-threshold fan rule), and a root
+         * whose constructor arguments span multiple lines is excluded. The compact shape stays width-gated at the call
+         * site.
          */
         boolean canUseCompactObjectCreationInitializer(boolean chainSpansMultipleSourceLines) {
             return rootIsObjectCreation
@@ -317,7 +315,7 @@ final class MethodCallChainSourcePlanner {
      * {@link #initializerShape(MethodCallChainAnalysis)} folds the same verdict into
      * {@link InitializerChainShape#chainBreaksByRule()} so the initializer layout routes a fan-threshold chain onto the
      * same source-neutral fan without re-deriving the rule (and without threading a new callback through the declaration
-     * printer graph). Lifted verbatim from PR #163 ({@code fix/method-chain-source-shape-independent}).
+     * printer graph).
      *
      * <ul>
      *   <li><b>Call / constructor root → threshold 2.</b> An {@link ObjectCreationExpr} or {@link MethodCallExpr} root

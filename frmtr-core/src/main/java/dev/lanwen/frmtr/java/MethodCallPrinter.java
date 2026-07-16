@@ -180,9 +180,8 @@ final class MethodCallPrinter {
      * The fixed-budget column oracle handed to the expression-lambda hug seams at the top-level method-call argument
      * positions this printer owns (not a fanned chain selector).
      *
-     * <p>D3 keystone: reproduces the seam's historical {@code expressionFirstLineWidth} baseline exactly (the fixed
-     * three-unit continuation depth, {@link LayoutWidth#continuationStatement}), so threading it is byte-identical.
-     * Consuming the true column is the atomic D3 flip, out of scope for this slice.
+     * <p>Uses the fixed three-unit continuation-depth baseline ({@link LayoutWidth#continuationStatement}) rather than
+     * the operand's true rendered column.
      */
     private ToIntFunction<String> expressionLambdaColumnWidthFallback() {
         return layoutWidth::continuationStatement;
@@ -195,10 +194,9 @@ final class MethodCallPrinter {
     /**
      * The public method-call entry that receives the caller's {@link LayoutContext}.
      *
-     * <p>The context is threaded from here down to the chain width gates so a follow-up can attribute
-     * the same-line {@code leftEdgePrefix} at the rendered column. This slice is pure plumbing — the prefix is not read
-     * yet and no width decision changes — so {@link #methodCall(MethodCallExpr)} keeps its {@link LayoutContext#root()}
-     * default and output stays byte-identical.
+     * <p>The context is threaded from here down to the chain width gates. The {@code leftEdgePrefix} it carries is not
+     * yet read by any width decision, so {@link #methodCall(MethodCallExpr)} keeps its {@link LayoutContext#root()}
+     * default.
      */
     Doc methodCall(MethodCallExpr expression, LayoutContext layout) {
         return methodCall(expression, MethodCallBreakMode.AUTO, layout);
@@ -228,11 +226,11 @@ final class MethodCallPrinter {
     // statement caller is ready to list a chainFanOut arm through bestFitting. A statement chain owns its own first
     // column, so the leftEdgePrefix is empty (the gate reads stay a no-op) but the chain's first-line width becomes the
     // statement's real rendered column ({@code nodeLine(expression, ...)}, which counts every enclosing block/type) rather
-    // than the fixed two-unit block baseline the seam threaded before. Because a statement always renders at its
+    // than a fixed two-unit block baseline. Because a statement always renders at its
     // own block depth (no stacked continuation indent an argument can accumulate), {@code nodeLine} is exactly that
-    // column, so already-formatted input is byte-identical while a statement chain nested deeper than the two-level budget
-    // is now measured at its true depth. The outer break-or-flat gate (methodCallStatementWidth) still keys on the
-    // threaded budget measure and is left unchanged.
+    // column, so a statement chain nested deeper than the two-level budget
+    // is measured at its true depth. The outer break-or-flat gate (methodCallStatementWidth) keys on the
+    // threaded budget measure.
     Doc forcedMethodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
@@ -840,7 +838,7 @@ final class MethodCallPrinter {
 
     /**
      * Renders a variable initializer's forced method-call-chain value — the initializer analogue of {@link #returnChain}
-     * (printer-contract-inversion, output-seam slice #2). This owns the forced-chain shape (the one chain shape the
+     * This owns the forced-chain shape (the one chain shape the
      * initializer delegates unconditionally, from all three of its forced-chain positions: the direct
      * {@code NAME = chain}, the {@code NAME = params -> chain} lambda body, and the broken-after-{@code =} continuation
      * fallback), so that shape call becomes an internal {@code this.} call here rather than a cross-printer callback.
@@ -854,7 +852,7 @@ final class MethodCallPrinter {
      * lambda-body positions that must not attribute it), so the prefix-aware chain width gates
      * ({@code MethodCallChainPrinter.compactRootLineWidth}) measure at the true rendered column; {@code firstLineWidth} is
      * the caller's {@link LayoutWidth#variableInitializer}-based first-line measure. Delegates to the layout-carrying
-     * forced-chain machinery this printer already owns, so it is byte-identical to the former direct callback.
+     * forced-chain machinery this printer already owns.
      */
     Optional<Doc> initializerChain(
             MethodCallExpr methodCall,
@@ -865,27 +863,24 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Renders an expression statement's method-call-chain shape by running the statement-flavored chain-shape cascade the
-     * {@link StatementPrinter} used to own inline (printer-contract-inversion, output-seam slice #3, the statement
-     * analogue of {@link #returnChain}). Moving the cascade here collapses the chain shape-callbacks the statement
-     * printer used to thread through the composer to this one entry: every shape decision below is now an internal
-     * {@code this.} call rather than a cross-printer callback (final-trailing-comment forced call, source-multiline
-     * statement call, and the width-driven forced call with its comment/object-creation/field-access break gate).
+     * Renders an expression statement's method-call-chain shape by running the statement-flavored chain-shape cascade
+     * (the statement analogue of {@link #returnChain}). Every shape decision below is an internal
+     * {@code this.} call rather than a cross-printer callback: the final-trailing-comment forced call, the source-multiline
+     * statement call, and the width-driven forced call with its comment/object-creation/field-access break gate.
      *
      * <p>The cascade is statement-flavored only through its parameters — everything else is the ordinary chain-shape
      * machinery this printer already owns. {@code tail} is the statement terminator ({@code ExpressionTail.SEMICOLON});
-     * it is threaded into the forced-call shapes and appended after the source-multiline shape exactly where the former
-     * cascade baked the {@code ;} in. {@code lineWidth} is the caller's statement first-line width closure (already
-     * threaded to the forced-call shapes). {@code statementWidth} is the caller's raw-source-based whole-statement width
+     * it is threaded into the forced-call shapes and appended after the source-multiline shape where the {@code ;}
+     * belongs. {@code lineWidth} is the caller's statement first-line width closure (threaded to the forced-call shapes).
+     * {@code statementWidth} is the caller's raw-source-based whole-statement width
      * measure ({@code StatementPrinter#methodCallStatementWidth}, {@code normalizeWhitespace(rawWithoutOwnComment) + ";"});
-     * it stays with the caller because the raw-source read lives there, and only its measured width crosses the seam so
-     * the width gate ({@code > options.lineWidth()}) reads byte-for-byte as before.
+     * it stays with the caller because the raw-source read lives there, and only its measured width crosses the seam that
+     * the width gate ({@code > options.lineWidth()}) reads.
      *
      * <p>Returns {@link Optional#empty()} when no chain shape is selected (the statement fits within the line width and is
      * not final-trailing-comment or source-multiline shaped); the caller then falls through to its general
      * expression-with-tail rendering. The trailing statement comment stays with the caller, concatenated after this entry,
-     * so this entry owns only the chain shape. The branch order, conditions, and Docs are preserved byte-for-byte from the
-     * statement printer's former cascade — including the {@code chainBreak} gate whose two arms already emitted the same
+     * so this entry owns only the chain shape. The {@code chainBreak} gate's two arms emit the same
      * forced-call shape.
      */
     Optional<Doc> statementChain(
@@ -918,11 +913,9 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Renders a {@code return}'s forced method-call-chain value by running the return-flavored chain-shape cascade the
-     * {@link ReturnExpressionPrinter} used to own inline (printer-contract-inversion, output-seam slice #1). Moving the
-     * cascade here collapses the nine chain shape-callbacks the return printer used to thread through the composer to
-     * this one entry: every shape decision below is now an internal {@code this.} call rather than a cross-printer
-     * callback.
+     * Renders a {@code return}'s forced method-call-chain value by running the return-flavored chain-shape cascade that
+     * {@link ReturnExpressionPrinter} calls into. Every shape decision below is an internal {@code this.} call rather than
+     * a cross-printer callback.
      *
      * <p>The cascade is return-flavored only through its two parameters — everything else is the ordinary chain-shape
      * machinery this printer already owns. {@code chainLayout} carries the {@code "return "} left-edge prefix (built by
@@ -932,7 +925,7 @@ final class MethodCallPrinter {
      * first-line-fit candidate is judged post-{@code "return "}. The residual fixed-baseline probes measure at the
      * ordinary two-unit block baseline ({@link LayoutWidth#blockStatement}), computed here. The branch order,
      * conditions, and the CRBFS-versus-fan {@link Doc#bestFitting(java.util.List, int[])} priorities ({@code {1, 0}})
-     * are preserved byte-for-byte from the return printer's former cascade.
+     * are defined here.
      */
     Optional<Doc> returnChain(
             MethodCallExpr methodCall,
@@ -1340,7 +1333,7 @@ final class MethodCallPrinter {
      * the seam fires on a chain selector such as {@code request.topics().add(new CreatableTopic()...)} and forces the whole
      * enclosing chain to explode ({@code request}⏎{@code .topics()}⏎{@code .add(}…) — a regression, since the enclosing
      * chain's fan is owned by the chain printer, not this argument seam. The chain-selector-hosted single-argument hug is
-     * the deferred nested-root slice; here we only stabilize the standalone statement/return/initializer/argument host
+     * not handled by this seam; here we only stabilize the standalone statement/return/initializer/argument host
      * ({@code assertTrue(chain)}, {@code Optional.of(chain)}), whose opener text renders atomically at its column.
      */
     private Optional<Doc> singleFanChainArgumentBestFitting(String prefix, MethodCallExpr expression) {
@@ -1411,7 +1404,7 @@ final class MethodCallPrinter {
      * ({@code NAME = outer(inner(…))}) the {@code NAME = } prefix sharing the line is not counted, so a naive probe
      * attaches the hug even when the opener visibly overflows. Measuring at the real rendered column — attach only when
      * the hugged opener fits — mirrors the prefix-aware first-line probe
-     * threaded into method-chain layout for the assignment column (#161) and the chain arm's stay-flat rule (#163): the
+     * threaded into method-chain layout for the assignment column and the chain arm's stay-flat rule: the
      * column where the value begins, not just its indentation, decides whether the flat shape is legal.
      *
      * <p>The value prefix that shares the call's first line is reconstructed from the source range: the call's start
@@ -1481,28 +1474,26 @@ final class MethodCallPrinter {
      * a source-multiline expression-lambda argument can be hugged.
      *
      * <p>This gate reconstructs the call column from {@code range.begin.column}, a source-column read that
-     * understates the rendered column once the call is reindented shallower than its true block/type depth. It now also
+     * understates the rendered column once the call is reindented shallower than its true block/type depth. It also
      * considers the call's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type
      * and block) and takes the <em>wider</em> of the two, mirroring the chain-printer root gates
      * ({@code MethodCallChainPrinter.compactRootLineWidth}/{@code rootLineWidth}), the sibling
-     * {@link ExpressionLambdaArgumentLayout} first-line gate (#226), and the single-argument hug gate
+     * {@link ExpressionLambdaArgumentLayout} first-line gate, and the single-argument hug gate
      * {@link #attachedOpenerOverflows}.
      *
      * <p>The source column is kept as the <em>floor</em> rather than replaced: this call can be an initializer/return
      * value whose {@code = }/{@code return } leading prefix shares the measured line, and {@code nodeIndentWidth}
      * (nesting depth only) does not carry that prefix while the source column does. Flooring by the source column keeps
-     * it accounted for, so the probe can only ever measure wider and never under-measures a prefixed call. The change is
-     * byte-identical on the fixture corpus and on every reindented/nested probe.
+     * it accounted for, so the probe can only ever measure wider and never under-measures a prefixed call.
      *
-     * <p>Activated to read {@code layout.leftEdgePrefix()} the same way its sibling
-     * {@code MethodCallChainPrinter.compactRootLineWidth} does — when the prefix is non-empty it measures the call's first
+     * <p>Reads {@code layout.leftEdgePrefix()} the same way its sibling
+     * {@code MethodCallChainPrinter.compactRootLineWidth} does: when the prefix is non-empty it measures the call's first
      * line at the exact rendered column {@code nodeIndentWidth(expression) + leftEdgePrefix.length() + firstLine.length()}
-     * and drops the source-column floor. Reading an empty prefix is a strict no-op, so every caller keeps the wider-of
+     * and drops the source-column floor. An empty prefix is a strict no-op, so every caller keeps the wider-of
      * floor. No current caller of this source-multiline expression-lambda hug gate threads a non-empty prefix into it
-     * (the statement and argument chain callers thread an empty prefix), so the activation is byte-identical readiness for
-     * a future prefixed lambda-hug caller — unlike the chain-printer's {@code rootLineWidth}/{@code selectorLineWidth},
-     * which the initializer chain already reaches with a real prefix and so cannot be activated here without moving a
-     * golden.
+     * (the statement and argument chain callers thread an empty prefix), so the prefix read is dormant readiness for
+     * a prefixed lambda-hug caller; the chain-printer's {@code rootLineWidth}/{@code selectorLineWidth} equivalents, by
+     * contrast, already receive a real prefix from the initializer chain.
      */
     private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine, LayoutContext layout) {
         // With the same-line prefix threaded, measure at the exact rendered column and drop the
@@ -1578,7 +1569,7 @@ final class MethodCallPrinter {
      * <p>The comments come from {@link CommentedExpressionListPrinter#singleArgumentHugGapComments}, which computes the
      * gaps by source order and offers each under the same ownership anchor the parenthesized argument list uses, so the
      * hug preserves the same comments the deferred list would — including on whitespace-perturbed shapes that float a
-     * comment off the block's own line, which the previous own-comment / same-line-orphan lookups could not see.
+     * comment off the block's own line.
      */
     private Doc textBlockArgument(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
         CommentedExpressionListPrinter.HugGapComments gaps =
@@ -1695,9 +1686,9 @@ final class MethodCallPrinter {
         // A method-call chain argument that fits the top-level chain probe but overflows once placed at this argument
         // list's continuation indentation must break here rather than emit an over-width flat line. The flat fallbacks
         // below render the chain through the AUTO chain printer with the CURRENT budget, which is blind to the argument's
-        // real (deeper) column; threading the CONTINUATION budget lets the chain printer's nesting-aware probe (#160/#161)
+        // real (deeper) column; threading the CONTINUATION budget lets the chain printer's nesting-aware probe
         // break the chain at its actual position. A chain that still fits at this depth returns empty and falls through
-        // to the unchanged flat rendering, so non-overflowing arguments stay byte-identical.
+        // to the flat rendering.
         //
         // Thread a real LayoutContext (ARGUMENT position) for the
         // argument chain instead of the implicit root(), so the argument caller is ready to list a chainFanOut arm through
@@ -1707,9 +1698,9 @@ final class MethodCallPrinter {
         // render time, and an argument can sit under several stacked continuations that nodeIndentWidth (block/type depth
         // only) does not count. The chain width gates therefore keep their wider-of source-column floor
         // (max(source-column, nodeIndentWidth)), which is exactly where that unmodelled continuation indent still lives,
-        // and the stay-flat gate keeps measuring at the fixed CONTINUATION budget — byte-identical. Dropping that floor
+        // and the stay-flat gate keeps measuring at the fixed CONTINUATION budget. Dropping that floor
         // here via a nodeIndentWidth-based prefix under-measures a deeply nested argument and regresses it to an
-        // over-width flat line, so the rendered-column attribution of the continuation indent is left to a later slice.
+        // over-width flat line, so the rendered-column attribution of the continuation indent is left unmodelled here.
         if (argument instanceof MethodCallExpr methodCall) {
             LayoutContext argumentLayout = new LayoutContext(
                 EnclosingConstruct.ARGUMENT,
@@ -1732,7 +1723,7 @@ final class MethodCallPrinter {
         // The breakable-argument seam offers the argument's broken form as a renderer-measured
         // conditionalGroup arm rather than a fixed-CONTINUATION-budget width probe, so the argument breaks at its true
         // rendered column and the trailing `suffix` (rendered by the enclosing list) is accounted for by the renderer's
-        // line-fit lookahead — the seam no longer threads a width suffix or positional context.
+        // line-fit lookahead — the seam threads no width suffix or positional context.
         if (sourceMultilineList) {
             return breakableArguments.sourceMultilineArgument(argument);
         }
@@ -1849,8 +1840,8 @@ final class MethodCallPrinter {
      * and {@link BreakableArgumentExpressionPrinter#sourceMultilineArgument} — which observes the wrapped argument list a
      * prior pass produced — emit the same shape rather than alternating between the operand-fanned form and the
      * broken-argument delegate's operator-on-its-own-line form. Chains the rule does not fan (a plain-receiver 1–2-link
-     * operand, the #119 {@code binary-chain-wrap-converge} guard) and comment / lambda chains are withheld by
-     * {@code binaryFansChainOperand}, so those arguments keep the broken-argument delegate below byte-for-byte.
+     * operand, the source-shape-independent {@code binary-chain-wrap-converge} guard) and comment / lambda chains are withheld by
+     * {@code binaryFansChainOperand}, so those arguments keep the broken-argument delegate below.
      */
     private Optional<Doc> singleBinaryArgument(
             String prefix,

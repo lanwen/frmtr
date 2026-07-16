@@ -116,7 +116,7 @@ final class JavaCommentPlacementPolicy {
      * trailing slot prints.
      *
      * <p>Both kinds are recovered — the slot also holds an inline block trailing a wrapped binary value's final operand
-     * ({@code return a == 1 /* x *}{@code / || a == 2 /* y *}{@code /;}, the issue #93 final-operand comment). A
+     * ({@code return a == 1 /* x *}{@code / || a == 2 /* y *}{@code /;}, the final-operand comment). A
      * {@code //} after the last operand and before the {@code ;} is dropped both ways otherwise: JavaParser parks it as an
      * orphan of the {@code semicolonOwner} ({@link com.github.javaparser.ast.body.FieldDeclaration} /
      * {@link com.github.javaparser.ast.stmt.ExpressionStmt}) or as the initializer's contained trivia on the last operand,
@@ -776,8 +776,8 @@ final class JavaCommentPlacementPolicy {
     /**
      * Finds the nearest unattached line comment that source placed after {@code node} on the same line.
      *
-     * <p>The parent walk follows JavaParser's containment hierarchy from nearest to farthest owner, preserving the old
-     * "first recoverable same-line comment" behavior while using the run's cached contained-comment map.
+     * <p>The parent walk follows JavaParser's containment hierarchy from nearest to farthest owner, selecting the first
+     * recoverable same-line comment through the run's cached contained-comment map.
      */
     Optional<JavaCommentTrivia> unattachedTrailingLineComment(Node node) {
         return unattachedTrailingComment(node, JavaCommentTrivia::isLine);
@@ -786,9 +786,8 @@ final class JavaCommentPlacementPolicy {
     /**
      * Finds the nearest unattached block comment that source placed after {@code node} on the same line.
      *
-     * <p>The parent walk follows JavaParser's containment hierarchy from nearest to farthest owner, preserving the old
-     * "first recoverable same-line block comment" behavior while moving the raw contained-comment scan behind the
-     * central policy.
+     * <p>The parent walk follows JavaParser's containment hierarchy from nearest to farthest owner, selecting the first
+     * recoverable same-line block comment through the run's cached contained-comment map.
      */
     Optional<JavaCommentTrivia> unattachedTrailingBlockComment(Node node) {
         return unattachedTrailingComment(node, JavaCommentTrivia::isBlock);

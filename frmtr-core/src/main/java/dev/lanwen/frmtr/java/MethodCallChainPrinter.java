@@ -1900,9 +1900,9 @@ final class MethodCallChainPrinter {
      * <p>The root's start column reconstructed from {@code range.begin.column} is a source-column read that understates
      * the rendered column once the root is reindented shallower than its true block/type depth. This gate also considers
      * the root's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type and block)
-     * and takes the <em>wider</em> of the two (#217), so a root reindented flush-left inside deep nesting is not measured
+     * and takes the <em>wider</em> of the two, so a root reindented flush-left inside deep nesting is not measured
      * as fitting at its stale shallow column and hugged over width. This mirrors the sibling
-     * {@link ExpressionLambdaArgumentLayout} first-line gate (#226) and the depth-aware chain probes (#162).
+     * {@link ExpressionLambdaArgumentLayout} first-line gate and the depth-aware chain probes.
      *
      * <p>Two measurement modes, keyed on whether a caller has threaded the same-line leading prefix through
      * {@link LayoutContext#leftEdgePrefix()}:
@@ -2200,7 +2200,7 @@ final class MethodCallChainPrinter {
      * decisions ({@link #canBreakAfterCompactExpressionLambdaRoot}, {@link #promotedRootArgumentsShouldBreak}).
      *
      * <p>Like {@link #compactRootLineWidth} it takes the wider of the source-column reconstruction and the root's
-     * rendered indentation ({@link LayoutWidth#nodeIndentWidth}) (#217), so a root reindented shallower than its true
+     * rendered indentation ({@link LayoutWidth#nodeIndentWidth}), so a root reindented shallower than its true
      * depth is not under-measured, while the source-column floor keeps the {@code = }/{@code return }/continuation
      * leading prefix accounted for (dropping it under-measures the initializer/return chains). The wider-of rule can only
      * measure wider, never relax a break.
@@ -2209,9 +2209,8 @@ final class MethodCallChainPrinter {
      * {@link LayoutContext#leftEdgePrefix()} the rendered column is known exactly
      * ({@code nodeIndentWidth(root) + leftEdgePrefix.length() + text.length()}) and the source-column floor is dropped,
      * exactly as {@link #compactRootLineWidth} does. Its consumer {@link #promotedRootArgumentsShouldBreak} is reached by
-     * the <em>initializer</em> chain carrying a real {@code "NAME = "} prefix, so the arg-break verdict is now measured at
-     * that chain's true rendered column rather than the value's stale source column — byte-identical on already-formatted
-     * input, a determinism hardening for reindented input. Callers with no prefix ({@code root()}) keep the wider-of
+     * the <em>initializer</em> chain carrying a real {@code "NAME = "} prefix, so the arg-break verdict is measured at
+     * that chain's true rendered column rather than the value's stale source column. Callers with no prefix ({@code root()}) keep the wider-of
      * source-column floor, which still stands in for their unmodelled leading prefix.
      */
     private int rootLineWidth(Expression root, String text, LayoutContext layout) {

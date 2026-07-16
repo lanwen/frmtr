@@ -4,8 +4,8 @@ package dev.lanwen.frmtr.java;
  * The closed, enumerated set of <em>inline</em> source-shape reads still live in the Java printers.
  *
  * <p>Sibling to {@link SourceShapeException}, which enumerates the reads that go through
- * {@link SourceShapePolicy}. This enum closes the second tier the D3 flip uncovered: printers that hand-roll a
- * "preserve the author's line layout" decision inline, without ever touching the policy, so they were invisible to
+ * {@link SourceShapePolicy}. This enum closes the second tier: printers that hand-roll a
+ * "preserve the author's line layout" decision inline, without ever touching the policy, so they are invisible to
  * {@code SourceShapeExceptionGovernanceTest}. Two mechanisms make such a read:
  *
  * <ul>
@@ -22,12 +22,10 @@ package dev.lanwen.frmtr.java;
  * and no stale entry (a retired read forces its enum value's deletion, which is progress). Every value below is a
  * {@code RETIREMENT_TARGET}: a "preserve the author's line breaks" read the formatter overwrites.
  *
- * <p>The G3 slice retired five of the original seven inline reads by replacing each with a width-driven or pure-AST
- * decision (dead-code removal, an always-dedented lambda close, a structural chain-scope guard, an inert admission
- * clause, and a below-threshold "pack flat when it fits" rule). The two entries that remain are genuinely load-bearing:
- * each preserves an author-intent line shape that no clean width/AST rule reproduces without regressing the corpus or a
- * curated golden, so they stay deferred on the enclosing-column / {@code leftEdgePrefix} foundation (proposal
- * {@code left-edge-prefix-foundation.md}) that also blocks the last {@link SourceShapePolicy} retirements.
+ * <p>The two entries here are genuinely load-bearing: each preserves an author-intent line shape that no clean width/AST
+ * rule reproduces without regressing the corpus or a curated golden, so they stay deferred on the enclosing-column /
+ * {@code leftEdgePrefix} foundation (proposal {@code left-edge-prefix-foundation.md}) that also blocks the last
+ * {@link SourceShapePolicy} retirements.
  */
 enum InlineSourceShapeException {
 

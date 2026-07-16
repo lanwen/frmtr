@@ -65,8 +65,8 @@ final class AssignmentExpressionPrinter {
 
     private final BiFunction<AssignExpr, ConditionalExpr, Optional<Doc>> conditionalAssignment;
 
-    // Extracted comment-recovery cluster: the assignment statement's terminator trailing-comment family (method-call
-    // value tail line comment before the {@code ;}, binary value after-final-operand pre-{@code ;} comment). See
+    // Comment-recovery cluster: the assignment statement's terminator trailing-comment family (method-call value tail
+    // line comment before the {@code ;}, binary value after-final-operand pre-{@code ;} comment). See
     // {@link AssignmentStatementCommentLayout}.
     private final AssignmentStatementCommentLayout statementCommentLayout;
 
@@ -228,15 +228,15 @@ final class AssignmentExpressionPrinter {
     }
 
     /**
-     * Selects the {@link AssignmentValueArm} for a broken assignment value from its AST kind alone, reproducing the former
-     * ordered cascade. The kinds are mutually exclusive, so this switch is order-independent; an anonymous-class object
-     * creation matches no arm (its body owns the layout) and resolves to {@link AssignmentValueArm#NONE}.
+     * Selects the {@link AssignmentValueArm} for a broken assignment value from its AST kind alone. The kinds are
+     * mutually exclusive, so this switch is order-independent; an anonymous-class object creation matches no arm (its
+     * body owns the layout) and resolves to {@link AssignmentValueArm#NONE}.
      */
     private AssignmentValueArm classifyAssignmentValue(Expression value) {
         return switch (value) {
             case BinaryExpr binaryValue -> AssignmentValueArm.BINARY;
             // An anonymous-class body owns the layout after the constructor header, so it takes no broken shape here and
-            // declines like the former object-creation branch (empty -> flat).
+            // declines to NONE (empty -> flat).
             case ObjectCreationExpr objectCreation -> objectCreation.getAnonymousClassBody().isEmpty()
                 ? AssignmentValueArm.OBJECT_CREATION
                 : AssignmentValueArm.NONE;
@@ -248,9 +248,9 @@ final class AssignmentExpressionPrinter {
     }
 
     /**
-     * Dispatches a classified {@link AssignmentValueArm} to its unchanged shape emitter, returning the identical
-     * {@code Optional<Doc>} the former cascade produced -- including the empty the {@code METHOD_CALL} and
-     * {@code CONDITIONAL} hooks may return, which leaves the cascade empty and falls the caller back to flat assignment.
+     * Dispatches a classified {@link AssignmentValueArm} to its shape emitter, returning the {@code Optional<Doc>} that
+     * emitter produces -- including the empty the {@code METHOD_CALL} and {@code CONDITIONAL} hooks may return, which
+     * leaves the cascade empty and falls the caller back to flat assignment.
      */
     private Optional<Doc> renderAssignmentValueArm(AssignmentValueArm arm, AssignExpr expression) {
         return switch (arm) {
@@ -272,7 +272,7 @@ final class AssignmentExpressionPrinter {
      */
     private Optional<Doc> assignmentWithSuffixedEnclosedValue(AssignExpr expression) {
         // The assignment has already decided this value breaks, so the enclosed suffix receiver must lead with a break;
-        // that positional fact rides on the LayoutContext (#189) rather than a loose boolean argument.
+        // that positional fact rides on the LayoutContext rather than a loose boolean argument.
         Optional<Doc> suffixedEnclosedValue = suffixedEnclosedExpression.apply(
             expression.getValue(),
             LayoutContext.root().withLeadingBreak(true)

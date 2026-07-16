@@ -277,8 +277,8 @@ final class BinaryExpressionPrinter {
      * already fired, routing a fan-threshold, comment/lambda-free fluent chain through the source-neutral canonical fan
      * ({@code chainFanOut}) before falling back to the pre-existing forced-chain / broken-call shape.
      *
-     * <p>Canonical-fan cutover seam U8 (End-state A). The break <em>gate</em> ({@link #methodCallOperandShouldBreak}) is
-     * unchanged — it is the #119-hardened width+AST-only predicate — and this method is reached only once the gate has
+     * <p>The break <em>gate</em> ({@link #methodCallOperandShouldBreak}) is unchanged — it is the width- and AST-only,
+     * source-shape-independent break predicate — and this method is reached only once the gate has
      * decided the operand breaks. Only the delegate <em>shape</em> changes: when the broken operand is itself a
      * 3+-link (or call/factory-rooted 2+-link) chain that the structural rule fans, both a flat-source pass and a
      * pre-broken-argument pass must emit the <em>same</em> fan, or the operand oscillates between the fanned shape
@@ -292,7 +292,7 @@ final class BinaryExpressionPrinter {
      * width-independent link-count rule, so the unmodelled continuation indent never affects whether it fires.
      *
      * <p>Sub-fan-threshold chains (a plain-receiver 1–2-link operand such as {@code rx.fileLabelName().equals(...)}, the
-     * #119 {@code binary-chain-wrap-converge} guard) and expression-lambda / comment-bearing chains are all withheld
+     * source-shape-independent {@code binary-chain-wrap-converge} guard) and expression-lambda / comment-bearing chains are all withheld
      * inside {@code canonicalFanChain}, so they keep the pre-existing forced-chain / broken-call delegate byte-for-byte;
      * expression-lambda-bodied operand chains are the deferred lambda-arrow seam. A withheld chain returns empty without
      * committing any comment claim — comment rendering is claim-neutral, so building the fan candidate mutates no claim
@@ -302,8 +302,8 @@ final class BinaryExpressionPrinter {
         // The operand sits on a binary continuation line; its extra offset is pure continuation indentation the
         // surrounding line applies, which the fan's relative {@link Doc#indent} reproduces, so no textual leftEdgePrefix
         // is threaded (matching the argument first-selector seam). The fan reads nothing else from this context: its
-        // {@code --explain} width-break diagnostic now measures at the operand's rendered column, so the transitional
-        // widthBudget selector this context once carried is retired (U9 / #190). EnclosingConstruct stays ROOT: no chain
+        // {@code --explain} width-break diagnostic measures at the operand's rendered column, so this context carries no
+        // widthBudget selector. EnclosingConstruct stays ROOT: no chain
         // rule consumes it here, and a binary operand is not itself a statement / argument / return / condition position,
         // so fabricating one of those would be misleading.
         LayoutContext operandLayout = new LayoutContext(
@@ -332,7 +332,7 @@ final class BinaryExpressionPrinter {
      * call and right operand carry no comments; the nest form remains the fallback when the suffix cannot align (the
      * closing line would overflow) or comments force the operand through the comment-aware renderer. Keeping the suffix on
      * the closing line is also what makes the layout width-deterministic: it does not depend on whether the call's
-     * argument list was flat or pre-broken in the source (issue #119), because both shapes converge on this single
+     * argument list was flat or pre-broken in the source, because both shapes converge on this single
      * closing-line suffix.
      */
     private boolean leadingOperatorMethodCallBinarySuffixCanAlign(BinaryExpressionLine binaryLine, Expression operand) {
@@ -361,8 +361,8 @@ final class BinaryExpressionPrinter {
      * call's args were already broken across lines would make the layout depend on the previous pass's incidental line
      * shape, so once a pass exploded an operand's args the next pass would re-observe the broken shape and re-explode,
      * producing two different stable outputs for the same tree (flat vs args-exploded) and, near the width boundary, a
-     * layout that never converges. This is the same source-shape-coupling root cause as the #98/#117 wrap-convergence
-     * family (issue #119).
+     * layout that never converges. This is the same source-shape-coupling root cause as the wrap-convergence
+     * family.
      */
     private boolean methodCallOperandShouldBreak(
             BinaryExpressionLine binaryLine,
@@ -379,8 +379,8 @@ final class BinaryExpressionPrinter {
     /**
      * Reports whether a leading-operator method-call binary operand should break its left call's argument list.
      *
-     * <p>Like {@link #methodCallOperandShouldBreak}, this is width-deterministic (see that method for the #119
-     * rationale): the operand explodes its args only when the flat operand overflows the broken line, or sits at the
+     * <p>Like {@link #methodCallOperandShouldBreak}, this is width-deterministic (see that method for the
+     * source-shape-independence rationale): the operand explodes its args only when the flat operand overflows the broken line, or sits at the
      * boundary while the call carries breakable structure.
      */
     private boolean methodCallBinaryOperandShouldBreak(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
@@ -406,8 +406,8 @@ final class BinaryExpressionPrinter {
      * Reports whether a leading-operator method-call binary operand should nest its inner chain rather than align its
      * closing line with the trailing operator.
      *
-     * <p>This break-shape decision is width-deterministic (see {@link #methodCallOperandShouldBreak} for the #119
-     * rationale). The operand nests whenever it is a leading-operator multi-argument call that overflows the available
+     * <p>This break-shape decision is width-deterministic (see {@link #methodCallOperandShouldBreak} for the
+     * source-shape-independence rationale). The operand nests whenever it is a leading-operator multi-argument call that overflows the available
      * width, independent of the input line shape.
      *
      * <p>This is the fallback for {@link #leadingOperatorMethodCallBinarySuffixCanAlign}, which the caller checks first:
@@ -471,7 +471,7 @@ final class BinaryExpressionPrinter {
      *
      * <p>The break fires only for a multi-argument call that overflows the available width; the decision is computed from
      * that width, a fixed property of the AST, rather than from the input's incidental line shape (see
-     * {@link #methodCallOperandShouldBreak} for the #119 rationale). A single-argument overflowing call falls through to
+     * {@link #methodCallOperandShouldBreak} for the source-shape-independence rationale). A single-argument overflowing call falls through to
      * the deterministic operand renderer.
      */
     private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpressionLine binaryLine, Expression operand) {
@@ -544,10 +544,10 @@ final class BinaryExpressionPrinter {
      * Reports whether a binary chain carries between-operand comments that only the comment-aware multi-line render can
      * place, so callers route it through {@link #linesWithComments(BinaryExpr)} instead of the comment-stripped layouts.
      *
-     * <p>Despite the name kept for the original line-comment gate this is the broader "would the plain shape drop a
-     * comment" question. It fires on any contained {@code //} line comment (the historic case) and, additionally, on an
-     * inline {@code /* ... *}{@code /} block comment that sits between two flattened operands. The block arm is what makes
-     * issue #93 route correctly: JavaParser parks such a block comment as the following operand's own trivia, which the
+     * <p>Despite the {@code hasLineComments} name this is the broader "would the plain shape drop a
+     * comment" question. It fires on any contained {@code //} line comment (the line-comment case) and, additionally, on an
+     * inline {@code /* ... *}{@code /} block comment that sits between two flattened operands. The block arm routes an inline
+     * block comment between operands correctly: JavaParser parks such a block comment as the following operand's own trivia, which the
      * comment-stripped {@code lines}/flat layouts discard, while {@link #commentedBinaryLines(BinaryExpr)} re-offers it on
      * the operand boundary. A node's own leading or trailing-after-last block comment is not between two operands, so it
      * is left to its existing slot and this gate stays {@code false} for it.
@@ -675,8 +675,7 @@ final class BinaryExpressionPrinter {
 
     /**
      * Builds the operand-per-line docs for a broken binary chain — the single operand-per-line builder shared by the
-     * comment-free broken path and the comment-aware one the {@code hasLineComments} preempt used to reach through a
-     * separate early return.
+     * comment-free broken path and the comment-aware path that {@code hasLineComments} routes here.
      *
      * <p>When {@code commentAware} is false the chain carries no placement-relevant comments, so every comment-offering
      * step is skipped and each operand renders through the width-breaking {@link #binaryExpressionLineOperand} (plus the
@@ -1068,7 +1067,7 @@ final class BinaryExpressionPrinter {
      * between-operand comment. Identity comparison routes such a binary through the comment-aware multi-line render so
      * both same-text comments survive — the same value-vs-identity hazard the chain printer dedups against.
      *
-     * <p>The {@link #hasBetweenOperandBlockComments(BinaryExpr)} arm covers the issue #93 case: an inline
+     * <p>The {@link #hasBetweenOperandBlockComments(BinaryExpr)} arm covers the inline block-comment-between-operands case: an inline
      * {@code /* ... *}{@code /} block comment between operands ({@code a == 1 /* x *}{@code / || a == 2}) is parked by
      * JavaParser as the following operand's own trivia and the flat shape renders that operand from comment-stripped
      * compact text, so without this arm the block comment is dropped while the chain stays flat. Routing it to the

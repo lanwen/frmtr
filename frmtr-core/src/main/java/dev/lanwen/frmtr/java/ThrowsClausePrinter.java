@@ -61,8 +61,8 @@ final class ThrowsClausePrinter {
     ) {
         // The same-line content the caller emits after the throws clause — the "{" of a body or the ";" of an abstract
         // declaration — is carried on the context as trailing content rather than passed as a loose suffix string, so
-        // the width gate reads "what follows me on this line" from its position (LayoutContext #218) instead of the
-        // caller re-describing it here.
+        // the width gate reads "what follows me on this line" from the LayoutContext instead of the caller
+        // re-describing it here.
         String suffix = layout.trailingContent();
         String exceptions = compactJoin.apply(thrownExceptions);
         String throwsText = "throws " + exceptions;
@@ -70,14 +70,15 @@ final class ThrowsClausePrinter {
             + parameters.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("")
             + ")";
         String flatSignature = prefix + flatParameters;
-        // C10 (#220): the same-line throws width is measured at the declaration's real rendered column, not the fixed
+        // The same-line throws width is measured at the declaration's real rendered column, not the fixed
         // one-indent-level `currentIndented` baseline. A `throws …` on a member of an inner class / nested type renders
         // one block/type level deeper per enclosing scope, which the fixed baseline under-counts, so an over-width
         // nested clause would be kept inline against reality. `LayoutWidth.nodeLine` counts every enclosing
         // TypeDeclaration/BlockStmt around the declaration and floors at one level, and the `currentIndentedWidth` term
         // is kept as a floor so a top-level member is still measured against at least one unit — leaving top-level
-        // declarations byte-identical while correcting the deeper-nested ones (mirrors the LDM-2 unary/ternary/return
-        // gates and the try-with-resources opener gate #219). The trailer still arrives from LayoutContext (above).
+        // declarations byte-identical while correcting the deeper-nested ones (the same real-column measure the
+        // unary/ternary/return gates and the try-with-resources opener gate use). The trailer still arrives from
+        // LayoutContext (above).
         String sameLine = parametersBreak
             ? ") " + throwsText + suffix
             : flatSignature + " " + throwsText + suffix;

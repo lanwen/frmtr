@@ -768,13 +768,9 @@ final class StatementPrinter {
     }
 
     /**
-     * Recovers a {@code //} comment that trails this statement's closing {@code );} on its end line but which JavaParser,
-     * once the call's arguments break one-per-line, re-attributes to the FOLLOWING statement as that statement's leading
-     * comment. Claiming it here as this statement's {@link OwnerSlot#TRAILING} — before the next statement's envelope
-     * would emit it on its own line — keeps the inline {@code ); // note} placement idempotent across re-format (the
-     * flat-source pass parks it on this statement's own trivia, recovered by the method-call/expression tail; the
-     * broken-source pass parks it on the next sibling's lead, recovered here). The first-claimant dry run then renders the
-     * next statement's leading offer empty, so the comment is neither dropped nor double-printed (#137, family G).
+     * Recovers a {@code //} that trails this statement's closing {@code );} but which JavaParser attributes to the
+     * following statement's leading trivia once the call's arguments break one-per-line. Claiming it here as this
+     * statement's {@link OwnerSlot#TRAILING} keeps the inline {@code ); // note} placement stable across a re-format.
      */
     private Doc nextStatementLeadingTrailingComment(ExpressionStmt statement) {
         if (!(statement.getParentNode().orElse(null) instanceof BlockStmt block)) {
@@ -790,10 +786,9 @@ final class StatementPrinter {
             return commentPlacement.leadingComment(next)
                     .filter(JavaCommentTrivia::isLine)
                     .filter(trivia -> trivia.startsAfterNodeOnSameLine(statement))
-                    // The next statement must begin on a LATER line than the comment. A fully collapsed run of
-                    // statements sharing one line (`a; b; c; // note`⏎`d;`) satisfies startsAfterNodeOnSameLine for
-                    // every statement on that line, but the comment trails only the LAST of them — the one whose next
-                    // sibling starts on the following line — so this claims it exactly once, for that statement.
+                    // Require the next statement to start on a later line than the comment: when a run of statements
+                    // collapses onto one line, only the last — whose sibling begins below — actually trails the comment,
+                    // so this claims it exactly once instead of for every statement sharing the line.
                     .filter(trivia -> nextBeginLine > trivia.beginLine(Integer.MAX_VALUE))
                     .map(trivia -> comments.comment(trivia, statement, OwnerSlot.TRAILING))
                     .orElse(Doc.EMPTY);

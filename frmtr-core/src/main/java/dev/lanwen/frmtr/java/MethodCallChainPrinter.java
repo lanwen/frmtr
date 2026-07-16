@@ -2366,11 +2366,17 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix,
             ToIntFunction<String> lineWidth
     ) {
+        // Measure the segment at the continuation column of the root's closing line (the {@code ")" + segment} closure),
+        // not the beside-a-token source column. This segment attaches to the broken root's {@code )} on its continuation
+        // line ({@code ).thenReturn(arg)}), so its argument-break gate must use that rendered column; the default
+        // source-column estimate reads the author's shape and flips the segment's argument list between broken and
+        // collapsed across passes (the {@code when(...).thenReturn(...)} family).
         return methodCallChainSegment(
             expression,
             Optional.empty(),
             finalSegmentSuffix,
-            segment -> lineWidth.applyAsInt(")" + segment)
+            segment -> lineWidth.applyAsInt(")" + segment),
+            true
         );
     }
 

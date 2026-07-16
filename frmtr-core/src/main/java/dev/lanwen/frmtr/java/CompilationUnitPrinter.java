@@ -98,11 +98,11 @@ final class CompilationUnitPrinter {
                 .filter(CompilationUnitPrinter::hasRawGap)
                 .map(importRawGaps::rawGapRegions)
                 .orElse(List.of());
+        // Sweep the raw pre-package comment blob FIRST: it claims the tracked comments it renders, so the orphan pass
+        // below excludes them. Reordering these two would re-emit a swept `//` header line as an orphan (duplication).
         Doc sourceLeadingComments = packageDeclarations.sourceLeadingCommentsBeforePackage(unit);
         if (sourceLeadingComments != Doc.EMPTY) {
             parts.add(sourceLeadingComments);
-            parts.add(Doc.HARD_LINE);
-            parts.add(Doc.HARD_LINE);
         }
         int firstTypeLine = firstTypeLine(unit);
         // Split orphan comments at the package/imports/module boundary: at/above -> file-boundary content, below ->
@@ -117,6 +117,14 @@ final class CompilationUnitPrinter {
             typeLeadingBoundaryLine,
             importRawGapRegions
         );
+        // Give the raw comment blob its trailing blank only when no file-boundary orphan block follows: a following
+        // orphan block emits its OWN leading blank, so adding one here too stacks to three blank lines — while the same
+        // comment reclassified as `package`'s own leading comment next pass emits a single leading blank, flipping 3
+        // blanks to 1 (#137, family F). Deferring the separator to the next section keeps both passes at one blank.
+        if (sourceLeadingComments != Doc.EMPTY && orphanComments == Doc.EMPTY) {
+            parts.add(Doc.HARD_LINE);
+            parts.add(Doc.HARD_LINE);
+        }
         if (orphanComments != Doc.EMPTY) {
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);

@@ -125,6 +125,9 @@ final class VariableInitializerLayout {
 
     private final LayoutWidth layoutWidth;
 
+    /** Stateless precedence authority, used to measure the canonical (clarity-parenthesized) width for the routing gate. */
+    private final NestedBinaryParenthesesLayout binaryParentheses = new NestedBinaryParenthesesLayout();
+
     private final Function<Node, String> compactTypeLike;
 
     private final Function<Node, String> compact;
@@ -663,7 +666,11 @@ final class VariableInitializerLayout {
                 return Optional.of(brokenCall.orElseThrow());
             }
         }
-        if (layoutWidth.blockStatement(flat) > options.lineWidth()) {
+        // Route on the CANONICAL width (bare compact plus the clarity parens frmtr adds around nested binary operands),
+        // not the source form: measuring the parens the renderer inserts either way makes this over-width gate invariant
+        // to whether the source already carries them, so a binary initializer no longer flips tiers (and shapes) between
+        // passes (#137, family D).
+        if (layoutWidth.blockStatement(flat) + binaryParentheses.clarityParenWidth(initializer) > options.lineWidth()) {
             // The initializer line is already over width, so the enclosed suffix receiver must lead with a break; that
             // positional fact rides on the LayoutContext (#189) rather than a loose boolean argument.
             Optional<Doc> suffixedEnclosedInitializer =

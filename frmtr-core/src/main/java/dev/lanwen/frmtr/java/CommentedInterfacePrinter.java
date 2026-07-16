@@ -15,9 +15,16 @@ final class CommentedInterfacePrinter {
 
     /**
      * Reports whether an interface header contains block comments that need the raw-source formatter.
+     *
+     * <p>Only a comment at or after the {@code interface} keyword counts: those live inside the header syntax (name,
+     * type clauses, brace) that this fallback rebuilds. A comment before the keyword is ordinary leading trivia the
+     * structured printer places, so it must not divert the declaration here.
      */
     boolean hasCommentedHeader(String rawInterface) {
-        return commentedInterfaceHeader(rawInterface).contains("/*");
+        List<String> tokens = CommentedTokenText.tokens(commentedInterfaceHeader(rawInterface));
+        int keyword = tokens.indexOf("interface");
+        return keyword >= 0
+            && tokens.subList(keyword, tokens.size()).stream().anyMatch(token -> token.startsWith("/*"));
     }
 
     /**

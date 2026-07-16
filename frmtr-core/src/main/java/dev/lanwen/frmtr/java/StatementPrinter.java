@@ -779,8 +779,11 @@ final class StatementPrinter {
     }
 
     private int methodCallStatementWidth(MethodCallExpr methodCall, ToIntFunction<String> lineWidth) {
-        String raw = rawSource.normalizeWhitespace(rawSource.rawWithoutOwnComment(methodCall));
-        return lineWidth.applyAsInt(raw + ";");
+        // Measure the SOURCE-NEUTRAL compact form, not normalizeWhitespace(rawWithoutOwnComment): the latter turns each
+        // source newline into a space, so a chain the author already wrapped measures wider than the same chain on one
+        // line and this gate flips the statement between the generic fan and the collapsing two-selector-fan across passes.
+        String compactText = compactWithoutOwnComment.apply(methodCall);
+        return lineWidth.applyAsInt(compactText + ";");
     }
 
     private Optional<Comment> conditionalElseStatementTrailingComment(ExpressionStmt statement) {

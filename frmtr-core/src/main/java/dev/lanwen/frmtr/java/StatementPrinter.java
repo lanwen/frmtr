@@ -758,9 +758,47 @@ final class StatementPrinter {
         if (statementTrailing != Doc.EMPTY) {
             return Doc.lineSuffix(Doc.concat(Doc.text(" "), statementTrailing));
         }
+        Doc recoveredNextSiblingTrailing = nextStatementLeadingTrailingComment(statement);
+        if (recoveredNextSiblingTrailing != Doc.EMPTY) {
+            return Doc.lineSuffix(Doc.concat(Doc.text(" "), recoveredNextSiblingTrailing));
+        }
         return conditionalElseStatementTrailingComment(statement)
                 .map(comment -> Doc.lineSuffix(Doc.concat(Doc.text(" "), comments.comment(comment))))
                 .orElse(Doc.EMPTY);
+    }
+
+    /**
+     * Recovers a {@code //} comment that trails this statement's closing {@code );} on its end line but which JavaParser,
+     * once the call's arguments break one-per-line, re-attributes to the FOLLOWING statement as that statement's leading
+     * comment. Claiming it here as this statement's {@link OwnerSlot#TRAILING} — before the next statement's envelope
+     * would emit it on its own line — keeps the inline {@code ); // note} placement idempotent across re-format (the
+     * flat-source pass parks it on this statement's own trivia, recovered by the method-call/expression tail; the
+     * broken-source pass parks it on the next sibling's lead, recovered here). The first-claimant dry run then renders the
+     * next statement's leading offer empty, so the comment is neither dropped nor double-printed (#137, family G).
+     */
+    private Doc nextStatementLeadingTrailingComment(ExpressionStmt statement) {
+        if (!(statement.getParentNode().orElse(null) instanceof BlockStmt block)) {
+            return Doc.EMPTY;
+        }
+        NodeList<Statement> siblings = block.getStatements();
+        for (int index = 0; index + 1 < siblings.size(); index++) {
+            if (siblings.get(index) != statement) {
+                continue;
+            }
+            Statement next = siblings.get(index + 1);
+            int nextBeginLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
+            return commentPlacement.leadingComment(next)
+                    .filter(JavaCommentTrivia::isLine)
+                    .filter(trivia -> trivia.startsAfterNodeOnSameLine(statement))
+                    // The next statement must begin on a LATER line than the comment. A fully collapsed run of
+                    // statements sharing one line (`a; b; c; // note`⏎`d;`) satisfies startsAfterNodeOnSameLine for
+                    // every statement on that line, but the comment trails only the LAST of them — the one whose next
+                    // sibling starts on the following line — so this claims it exactly once, for that statement.
+                    .filter(trivia -> nextBeginLine > trivia.beginLine(Integer.MAX_VALUE))
+                    .map(trivia -> comments.comment(trivia, statement, OwnerSlot.TRAILING))
+                    .orElse(Doc.EMPTY);
+        }
+        return Doc.EMPTY;
     }
 
     /**

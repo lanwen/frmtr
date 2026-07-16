@@ -4,6 +4,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
@@ -31,17 +32,17 @@ final class ChainSegmentWidthLayout {
 
     private final FormatterOptions options;
 
-    private final RawSource rawSource;
+    private final Function<Expression, String> compactWithoutOwnComment;
 
     private final Predicate<Expression> promotesFirstCall;
 
     ChainSegmentWidthLayout(
             FormatterOptions options,
-            RawSource rawSource,
+            Function<Expression, String> compactWithoutOwnComment,
             Predicate<Expression> promotesFirstCall
     ) {
         this.options = options;
-        this.rawSource = rawSource;
+        this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.promotesFirstCall = promotesFirstCall;
     }
 
@@ -105,8 +106,11 @@ final class ChainSegmentWidthLayout {
     }
 
     String methodCallSegmentArgumentsWidthText(NodeList<Expression> arguments) {
+        // Reconstruct each argument SOURCE-NEUTRALLY (compactWithoutOwnComment), not via
+        // normalizeWhitespace(rawWithoutOwnComment): the latter turns an argument's source newlines into spaces, so an
+        // already-wrapped argument measures wider than its flat form and the segment-break gate flips between passes.
         return arguments.stream()
-                .map(argument -> rawSource.normalizeWhitespace(rawSource.rawWithoutOwnComment(argument)))
+                .map(compactWithoutOwnComment)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
     }

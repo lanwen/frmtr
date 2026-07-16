@@ -35,8 +35,6 @@ final class MethodCallChainPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    private final RawSource rawSource;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final MethodCallChainSourcePlanner methodChainPlanner;
@@ -122,7 +120,6 @@ final class MethodCallChainPrinter {
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
-        this.rawSource = context.rawSource;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.compactSource = context.compactSource;
@@ -203,7 +200,11 @@ final class MethodCallChainPrinter {
             this::fannedSelectorColumnWidth,
             this::brokenMethodCallSegment
         );
-        this.segmentWidth = new ChainSegmentWidthLayout(options, rawSource, methodChainPlanner::promotesFirstCall);
+        this.segmentWidth = new ChainSegmentWidthLayout(
+            options,
+            compactSource::compactWithoutOwnComment,
+            methodChainPlanner::promotesFirstCall
+        );
         this.chainComments = new ChainCommentLayout(comments, commentPlacement, commentedExpressionLists);
         this.chainFan = new ChainFanLayout(
             context.options,
@@ -1612,7 +1613,10 @@ final class MethodCallChainPrinter {
     }
 
     private String compactSourceWidthText(Expression expression) {
-        return rawSource.normalizeWhitespace(rawSource.rawWithoutOwnComment(expression));
+        // Source-neutral compact form, not normalizeWhitespace(rawWithoutOwnComment): the latter turns each source
+        // newline into a space, so an expression the author already wrapped measures wider than its flat form and the
+        // root/scope-overflow gates that consume this width flip their verdict between passes.
+        return compactSource.compactWithoutOwnComment(expression);
     }
 
     private Doc groupedPromotedMethodCall(MethodCallExpr expression) {

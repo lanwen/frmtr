@@ -65,6 +65,21 @@ final class VariableInitializerLayout {
     }
 
     /**
+     * The terminator-threading forced-chain callback: like {@link ForcedChainWithLayout} but folds the initializer's
+     * same-line terminator (its {@code ;}) into the chain so its width-driven fit-or-fan verdict counts it. The caller
+     * must not also append the terminator after the returned doc.
+     */
+    @FunctionalInterface
+    interface ForcedChainWithTerminator {
+        Optional<Doc> apply(
+            MethodCallExpr expression,
+            String terminator,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+        );
+    }
+
+    /**
      * The source-neutral canonical-fan callback: emits {@code chainFanOut} for a
      * fan-threshold, comment/lambda-free chain independent of the author's source shape, or empty when the chain is
      * withheld (comment / block-lambda / expression-lambda chains — the deferred lambda-arrow seam). This is the same
@@ -171,6 +186,8 @@ final class VariableInitializerLayout {
     // first-line width probe.
     private final ForcedChainWithLayout initializerChain;
 
+    private final ForcedChainWithTerminator initializerChainWithTerminator;
+
     private final CanonicalFanChain canonicalFanChain;
 
     private final Function<MethodCallExpr, Doc> singleSelectorDotSplit;
@@ -253,6 +270,7 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
             ForcedChainWithLayout initializerChain,
+            ForcedChainWithTerminator initializerChainWithTerminator,
             CanonicalFanChain canonicalFanChain,
             Function<MethodCallExpr, Doc> singleSelectorDotSplit,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
@@ -305,6 +323,7 @@ final class VariableInitializerLayout {
         this.brokenMethodCall = brokenMethodCall;
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
         this.initializerChain = initializerChain;
+        this.initializerChainWithTerminator = initializerChainWithTerminator;
         this.canonicalFanChain = canonicalFanChain;
         this.singleSelectorDotSplit = singleSelectorDotSplit;
         this.packedMethodCallChain = packedMethodCallChain;
@@ -404,6 +423,37 @@ final class VariableInitializerLayout {
                 methodCallChainFirstLine.apply(methodCall),
                 methodCallWithSemicolon.apply(methodCall)
             );
+        }
+        if (
+            variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
+            && initializerFansWidthDrivenTwoSelectorChain(methodCall)
+            && trailingCommentLayout.preSemicolonInitializerComment(variable) == Doc.EMPTY
+        ) {
+            // A two-selector chain over a plain receiver fans one dotted selector per line, source-neutrally, when the
+            // whole line overflows. Render it through the terminator-threaded chain entry so the fan-versus-flat verdict
+            // counts the `;` folded into the last segment: a chain whose flat form fits at exactly the column but
+            // overflows with its terminator fans on every pass rather than collapsing to an over-width flat line.
+            String flatName = declarationPrefix + variable.getNameAsString();
+            Optional<Doc> fannedChain = initializerChainWithTerminator.apply(
+                methodCall,
+                ";",
+                firstLineWidth(variable, flatName + " = "),
+                LayoutContext.root().withLeftEdgePrefix(flatName + " = ")
+            );
+            if (fannedChain.isPresent()) {
+                Doc declaration = variableWithMethodCallChain(
+                    variable,
+                    variableName(variable),
+                    flatName,
+                    methodCall,
+                    methodCallChainFirstLine.apply(methodCall),
+                    fannedChain.orElseThrow()
+                );
+                return Doc.concat(
+                    declaration,
+                    trailingLineComment(trailingCommentLayout.trailingDeclaratorLineComment(variable))
+                );
+            }
         }
         Doc trailingLineComment = trailingCommentLayout.trailingDeclaratorLineComment(variable);
         Doc preSemicolonInitializerComment = trailingCommentLayout.preSemicolonInitializerComment(variable);
@@ -2067,6 +2117,41 @@ final class VariableInitializerLayout {
                             && (methodCallChainInitializerShape.apply(methodCall).singleCall()
                                 || methodCallScopeEndsOnNameLine(scopedCall, methodCall)))
                 )
+                .isPresent();
+    }
+
+    /**
+     * Reports a two-selector chain over a plain (non type-like, non object-creation) receiver
+     * ({@code env.adminClient().alterStreamsGroupOffsets(args)}, {@code keys.stream().collect(...)}): the first selector's
+     * own scope is the receiver root and is not itself a call, so the whole chain is exactly two links. Such a chain fans
+     * one dotted selector per line when it overflows, on BOTH a flat-source and a pre-broken-source pass, so the layout
+     * keys on this AST shape rather than {@link #methodCallScopeEndsOnNameLine}'s source-line read — the source-neutral
+     * fixpoint that closes the flat↔fan reshape.
+     *
+     * <p>Withheld above the canonical link-count threshold ({@code chainBreaksByRule} — the 3+/call-root fan already owns
+     * those), for a block-lambda argument (its hugged fan keeps the block on the last selector's line, which the generic
+     * chain path preserves), and for any own/contained/trailing comment (whose placement the terminator-threaded chain
+     * path does not own).
+     */
+    private boolean initializerFansWidthDrivenTwoSelectorChain(MethodCallExpr methodCall) {
+        MethodCallChainSourcePlanner.InitializerChainShape shape = methodCallChainInitializerShape.apply(methodCall);
+        if (
+            shape.typeLikeRoot()
+            || shape.rootIsObjectCreation()
+            || shape.singleCall()
+            || shape.chainBreaksByRule()
+            || methodCallHasBlockLambdaArgument(methodCall)
+            || methodCallHasOwnComment(methodCall)
+            || sourceShapePolicy.hasContainedComments(methodCall)
+            || !methodCallFinalTrailingLineComments(methodCall).isEmpty()
+        ) {
+            return false;
+        }
+        return methodCall.getScope()
+                .filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .flatMap(MethodCallExpr::getScope)
+                .filter(root -> !(root instanceof MethodCallExpr))
                 .isPresent();
     }
 

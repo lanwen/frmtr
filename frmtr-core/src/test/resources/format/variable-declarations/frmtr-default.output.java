@@ -173,10 +173,8 @@ public class Variables {
 
         Object.test.creation thisObject3 = classWithName.invocationOne().invocationTwo(argument1, argument2, argument3);
 
-        Object.test.creation thisObject4 = classWithName.invocationOne(argument1, argument2, argument3).invocationTwo(
-            argument1,
-            argument2
-        );
+        Object.test.creation thisObject4 = classWithName.invocationOne(argument1, argument2, argument3)
+                .invocationTwo(argument1, argument2);
 
         Object.test.creation thisObject5 = classWithName
                 .invocationOne(firstArgumentWithAVeryVeryVeryVeryLongName, secondArgument, thirdArgument)

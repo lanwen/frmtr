@@ -612,6 +612,17 @@ final class ExpressionPrinters {
         return methodCalls.initializerChain(expression, firstLineWidth, layout);
     }
 
+    // Terminator-threading initializer chain entry: delegates to MethodCallPrinter so the chain's fit-or-fan verdict
+    // counts the caller's same-line terminator.
+    Optional<Doc> initializerChainWithTerminator(
+            MethodCallExpr expression,
+            String terminator,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return methodCalls.initializerChainWithTerminator(expression, terminator, firstLineWidth, layout);
+    }
+
     // The expression statement's method-call-chain shape entry (statement analogue of the return chain's composite
     // entry). Delegates to MethodCallPrinter.statementChain so StatementPrinter threads a single statement chain callback
     // rather than the chain shape-callbacks (source-multiline statement call, forced call with terminator, and the

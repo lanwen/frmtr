@@ -143,6 +143,7 @@ final class DeclarationPrinters {
             expressions::brokenMethodCall,
             expressions::mixedFieldMethodCallChain,
             expressions::initializerChain,
+            expressions::initializerChainWithTerminator,
             expressions::canonicalFanChain,
             expressions::singleSelectorDotSplit,
             expressions::packedMethodCallChain,

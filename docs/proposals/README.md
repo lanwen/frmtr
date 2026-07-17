@@ -33,6 +33,10 @@ roadmap items and are cross-linked from the relevant sections:
   — the broad version of **B1**; B1's `SourceShapePolicy` shipped as its concrete first slice.
 - [`comment-containment-index.md`](comment-containment-index.md) (partially implemented — the index
   boundary landed; caller migration remains) — a perf + comment-handling effort on the **B1/B2** surface.
+- [`comment-attribution-normalization.md`](comment-attribution-normalization.md) (proposed) — makes the
+  comment→node binding a whitespace-invariant function of the token stream, closing the source-dependent
+  comment-attribution non-idempotence class (#391/#393/#395); shares the `JavaCommentMap` hook with the
+  containment-index proposal but deliberately reverses its JavaParser-parity contract.
 - [`cli-discovery-lazy-ignore.md`](cli-discovery-lazy-ignore.md) (implemented; one guarded follow-up —
   ignored-directory pruning) — already delivered part of the discovery speed-up that **M3** builds on.
 - [`archived/`](archived/) — implemented and superseded proposals retained as provenance records (e.g. the

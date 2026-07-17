@@ -1662,6 +1662,15 @@ final class MethodCallPrinter {
         return methodCallArgumentList(arguments, line);
     }
 
+    /**
+     * Renders {@code prefix(args)} through the comment-aware list when a line comment sits in an argument gap, empty
+     * otherwise. Lets an opener-hug caller (the expression-lambda body) keep {@code prefix(} on its line while still
+     * emitting a gap comment the comment-blind {@link #methodCallArgumentList} would drop.
+     */
+    Optional<Doc> commentedArgumentList(String prefix, MethodCallExpr call) {
+        return commentedExpressionLists.parenthesized(prefix, call, call.getArguments());
+    }
+
     private boolean argumentConsumesSuffix(Expression argument) {
         return argument instanceof ObjectCreationExpr || argument instanceof MethodCallExpr;
     }

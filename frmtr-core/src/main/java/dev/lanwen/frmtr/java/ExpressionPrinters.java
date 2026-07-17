@@ -162,6 +162,7 @@ final class ExpressionPrinters {
             this::lambdaBodyCanonicalFanChain,
             this::lambdaBodyChainRootIsTrivialReceiver,
             this::methodCallArgumentList,
+            this::commentedMethodCallArgumentList,
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
             compactSource::compactJoin,
@@ -471,6 +472,10 @@ final class ExpressionPrinters {
 
     Doc methodCallArgumentList(NodeList<Expression> arguments, Doc line) {
         return methodCalls.methodCallArgumentList(arguments, line);
+    }
+
+    private Optional<Doc> commentedMethodCallArgumentList(String prefix, MethodCallExpr call) {
+        return methodCalls.commentedArgumentList(prefix, call);
     }
 
     private Optional<Doc> brokenArgument(Expression expression) {

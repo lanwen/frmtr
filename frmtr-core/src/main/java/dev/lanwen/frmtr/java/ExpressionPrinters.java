@@ -332,6 +332,16 @@ final class ExpressionPrinters {
                         .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value);
                 return !trailing.isEmpty() && trailing.stream().allMatch(JavaCommentTrivia::isBlock);
             },
+            (semicolonOwner, value) -> {
+                // The value's trailing comments are all `//` lines sitting after the terminator on its own source line
+                // (`return x; // note`): render them trailing the `;` in source order, not hoisted ahead of it.
+                List<JavaCommentTrivia> trailing = commentPlacementPolicy
+                        .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value);
+                return !trailing.isEmpty()
+                    && trailing.stream().allMatch(
+                        comment -> comment.isLine() && comment.startsAfterNodeOnSameLine(semicolonOwner)
+                    );
+            },
             (semicolonOwner, value) -> commentPlacementPolicy
                     .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value)
                     .stream()

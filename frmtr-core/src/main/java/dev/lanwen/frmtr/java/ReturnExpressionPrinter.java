@@ -89,6 +89,8 @@ final class ReturnExpressionPrinter {
 
     private final BiFunction<Node, Expression, Boolean> trailingValueCommentsAreAllBlock;
 
+    private final BiFunction<Node, Expression, Boolean> trailingValueCommentStartsAfterSemicolon;
+
     private final BiFunction<Node, Expression, Integer> trailingValueBlockCommentInlineWidth;
 
     private final Predicate<BinaryExpr> binaryHasLineComments;
@@ -126,6 +128,7 @@ final class ReturnExpressionPrinter {
             BiFunction<Expression, Boolean, Doc> parenthesizedBreak,
             BiFunction<Node, Expression, List<Doc>> trailingValueCommentsBeforeSemicolon,
             BiFunction<Node, Expression, Boolean> trailingValueCommentsAreAllBlock,
+            BiFunction<Node, Expression, Boolean> trailingValueCommentStartsAfterSemicolon,
             BiFunction<Node, Expression, Integer> trailingValueBlockCommentInlineWidth,
             Predicate<BinaryExpr> binaryHasLineComments,
             Predicate<BinaryExpr> binaryHasBetweenOperandComments,
@@ -154,6 +157,7 @@ final class ReturnExpressionPrinter {
         this.parenthesizedBreak = parenthesizedBreak;
         this.trailingValueCommentsBeforeSemicolon = trailingValueCommentsBeforeSemicolon;
         this.trailingValueCommentsAreAllBlock = trailingValueCommentsAreAllBlock;
+        this.trailingValueCommentStartsAfterSemicolon = trailingValueCommentStartsAfterSemicolon;
         this.trailingValueBlockCommentInlineWidth = trailingValueBlockCommentInlineWidth;
         this.binaryHasLineComments = binaryHasLineComments;
         this.binaryHasBetweenOperandComments = binaryHasBetweenOperandComments;
@@ -203,6 +207,21 @@ final class ReturnExpressionPrinter {
             && binaryReturnNeedsCommentAwareRender(binaryExpr)
         ) {
             return commentBearingBinaryReturn(binaryExpr, layout);
+        }
+        Node semicolonOwner = expression.getParentNode().orElse(null);
+        if (
+            semicolonOwner != null
+            && Boolean.TRUE.equals(trailingValueCommentStartsAfterSemicolon.apply(semicolonOwner, expression))
+        ) {
+            // The value's trailing comment sits after the `;` on its own source line (`return x; // note`). Keep the `;`
+            // directly on the value and let the comment trail it — matching source order — instead of hoisting the
+            // comment ahead of the `;` and splitting a multi-line trailing comment across the terminator.
+            return Doc.concat(
+                Doc.text("return "),
+                commentFreeFitReturnValue(expression, layout),
+                Doc.text(";"),
+                inlineTrailingComments(trailingValueCommentsBeforeSemicolon.apply(semicolonOwner, expression))
+            );
         }
         Doc preSemicolonComment = preSemicolonValueComment(expression);
         if (preSemicolonComment != Doc.EMPTY) {

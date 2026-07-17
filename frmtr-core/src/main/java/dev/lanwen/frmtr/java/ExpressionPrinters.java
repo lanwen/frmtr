@@ -578,6 +578,10 @@ final class ExpressionPrinters {
         return methodCalls.canonicalFanChain(expression, suffix, layout);
     }
 
+    Doc singleSelectorDotSplit(MethodCallExpr call) {
+        return methodCalls.singleSelectorDotSplit(call, LayoutContext.root());
+    }
+
     Optional<Doc> forcedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth

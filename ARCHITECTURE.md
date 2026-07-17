@@ -286,7 +286,11 @@ Comment preservation is a dedicated subsystem, because comments are trivia (not 
 can drop or duplicate them. Ownership is settled up front: a **`JavaCommentMap`** and read-only
 **`JavaCommentPlacementPolicy`** index the source's comments, and a **`CommentTracker`** pre-pass (the record-only dry
 run above) records the single `(node, slot)` owner of every comment across all families (leading, trailing, adjacent,
-own, orphan, interleaved). The real render then emits a comment only from its recorded owner and empty everywhere else,
+own, orphan, interleaved). JavaParser attaches a trailing comment by a whitespace-sensitive rule, so
+**`CanonicalCommentBinding`** offers a whitespace-invariant alternative — a comment→node skeleton (`preceding`/
+`following`/`enclosing`) and token-span containment computed from the code-token stream — proven invariant by a property
+test and available for comment-driven gates to adopt (the containment-hub adoption is staged; see the comment-attribution
+proposal). The real render then emits a comment only from its recorded owner and empty everywhere else,
 so a comment can be offered in several eagerly-built ranked layout arms without being dropped or duplicated — the
 renderer keeps only the arm it picks. Comment *text* rendering (Javadoc reflow, banner preservation, block/line
 normalization) is centralized in one routine keyed on parser kind. Many focused `*CommentLayout` helpers place comments

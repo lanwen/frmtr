@@ -1,6 +1,57 @@
 # Comment Attribution Normalization
 
-Status: 🔵 Proposed. Design only; nothing here is implemented yet.
+Status: 🟡 Foundation + companion fix in place. `CanonicalCommentBinding` exists and is invariance-tested; the
+expression-lambda-body comment drop is fixed. The containment-hub adoption and the chain trailing-signal / relaxation
+work are the remaining, corpus-gated steps.
+
+## Current state
+
+- **`CanonicalCommentBinding`** holds, per comment, the whitespace-invariant token-gap skeleton
+  (`preceding`/`following`/`enclosing`, computed "closed nearest before / opens nearest after"), a token-span
+  containment test, and a role-gated owner. A binding-invariance property test asserts, over the whole fixture corpus
+  under both `COLLAPSE` and `EXPAND` whitespace re-shapes, that containment and the skeleton are identical. It is not yet
+  consumed by a layout gate (so it costs nothing per run); it is the proven substrate the adoption steps build on, wired
+  into `JavaCommentMap` when the first consumer lands.
+- **The expression-lambda body opener no longer drops an argument-trailing comment.** `() -> call(a, (Cast) b, // note`⏎
+  `c)` renders its arguments through the comment-aware list, so the opener stays hugged on the arrow line and the gap
+  comment survives beside its argument. This is the #393 companion render-path fix, independent of the binding and the
+  containment hub.
+
+## What is left
+
+The adoption is corpus-gated. A full-kafka run (`scripts/corpus-check.sh kafka --full`, base `github/main`) established
+the guardrail below. Two full-kafka runs (`scripts/corpus-check.sh kafka --full`, base `main`) measured the hub-adoption
+path and it does **not** close the residual:
+
+- **Flipping `hasContainedComments` to the canonical span alone** is net-negative: it fixes none of the five residual
+  and destabilizes `ShareCoordinatorShardTest`, where a trailing-statement comment JavaParser had parked inside a nested
+  call was masking a source-shape oscillation the correct "not contained" answer exposes.
+- **Also making the chain `hasComments` verdict canonical** still fixes none of the five and still regresses that file.
+  Reducing each residual to its minimal case shows why: the extracted chains are **idempotent** — only *in their
+  original method, at their original indentation column*, do they oscillate. `StreamsBuilderTest` is a trailing-comment
+  *width* leak (`…withName("suppressed")) // wrapped 2` — the deferred comment's width flips the inner chain's break).
+  `SharePartitionTest` / `ShareCoordinatorShardTest` / `RecordCollectorTest` / `StreamsProducerTest` are `List.of(…)` /
+  `assertThrows(…, () -> …)` hug-vs-explode flips driven by column/width, not by which node a comment binds to.
+
+**Conclusion: the residual five are the source-shape / width-determinism class (#137 / #191), not comment-attribution
+flips.** The canonical binding is the right foundation for the *attribution* class (and fixes the #393 drop), but it does
+not resolve these files, so the hub adoption is deferred to the width-determinism work rather than forced net-negative.
+That remaining work is:
+
+- **Fix the width-determinism at these sites** (deferred trailing-comment width not leaking into the wrap decision;
+  column-stable `List.of(…)` / `assertThrows` argument hug-vs-explode) — the #137 / #191 grind, measured on the corpus.
+- **Then adopt the canonical span at the containment hub + migrate the chain trailing signals** (`hasTrailingLineComments`,
+  `rootHasTrailingLineCommentBeforeFirstSelector`, `finalTrailingLineComments`) together, so a final `); // note` stops
+  flipping, once the exposed source-shape oscillations are already stable. `hasContainedLineComments` stays on the
+  JavaParser bucket (its comment-aware binary/ternary layouts key on line-comment attachment position).
+- **Remove the relaxations** (`chainCommentsAreOnlyTrailingLine`, `chainFansByCanonicalRuleWithTrailingLineComment`,
+  `methodCallChainHasFinalTrailingLineComment`, `MethodCallPrinter#statementChain`'s final-trailing branch), each a
+  byte-identical diff on the external corpus.
+
+Each step's contract is measured on the external kafka/camel/cayenne/tomcat/zookeeper corpus (`scripts/corpus-check.sh`):
+verify-failures delta 0, comment-token delta ≥ 0, non-idempotent delta ≤ 0, over-width worktree ⊆ base.
+
+The rest of this document is the original design; the "Rollout" section is the plan the remaining work follows.
 
 > **Decisions settled (maintainer):**
 > 1. **Separate tracks** from the containment-index perf work — build canonical binding on the existing

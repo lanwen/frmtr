@@ -2,11 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    "helpers:pinGitHubActionDigests"
+    "helpers:pinGitHubActionDigestsToSemver"
   ],
   "enabledManagers": [
     "github-actions",
-    "gradle"
+    "gradle",
+    "gradle-wrapper"
   ],
   "minimumReleaseAge": "14 days",
   "minimumReleaseAgeBehaviour": "timestamp-required"

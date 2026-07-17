@@ -1350,7 +1350,11 @@ final class MethodCallPrinter {
         if (
             expression.getArguments().size() != 1
             || !(expression.getArgument(0) instanceof MethodCallExpr argument)
-            || sourceShapePolicy.hasContainedComments(expression)
+            // Comments block the fan, except the argument chain's own last-selector trailing line comment: the fan
+            // ({@code chainFanOut}) re-emits that slot, so a `call(chain.a().b() // note)` still fans instead of freezing
+            // flat over width and flipping fan<->collapse when the comment re-buckets onto the selector on the next pass.
+            || (sourceShapePolicy.hasContainedComments(expression)
+                && !argumentChainHasOnlyTrailingLineComment(expression, argument))
             || expression.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
             || hostIsChainSegment(expression)
         ) {
@@ -1368,6 +1372,12 @@ final class MethodCallPrinter {
             Doc.HARD_LINE,
             Doc.text(")")
         );
+        // A trailing-comment argument chain commits the exploded shape directly: a line comment closes the hugged arm's
+        // dangling `)` line, and a nested breaking selector can make the exploded arm not "fit" so the fit-ranked
+        // bestFitting would pick the comment-unsafe hugged arm and oscillate. The exploded shape is the stable one.
+        if (sourceShapePolicy.hasContainedComments(expression)) {
+            return Optional.of(exploded);
+        }
         // Prefer breaking right after the call's `(` — the chain argument on its own indented
         // line, the closing `)` dedented to the opener's column ({@code Response.listUsers(}⏎ chain ⏎{@code )},
         // {@code buffer.append(}⏎ chain ⏎{@code )}) — over hugging the chain root onto the opener line and dangling the
@@ -1377,6 +1387,19 @@ final class MethodCallPrinter {
         // of the hugged first line and both wrap the SAME source-neutral fan, the exploded arm fits whenever the hugged
         // one does, so the verdict is deterministic and idempotent — both passes rebuild and rank the same two shapes.
         return Optional.of(Doc.bestFitting(List.of(exploded, hugged), new int[] {1, 0}));
+    }
+
+    /**
+     * Reports that {@code expression}'s only contained comments are the argument chain's final-selector trailing line
+     * comment — the one comment shape the fan preserves ({@code chainFanOut} re-emits it), so the single-fan-chain seam
+     * may still fan the argument instead of dropping to the flat comment-aware list.
+     */
+    private boolean argumentChainHasOnlyTrailingLineComment(MethodCallExpr expression, MethodCallExpr argument) {
+        if (!methodChains.chainFansByCanonicalRuleWithTrailingLineComment(argument)) {
+            return false;
+        }
+        List<Comment> argumentComments = argument.getAllContainedComments();
+        return expression.getAllContainedComments().stream().allMatch(argumentComments::contains);
     }
 
     /**

@@ -1829,7 +1829,21 @@ final class VariableInitializerLayout {
             return false;
         }
         return methodCallChainRootIsObjectCreation.test(methodCall)
-            || singleCallHasSimpleAttachableRoot(methodCall);
+            || singleCallHasSimpleAttachableRoot(methodCall)
+            || singleCallHasInlineMethodCallRoot(methodCall);
+    }
+
+    /**
+     * A single-selector chain whose root is itself a method call ({@code root().collect(args)}): the root renders inline
+     * before the selector, so with the opener fitting (the caller's {@code openerFits} gate) the whole {@code = root().selector(}
+     * prefix stays on the assignment line and only the argument list breaks. That argument-break shape is a fixpoint, so it
+     * must be preferred over breaking after {@code =} regardless of whether the author wrote the chain across lines.
+     */
+    private boolean singleCallHasInlineMethodCallRoot(MethodCallExpr methodCall) {
+        return methodCall.getScope()
+                .filter(Expression::isMethodCallExpr)
+                .filter(scope -> !shouldPrintScopeAsDoc.test(scope))
+                .isPresent();
     }
 
     /**
@@ -2007,7 +2021,12 @@ final class VariableInitializerLayout {
                         || scope.isSuperExpr()
                         || (scope instanceof MethodCallExpr scopedCall
                             && !sourceShapePolicy.hasContainedComments(scopedCall)
-                            && methodCallScopeEndsOnNameLine(scopedCall, methodCall))
+                            // A single-selector chain over a method-call root ({@code root().collect(args)}) attaches
+                            // whether or not source kept the selector on the root's line: only the argument list breaks,
+                            // and the downstream opener-fit gate decides whether it stays on the assignment line. A
+                            // multi-selector chain keeps the source-line gate so it still fans one selector per line.
+                            && (methodCallChainInitializerShape.apply(methodCall).singleCall()
+                                || methodCallScopeEndsOnNameLine(scopedCall, methodCall)))
                 )
                 .isPresent();
     }

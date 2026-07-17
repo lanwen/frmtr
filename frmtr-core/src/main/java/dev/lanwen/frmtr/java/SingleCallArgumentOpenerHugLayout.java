@@ -96,7 +96,10 @@ final class SingleCallArgumentOpenerHugLayout {
         ) {
             return false;
         }
-        String flatCall = request.prefix() + "(" + compactSource.compact(inner) + ")";
+        // Measure the inner call source-neutrally: compact() normalizes the token range, so an array argument keeps the
+        // author's interior spacing and trailing comma ({@code new int[] {a, b,}}), which shifts this width across a
+        // re-format and flips the hug verdict. commentFree() rebuilds the call from the AST, so the width is invariant.
+        String flatCall = request.prefix() + "(" + compactSource.commentFree(inner) + ")";
         return layoutWidth.nodeIndentWidth(expression) + flatCall.length() > options.lineWidth();
     }
 

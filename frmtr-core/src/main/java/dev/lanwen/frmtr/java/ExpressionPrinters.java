@@ -315,6 +315,7 @@ final class ExpressionPrinters {
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,
             compactSource::compact,
+            compactSource::commentFree,
             methodCalls::returnChain,
             methodCalls::brokenMethodCallWithClosingLine,
             methodCalls::methodCallPrefix,
@@ -331,6 +332,16 @@ final class ExpressionPrinters {
                         .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value);
                 return !trailing.isEmpty() && trailing.stream().allMatch(JavaCommentTrivia::isBlock);
             },
+            (semicolonOwner, value) -> {
+                // The value's trailing comments are all `//` lines sitting after the terminator on its own source line
+                // (`return x; // note`): render them trailing the `;` in source order, not hoisted ahead of it.
+                List<JavaCommentTrivia> trailing = commentPlacementPolicy
+                        .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value);
+                return !trailing.isEmpty()
+                    && trailing.stream().allMatch(
+                        comment -> comment.isLine() && comment.startsAfterNodeOnSameLine(semicolonOwner)
+                    );
+            },
             (semicolonOwner, value) -> commentPlacementPolicy
                     .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value)
                     .stream()
@@ -339,6 +350,7 @@ final class ExpressionPrinters {
                     .mapToInt(trivia -> 1 + inlineCommentWidth(JavaFormatter.commentDoc(trivia)))
                     .sum(),
             binaries::hasLineComments,
+            binaries::hasBetweenOperandComments,
             binaries::linesWithComments,
             binaries::flatLineWithComments,
             binaries::flatLineWithCommentsWidth,
@@ -656,6 +668,10 @@ final class ExpressionPrinters {
 
     boolean binaryHasLineComments(BinaryExpr expression) {
         return binaries.hasLineComments(expression);
+    }
+
+    boolean binaryHasBetweenOperandComments(BinaryExpr expression) {
+        return binaries.hasBetweenOperandComments(expression);
     }
 
     Doc binaryLinesWithComments(BinaryExpr expression) {

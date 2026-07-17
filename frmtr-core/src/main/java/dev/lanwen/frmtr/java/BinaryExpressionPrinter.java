@@ -569,6 +569,30 @@ final class BinaryExpressionPrinter {
     }
 
     /**
+     * Reports whether a comment sits <em>between</em> two operands (not merely trailing the last one).
+     *
+     * <p>A comment after the final operand trails the whole chain — a statement terminator can place it — so it does not
+     * force the comment-aware multi-line render; only a comment genuinely between two operands does. Distinguishing the
+     * two keeps a trailing {@code //} from making the chain's flat-versus-broken choice depend on the source line the
+     * comment happened to sit on.
+     */
+    boolean hasBetweenOperandComments(BinaryExpr expression) {
+        List<Expression> operands = new ArrayList<>();
+        flattenBinaryExpression(expression, expression.getOperator(), operands);
+        for (int i = 0; i < operands.size() - 1; i++) {
+            Expression current = operands.get(i);
+            Expression next = operands.get(i + 1);
+            if (
+                !commentPlacement.lineCommentsBetween(expression, current, next).isEmpty()
+                || !commentPlacement.blockCommentsBetween(expression, current, next).isEmpty()
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Rebuilds broken binary lines when line comments appear between operands.
      *
      * <p>JavaParser attaches comments to nearby nodes rather than to operator tokens. The formatter therefore flattens

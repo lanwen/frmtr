@@ -483,7 +483,10 @@ final class IfStatementLayout {
             return separatorWithThenTrailingAndElseLeading(thenTrailingLineComment, elseLeadingLineComment);
         }
         if (thenTrailingLineComment != Doc.EMPTY) {
-            return Doc.concat(Doc.HARD_LINE, thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
+            // Keep a braceless then's trailing comment on the then body's own line ({@code stmt; // note}); only `else`
+            // moves down. Breaking the comment onto its own separator line instead re-buckets it as an else-leading
+            // comment on re-parse, which perturbs the else-trailing claim and drops the else body's own comment.
+            return Doc.concat(Doc.text(" "), thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
         }
         if (betweenThenAndElseBlockComment != Doc.EMPTY) {
             return Doc.concat(Doc.text(" "), betweenThenAndElseBlockComment, Doc.text(" else "));

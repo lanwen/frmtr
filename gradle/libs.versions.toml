@@ -10,7 +10,7 @@ jbake = "2.7.0"
 jmh = "1.37"
 jreleaser = "1.24.0"
 picocli = "4.7.7"
-slf4j = "2.0.17"
+slf4j = "2.0.18"
 
 [libraries]
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }

@@ -697,22 +697,16 @@ final class ChainFanLayout {
     // (the kafka {@code ConsumerGroupMember} oscillation). Such a chain keeps the fan-from-first shape below ({@code
     // target}⏎{@code .computeIfAbsent(…)}⏎…), where the selector's argument list breaks at a stable continuation column.
     //
-    // Additionally gated on the root NOT being SHORTER than the indent unit ({@link #rootAvoidsShortRootPadding}). A
-    // root shorter than one indent ({@code p}, {@code res}) drives {@code chainContinuation}'s short-root PADDING branch,
-    // which dedent-aligns the fanned selectors under the root text rather than at the plain continuation indent. Attaching
-    // the first selector there ({@code p.recordErrors()}⏎padded{@code .stream()}) diverges from the fan-from-first shape
-    // the imperative fall-through renders once a re-format makes the selector arguments span source lines and the early
-    // canonical route is skipped, so the padded-attach and the fan-from-first alternate across passes (the kafka
-    // {@code Sender} / {@code DescribeConsumerGroupTest} indent oscillation). A short-rooted chain keeps the fan-from-first
-    // shape, whose padding branch is already a fixpoint. Long roots (the maintainer's targets — {@code argument},
-    // {@code response.unsentRequests}, {@code counterStream}) never touch the padding branch and attach cleanly.
+    // A SHORT receiver ({@code env}, {@code p}, {@code res}) attaches too: {@link #fanTrivialReceiverAttachLayout} renders
+    // the fanned tail at the plain continuation indent, never {@code chainContinuation}'s short-root PADDING branch, so the
+    // attached opener ({@code env.adminClient()}) anchors the tail. The bare short root no longer sits alone on its line
+    // ({@code env}⏎padded{@code .adminClient()}), the shape that used to diverge from the fan-from-first fall-through.
     private boolean fanAttachesTrivialReceiverFirstSelector(ChainFanCandidate candidate) {
         List<MethodCallExpr> calls = candidate.calls();
         return calls.size() >= 2
             && chainRootIsTrivialReceiver(candidate.root())
             && (firstSelectorAttachesSafely(calls.getFirst())
-                || bareNameReceiverFirstSelectorHugsLambda(candidate.root(), calls.getFirst()))
-            && rootAvoidsShortRootPadding(candidate.root());
+                || bareNameReceiverFirstSelectorHugsLambda(candidate.root(), calls.getFirst()));
     }
 
     // Bare-name-receiver lambda-selector hug. Extends the trivial-receiver first-selector attach to a
@@ -743,10 +737,15 @@ final class ChainFanLayout {
     private Doc fanTrivialReceiverAttachLayout(ChainFanCandidate candidate) {
         List<MethodCallExpr> calls = candidate.calls();
         List<MethodCallExpr> fannedSelectors = new ArrayList<>(calls.subList(1, calls.size()));
+        // The fanned tail hangs at the plain continuation indent, anchored on the attached opener, not on the bare root:
+        // a short root ({@code env}) would otherwise trip {@code chainContinuation}'s root-padding branch and align the
+        // tail under the short root. For a long root this is byte-identical to the root-continuation it replaces.
         return Doc.concat(
             fanRootDoc(candidate.root()),
             attachedFirstSelectorDoc(calls.getFirst()),
-            rootChainContinuation.apply(candidate.root(), methodCallChainSegments.apply(fannedSelectors, candidate.tail()))
+            chainContinuation.apply(
+                Doc.join(Doc.HARD_LINE, methodCallChainSegments.apply(fannedSelectors, candidate.tail()))
+            )
         );
     }
 
@@ -865,21 +864,6 @@ final class ChainFanLayout {
             || argument.isThisExpr()
             || argument.isSuperExpr()
             || argument.isLiteralExpr();
-    }
-
-    /**
-     * Reports whether the trivial-receiver first-selector attach in {@link #chainFanOut} may use {@code root} without
-     * triggering {@code chainContinuation}'s short-root PADDING branch — i.e. the root's compact form is at least one
-     * indent unit wide (or is not a stable single-line compact at all). The padding branch dedent-aligns the fan under a
-     * sub-indent root text; attaching the first selector there diverges from the fan-from-first shape the imperative
-     * fall-through renders on a source-multiline-argument re-format, so a short root ({@code p}, {@code res}) must keep the
-     * fan-from-first layout to stay a fixpoint. Mirrors the exact predicate {@code chainContinuation(Expression, List)}
-     * uses to enter that branch, so the two stay in lockstep.
-     */
-    private boolean rootAvoidsShortRootPadding(Expression root) {
-        return compactSingleLineRoot.apply(root)
-                .filter(rootText -> rootText.length() < options.indentUnit().length())
-                .isEmpty();
     }
 
     /**

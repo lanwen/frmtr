@@ -359,6 +359,26 @@ final class MethodCallChainPrinter {
         );
     }
 
+    // The terminator-threading forced entry: renders the chain with {@code tail} (the caller's same-line {@code ;})
+    // folded into the LAST segment, so the width-driven fit-or-fan verdict counts the terminator. A caller whose chain
+    // owns its statement terminator threads it here rather than appending it outside the chain doc, so a chain whose flat
+    // form fits at exactly the column but overflows once the {@code ;} lands fans instead of keeping an over-width line.
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            MethodCallChainTail tail,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return methodCallChain(
+            expression,
+            MethodCallBreakMode.FORCED,
+            tail,
+            layoutWidth::currentIndented,
+            firstLineWidth,
+            layout
+        );
+    }
+
     Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
         return compactRootWithBrokenFinalChainSegment(expression, layoutWidth::currentIndented);
     }

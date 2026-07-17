@@ -872,6 +872,23 @@ final class MethodCallPrinter {
         return forcedMethodCallChain(methodCall, firstLineWidth, chainLayout);
     }
 
+    // The terminator-threading initializer chain entry: folds the caller's same-line terminator (an initializer's
+    // {@code ;}) into the chain so its width-driven fit-or-fan verdict counts it. The caller must NOT also append the
+    // terminator after the returned doc.
+    Optional<Doc> initializerChainWithTerminator(
+            MethodCallExpr methodCall,
+            String terminator,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext chainLayout
+    ) {
+        return methodChains.forcedMethodCallChain(
+            methodCall,
+            MethodCallChainPrinter.MethodCallChainTail.of(terminator),
+            firstLineWidth,
+            chainLayout
+        );
+    }
+
     /**
      * Renders an expression statement's method-call-chain shape by running the statement-flavored chain-shape cascade
      * (the statement analogue of {@link #returnChain}). Every shape decision below is an internal

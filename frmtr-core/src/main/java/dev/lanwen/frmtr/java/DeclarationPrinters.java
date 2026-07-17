@@ -144,6 +144,7 @@ final class DeclarationPrinters {
             expressions::mixedFieldMethodCallChain,
             expressions::initializerChain,
             expressions::canonicalFanChain,
+            expressions::singleSelectorDotSplit,
             expressions::packedMethodCallChain,
             methodCall -> expressions.expressionWithTail(methodCall, ExpressionTail.SEMICOLON),
             expressions::mixedFieldMethodCallRoot,

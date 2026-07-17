@@ -173,6 +173,8 @@ final class VariableInitializerLayout {
 
     private final CanonicalFanChain canonicalFanChain;
 
+    private final Function<MethodCallExpr, Doc> singleSelectorDotSplit;
+
     private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain;
 
     private final Function<MethodCallExpr, Doc> methodCallWithSemicolon;
@@ -252,6 +254,7 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
             ForcedChainWithLayout initializerChain,
             CanonicalFanChain canonicalFanChain,
+            Function<MethodCallExpr, Doc> singleSelectorDotSplit,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
@@ -303,6 +306,7 @@ final class VariableInitializerLayout {
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
         this.initializerChain = initializerChain;
         this.canonicalFanChain = canonicalFanChain;
+        this.singleSelectorDotSplit = singleSelectorDotSplit;
         this.packedMethodCallChain = packedMethodCallChain;
         this.methodCallWithSemicolon = methodCallWithSemicolon;
         this.mixedFieldMethodCallRoot = mixedFieldMethodCallRoot;
@@ -1685,7 +1689,27 @@ final class VariableInitializerLayout {
         if (sourceShapePolicy.hasContainedComments(methodCall)) {
             return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
         }
-        return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
+        Doc attach = brokenMethodCallArgumentList(name, methodCall, callPrefix);
+        if (
+            methodCallChainInitializerShape.apply(methodCall).singleCall()
+            && singleCallHasInlineMethodCallRoot(methodCall)
+            && singleSelectorTailFitsOnContinuation(methodCall)
+        ) {
+            // The selector's arguments fit flat on one continuation line, so split by dot (root on the `=` line, the
+            // selector on its own continuation line) rather than opening and exploding the argument list. When the
+            // arguments would explode (a broken lambda body, a nested breaking call), fall through to the opener-attach.
+            return Optional.of(Doc.concat(Doc.text(name + " = "), singleSelectorDotSplit.apply(methodCall)));
+        }
+        return Optional.of(attach);
+    }
+
+    /**
+     * Whether the single selector rendered flat ({@code .name(compactArgs)}) fits on its own dotted continuation line,
+     * so the dot-split keeps the argument list on one line rather than exploding it.
+     */
+    private boolean singleSelectorTailFitsOnContinuation(MethodCallExpr methodCall) {
+        String tail = "." + methodCall.getNameAsString() + "(" + compactJoin.apply(methodCall.getArguments()) + ");";
+        return layoutWidth.continuationStatement(tail) <= options.lineWidth();
     }
 
     /**

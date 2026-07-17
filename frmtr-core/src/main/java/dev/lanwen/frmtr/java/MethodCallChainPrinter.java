@@ -1261,6 +1261,16 @@ final class MethodCallChainPrinter {
     }
 
     /**
+     * The dot-split of a single-selector chain: the root, then the sole selector on its own dotted continuation line
+     * ({@code root()}⏎{@code .selector(args)}), through the source-neutral {@link #chainFanOut}. The initializer layout
+     * ranks this against its opener-attach shape so the dot-split is kept only when the selector's arguments fit on one
+     * continuation line.
+     */
+    Doc singleSelectorDotSplit(MethodCallExpr call, LayoutContext layout) {
+        return chainFanOut(call.getScope().orElseThrow(), List.of(call), MethodCallChainTail.EMPTY, layout);
+    }
+
+    /**
      * The object-creation-rooted sibling of {@link #rankedSingleSegmentChain}. Emits one ranked
      * {@link Doc#bestFitting(java.util.List) bestFitting} for a comment-free, width-driven single-segment chain whose root
      * is a source-compact constructor ({@code new Type(args).selector(...)}) and whose final segment carries breakable

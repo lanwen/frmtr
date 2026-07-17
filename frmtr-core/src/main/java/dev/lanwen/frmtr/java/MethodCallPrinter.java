@@ -828,6 +828,16 @@ final class MethodCallPrinter {
     // return chain fans through the source-neutral {@code chainFanOut}, ahead of the return caller's source-multiline
     // branches. The return caller threads {@code withLeftEdgePrefix("return ")}; the suffix is empty (the return terminator
     // {@code ;} is appended outside the value).
+    /**
+     * The source-neutral dot-split of a single-selector chain: the root on one line, the selector on its own dotted
+     * continuation line ({@code root()}⏎{@code .selector(args)}). Built through {@code chainFanOut} (a pure AST function)
+     * so it is a fixpoint; callers rank it against the opener-attach shape so the dot-split wins only when the selector's
+     * arguments fit on their continuation line.
+     */
+    Doc singleSelectorDotSplit(MethodCallExpr call, LayoutContext layout) {
+        return methodChains.singleSelectorDotSplit(call, layout);
+    }
+
     Optional<Doc> canonicalFanChain(
             MethodCallExpr expression,
             String finalSegmentSuffix,

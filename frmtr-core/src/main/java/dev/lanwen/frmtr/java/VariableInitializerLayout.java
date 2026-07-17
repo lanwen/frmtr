@@ -1419,11 +1419,26 @@ final class VariableInitializerLayout {
             String declarationPrefix,
             BinaryExpr binaryExpr
     ) {
+        // A leading comment before the first operand cannot ride the `=` line ({@code = // note} swallows the operand and
+        // re-parses onto its own line), so break after `=` and let the comment lead the first operand.
+        if (binaryInitializerHasLeadingFirstOperandComment(binaryExpr)) {
+            return false;
+        }
         String firstOperand = binaryInitializerFirstOperandLine(binaryExpr);
         return layoutWidth.variableInitializer(
             variable,
             declarationPrefix + variable.getNameAsString() + " = " + firstOperand
         ) <= options.lineWidth();
+    }
+
+    private boolean binaryInitializerHasLeadingFirstOperandComment(BinaryExpr binaryExpr) {
+        Expression firstOperand = firstBinaryOperand(binaryExpr);
+        return isLineCommentBefore(binaryExpr.getComment().orElse(null), firstOperand)
+            || isLineCommentBefore(firstOperand.getComment().orElse(null), firstOperand);
+    }
+
+    private boolean isLineCommentBefore(Comment comment, Expression operand) {
+        return comment instanceof LineComment && CommentIndex.startsBefore(comment, operand);
     }
 
     private String binaryInitializerFirstOperandLine(BinaryExpr binaryExpr) {
@@ -2611,10 +2626,16 @@ final class VariableInitializerLayout {
                 .filter(LineComment.class::isInstance)
                 .filter(comment -> CommentIndex.startsBefore(comment, initializer))
                 .forEach(leadingComments::add);
-        initializer.getComment()
-                .filter(LineComment.class::isInstance)
-                .filter(comment -> CommentIndex.startsBefore(comment, initializer))
-                .ifPresent(leadingComments::add);
+        // A comment-bearing binary renders its own first-operand leading comment through the comment-aware binary path,
+        // so hoisting the initializer's own comment here too would print it twice (and the duplicate grows every pass).
+        boolean binaryRendersOwnLeadingComment =
+            initializer instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments.test(binaryExpr);
+        if (!binaryRendersOwnLeadingComment) {
+            initializer.getComment()
+                    .filter(LineComment.class::isInstance)
+                    .filter(comment -> CommentIndex.startsBefore(comment, initializer))
+                    .ifPresent(leadingComments::add);
+        }
         // A comment that collapse slid onto the declarator name's line attaches to the name; recover it here when it
         // sits in the name-to-initializer gap (after the name, before the initializer) rather than leading the name.
         variable.getName()

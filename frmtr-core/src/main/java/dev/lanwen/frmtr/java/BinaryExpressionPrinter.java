@@ -340,6 +340,10 @@ final class BinaryExpressionPrinter {
             !binaryLine.hasLeadingOperator()
             || !(operand instanceof BinaryExpr binaryOperand)
             || !(binaryOperand.getLeft() instanceof MethodCallExpr methodCall)
+            // Breaking the left call's argument list only relieves width when it has arguments; an empty call
+            // ({@code call() == rhs}) would render a degenerate {@code call(⏎⏎) == rhs}, so leave the overflow to the
+            // normal binary renderer, which fans the right operand instead.
+            || methodCall.getArguments().isEmpty()
             || sourceShapePolicy.hasContainedComments(methodCall)
             || sourceShapePolicy.hasContainedComments(binaryOperand.getRight())
             || !methodCallBinaryOperandShouldBreak(binaryLine, binaryOperand)

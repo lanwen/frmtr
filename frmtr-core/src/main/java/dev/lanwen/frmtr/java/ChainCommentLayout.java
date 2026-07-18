@@ -314,6 +314,15 @@ final class ChainCommentLayout {
     }
 
     /**
+     * Whether JavaParser bound a trailing line comment to {@code node}'s own last token (its own comment), as opposed
+     * to a comment sitting deeper inside {@code node}'s subtree. Distinguishes an argument chain that itself trails a
+     * comment ({@code chain.a().b() // note}) from one whose comment binds to a nested leaf ({@code List.of(x // note)}).
+     */
+    boolean hasOwnTrailingLineComment(Node node) {
+        return commentPlacement.trailingLineComment(node).isPresent();
+    }
+
+    /**
      * Keeps a final segment's same-line comment after the rendered call, even when the call arguments break.
      */
     Doc finalTrailingLineComment(MethodCallExpr expression) {

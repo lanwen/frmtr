@@ -2832,6 +2832,16 @@ final class MethodCallChainPrinter {
             boolean segmentOnOwnLine
     ) {
         MethodCallChainTail segmentSuffix = nextCall.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY;
+        // A single method-call argument that itself trails a line comment binds that comment inside the argument, though
+        // it belongs after this segment's `)`. Claim the segment's trailing slot before rendering the argument (first
+        // offer wins the ownership pre-pass) so the argument renders comment-free and the comment stays a stable `) // c`.
+        boolean claimTrailingBeforeArgument =
+            expression.getArguments().size() == 1
+            && expression.getArgument(0) instanceof MethodCallExpr argument
+            && chainComments.hasOwnTrailingLineComment(argument);
+        Doc claimedTrailingComment = claimTrailingBeforeArgument
+            ? segmentTrailingComment(expression, nextCall)
+            : Doc.EMPTY;
         Doc segment = methodCallChainSegment(
             expression,
             nextCall.isEmpty(),
@@ -2839,13 +2849,20 @@ final class MethodCallChainPrinter {
             segmentSuffix,
             segmentOnOwnLine
         );
-        Doc trailingComment = nextCall
-                .map(next -> chainComments.trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
-                .orElseGet(() -> chainComments.finalTrailingLineComment(expression));
+        Doc trailingComment = claimTrailingBeforeArgument
+            ? claimedTrailingComment
+            : segmentTrailingComment(expression, nextCall);
         if (trailingComment == Doc.EMPTY) {
             return segment;
         }
         return Doc.concat(segment, Doc.lineSuffix(Doc.concat(Doc.text(" "), trailingComment)));
+    }
+
+    /** The segment's between-segments trailing line comment ({@code nextCall} present) or its final trailing comment. */
+    private Doc segmentTrailingComment(MethodCallExpr expression, Optional<MethodCallExpr> nextCall) {
+        return nextCall
+                .map(next -> chainComments.trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
+                .orElseGet(() -> chainComments.finalTrailingLineComment(expression));
     }
 
     private Doc appendFinalSegmentSuffix(Doc doc, MethodCallChainTail finalSegmentSuffix) {

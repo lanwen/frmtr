@@ -2,7 +2,6 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
@@ -59,6 +58,8 @@ final class ExpressionLambdaArgumentLayout {
 
     private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
 
+    private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedMethodCallArgumentList;
+
     private final Function<Node, String> compact;
 
     private final Function<List<? extends Node>, String> compactJoin;
@@ -92,6 +93,7 @@ final class ExpressionLambdaArgumentLayout {
             Predicate<MethodCallExpr> lambdaBodyChainFansByCanonicalRule,
             JavaFormatRule<Statement> statementRenderer,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
+            BiFunction<String, MethodCallExpr, Optional<Doc>> commentedMethodCallArgumentList,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
             BiFunction<Expression, Boolean, Doc> binaryExpressionNestedLinesRenderer,
@@ -111,6 +113,7 @@ final class ExpressionLambdaArgumentLayout {
         this.lambdaBodyChainFansByCanonicalRule = lambdaBodyChainFansByCanonicalRule;
         this.statementRenderer = statementRenderer;
         this.methodCallArgumentList = methodCallArgumentList;
+        this.commentedMethodCallArgumentList = commentedMethodCallArgumentList;
         this.compact = compact;
         this.compactJoin = compactJoin;
         this.binaryExpressionNestedLinesRenderer = binaryExpressionNestedLinesRenderer;
@@ -174,13 +177,20 @@ final class ExpressionLambdaArgumentLayout {
         ) {
             return Optional.empty();
         }
-        String opener = methodCallPrefix(methodCall) + "(";
-        String firstLine = parameters + " -> " + opener;
+        String prefix = methodCallPrefix(methodCall);
+        String firstLine = parameters + " -> " + prefix + "(";
         if (
             Math.max(expressionFirstLineWidth(firstLine), columnWidth.applyAsInt(firstLine)) > options.lineWidth()
             || brokenArgumentListLambdaBodyWidth(firstLine) > options.lineWidth()
         ) {
             return Optional.empty();
+        }
+        // A comment sitting in an argument gap would be dropped by the comment-blind argument list, so render the
+        // arguments through the comment-aware list — keeping the opener hugged on the arrow line while the gap comment
+        // survives beside its argument. Calls with no gap comment keep the plain list.
+        Optional<Doc> commentedArguments = commentedMethodCallArgumentList.apply(prefix, methodCall);
+        if (commentedArguments.isPresent()) {
+            return Optional.of(Doc.concat(Doc.text(parameters + " -> "), commentedArguments.orElseThrow()));
         }
         return Optional.of(
             Doc.concat(
@@ -253,17 +263,11 @@ final class ExpressionLambdaArgumentLayout {
      * is unaffected, so a body whose only comments are nested in a lambda argument keeps the compact opener layout.
      */
     private boolean openerWouldDropPrefixComment(MethodCallExpr methodCall) {
+        Node firstArgument = methodCall.getArgument(0);
         return methodCall.getAllContainedComments()
                 .stream()
                 .filter(LineComment.class::isInstance)
-                .anyMatch(comment -> !commentLiesInsideAnyArgument(methodCall, comment));
-    }
-
-    private boolean commentLiesInsideAnyArgument(MethodCallExpr methodCall, Comment comment) {
-        return methodCall.getArguments()
-                .stream()
-                .anyMatch(argument -> argument.getAllContainedComments().stream().anyMatch(contained -> contained == comment)
-                        || argument.getComment().filter(own -> own == comment).isPresent());
+                .anyMatch(comment -> CommentIndex.startsBefore(comment, firstArgument));
     }
 
     Optional<Doc> methodCallBodyWithHeader(String parameters, MethodCallExpr methodCall) {

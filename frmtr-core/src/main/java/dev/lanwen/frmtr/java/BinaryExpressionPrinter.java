@@ -726,7 +726,16 @@ final class BinaryExpressionPrinter {
     ) {
         List<Doc> lines = new ArrayList<>();
         if (commentAware && !operands.isEmpty()) {
-            lines.addAll(commentDocs(lineCommentsBeforeFirstOperand(expression, operands.getFirst())));
+            // Anchor before-first comments to this binary's own (expression, LEADING) key, not the claim-neutral
+            // (comment, INTERLEAVED). An enclosed logical operand rebuilds its inner chain here, so its before-first
+            // offer and the enclosing chain's between-operand offer would otherwise compute the same self-key and both
+            // render — duplicating, then dropping, the comment on re-format. The distinct key lets first-claim-wins
+            // (the enclosing between-operand offer, visited first) suppress this one.
+            lines.addAll(commentDocs(
+                lineCommentsBeforeFirstOperand(expression, operands.getFirst()),
+                expression,
+                OwnerSlot.LEADING
+            ));
         }
         for (int i = 0; i < operands.size(); i++) {
             Expression operand = operands.get(i);
@@ -1005,6 +1014,18 @@ final class BinaryExpressionPrinter {
         // slots that are not the recorded owner.
         return sourceComments.stream()
                 .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+    }
+
+    /**
+     * Before-first sibling of {@link #commentDocs(List)} that names a structural {@code (anchor, slot)} owner instead of
+     * the claim-neutral {@code (comment, INTERLEAVED)} key. Only the before-first site needs this: it is the one comment
+     * offer a nested logical operand duplicates against its enclosing chain's between-operand offer.
+     */
+    private List<Doc> commentDocs(List<JavaCommentTrivia> sourceComments, Node anchor, OwnerSlot slot) {
+        return sourceComments.stream()
+                .map(comment -> comments.comment(comment, anchor, slot))
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();
     }

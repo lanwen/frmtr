@@ -643,12 +643,15 @@ final class StatementPrinter {
         return lines;
     }
 
+    // The nested statement begins at the first non-blank, non-comment-only line after the label's `:` — whatever its
+    // keyword. Matching only `for`/`{` mis-fired for a labeled `while`/`do` loop that contains a `for`: it skipped the
+    // loop header and bound the loop body's leading comment to the label, hoisting (then re-duplicating) it every pass.
     private int labeledNestedStatementStart(String labelBody) {
         int cursor = 0;
         for (String line : labelBody.split("\\R", -1)) {
-            String stripped = line.stripLeading();
-            if (stripped.startsWith("for") || stripped.startsWith("{")) {
-                return cursor + line.indexOf(stripped);
+            String leadingStripped = line.stripLeading();
+            if (!leadingStripped.isBlank() && !isCommentOnlyLine(leadingStripped.stripTrailing())) {
+                return cursor + (line.length() - leadingStripped.length());
             }
             cursor += line.length() + 1;
         }

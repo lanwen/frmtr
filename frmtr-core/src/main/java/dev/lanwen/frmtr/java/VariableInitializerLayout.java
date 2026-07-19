@@ -395,6 +395,16 @@ final class VariableInitializerLayout {
             variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
             && !methodCallFinalTrailingLineComments(methodCall).isEmpty()
         ) {
+            // An enclosed-receiver suffix call ({@code (a + b).toCharArray(); // NOSONAR}) renders through the stable
+            // width-driven initializer gate, not the chain path. JavaParser binds the trailing comment to the field when
+            // the value is flat and to the call's selector when the receiver breaks; the chain path collapses the broken
+            // shape to an over-width flat line while the width gate keeps it broken, so the two attribution passes
+            // disagree forever. Route both through the same {@code variableWithInitializer} shape and re-home the comment
+            // as a width-free suffix, so the value breaks identically either way and the comment stays put.
+            if (methodCall.getScope().filter(EnclosedExpr.class::isInstance).isPresent()) {
+                Doc value = variableWithInitializer(variable, methodCall, declarationPrefix, Doc.text(";"));
+                return Doc.concat(value, trailingLineComment(methodCallFinalTrailingLineComment(methodCall)));
+            }
             // Whether the chain's final segment carries a trailing line comment
             // ({@code .thenMany(Flux.empty()); // note}) is a structural correctness property, not a source-shape one, so
             // this route claims it whenever such a comment is present, independent of source shape. The chain renderer
@@ -484,6 +494,14 @@ final class VariableInitializerLayout {
 
     private List<JavaCommentTrivia> methodCallFinalTrailingLineComments(MethodCallExpr expression) {
         return trailingCommentLayout.methodCallFinalTrailingLineComments(expression);
+    }
+
+    /** Renders the call's final trailing line comment(s) as one claimed Doc, or {@link Doc#EMPTY} when there are none. */
+    private Doc methodCallFinalTrailingLineComment(MethodCallExpr expression) {
+        return methodCallFinalTrailingLineComments(expression).stream()
+                .map(comments::comment)
+                .reduce((first, second) -> Doc.concat(first, Doc.text(" "), second))
+                .orElse(Doc.EMPTY);
     }
 
     private Doc trailingLineComment(Doc comment) {

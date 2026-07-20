@@ -370,7 +370,13 @@ final class MethodCallPrinter {
         if (commentedExpressionLambda.isPresent()) {
             return commentedExpressionLambda.orElseThrow();
         }
-        if (!heavy) {
+        // The expression-lambda hug rebuilds the call opener from comment-stripped compact text and only renders the
+        // lambda body through a comment path, so a comment sitting OUTSIDE the trailing lambda — an opener-to-lambda gap
+        // comment or one on a leading argument (`assertThrows(SomeType.class, // note` ⏎ `() -> body)`) — has no slot
+        // and is dropped. Withhold both lambda-hug branches for such a call so it falls to the comment-aware exploded
+        // list below, which preserves every comment as a source-neutral fixpoint.
+        boolean commentOutsideTrailingLambda = callCarriesCommentOutsideTrailingLambda(expression);
+        if (!heavy && !commentOutsideTrailingLambda) {
             Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.render(
                 prefix,
                 expression.getArguments(),
@@ -380,9 +386,11 @@ final class MethodCallPrinter {
                 return huggableExpressionLambda.orElseThrow();
             }
         }
-        Optional<Doc> brokenExpressionLambdaArguments = brokenExpressionLambdaArgumentsForOverflow(prefix, expression, layout);
-        if (brokenExpressionLambdaArguments.isPresent()) {
-            return brokenExpressionLambdaArguments.orElseThrow();
+        if (!commentOutsideTrailingLambda) {
+            Optional<Doc> brokenExpressionLambdaArguments = brokenExpressionLambdaArgumentsForOverflow(prefix, expression, layout);
+            if (brokenExpressionLambdaArguments.isPresent()) {
+                return brokenExpressionLambdaArguments.orElseThrow();
+            }
         }
         Optional<Doc> singleTextBlockArgument = singleTextBlockArgument(prefix, expression);
         if (singleTextBlockArgument.isPresent()) {
@@ -438,6 +446,25 @@ final class MethodCallPrinter {
             return call;
         }
         return Doc.group(call);
+    }
+
+    /**
+     * Reports whether the call carries a comment outside its trailing lambda argument — an opener-to-lambda gap comment
+     * or one on a leading argument. The expression-lambda hug would strip such a comment when it compact-joins the
+     * leading arguments, so a call carrying one must decline the hug and use the comment-aware exploded list. A comment
+     * inside the trailing lambda's own subtree is left to the lambda-hug's own handling.
+     */
+    private boolean callCarriesCommentOutsideTrailingLambda(MethodCallExpr expression) {
+        NodeList<Expression> arguments = expression.getArguments();
+        if (arguments.isEmpty()
+            || !(arguments.get(arguments.size() - 1) instanceof LambdaExpr trailingLambda)
+            || !sourceShapePolicy.hasContainedComments(expression)) {
+            return false;
+        }
+        List<Comment> insideTrailingLambda = new ArrayList<>(trailingLambda.getAllContainedComments());
+        trailingLambda.getComment().ifPresent(insideTrailingLambda::add);
+        return expression.getAllContainedComments().stream()
+                .anyMatch(comment -> !insideTrailingLambda.contains(comment));
     }
 
     private Doc methodCallWithTail(

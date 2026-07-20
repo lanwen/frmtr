@@ -1,8 +1,7 @@
 class AssignmentContinuation {
 
   void update() {
-    enabled =
-      accountReady &&
+    enabled = accountReady &&
       quotaAvailable &&
       regionActive &&
       policyAccepted;

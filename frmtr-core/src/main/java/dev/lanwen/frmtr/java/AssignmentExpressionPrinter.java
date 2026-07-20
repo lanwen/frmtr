@@ -70,6 +70,10 @@ final class AssignmentExpressionPrinter {
     // {@link AssignmentStatementCommentLayout}.
     private final AssignmentStatementCommentLayout statementCommentLayout;
 
+    // Sizes the clarity parens frmtr inserts around nested binary operands so the break gate measures the canonical
+    // parenthesized form, invariant to whether the source already carries them.
+    private final NestedBinaryParenthesesLayout binaryParentheses = new NestedBinaryParenthesesLayout();
+
     AssignmentExpressionPrinter(
             FormatterOptions options,
             CommentTracker comments,
@@ -135,7 +139,13 @@ final class AssignmentExpressionPrinter {
                 return conditionalValue.orElseThrow();
             }
         }
-        if (blockStatementWidth.applyAsInt(flat + ";") > options.lineWidth()) {
+        // Route on the CANONICAL width (bare compact plus the clarity parens frmtr adds around nested binary operands),
+        // not the source form, so a binary value routes to the same tier and shape whether or not the source already
+        // carries those parens -- otherwise the paren-free shape stays flat at the limit while its rendered line spills.
+        if (
+            blockStatementWidth.applyAsInt(flat + ";") + binaryParentheses.clarityParenWidth(expression.getValue())
+            > options.lineWidth()
+        ) {
             Optional<Doc> brokenAssignment = brokenAssignment(expression);
             if (brokenAssignment.isPresent()) {
                 return brokenAssignment.orElseThrow();
@@ -287,14 +297,26 @@ final class AssignmentExpressionPrinter {
     /**
      * Moves a binary value below the assignment operator while preserving binary-specific continuation policy.
      *
-     * <p>The cast-division exception delegates the decision to {@link BinaryExpressionPrinter}: {@code x = (T) a / b}
-     * stays as one continuation line when that line still fits, so the cast remains visually attached to the divided
-     * value. Other binary values use the shared broken binary lines because operator placement and operand wrapping are
-     * not assignment-specific decisions.
+     * <p>First preference is the hug: when the first operand still fits on the {@code target op} line it stays there and
+     * only the binary operator wraps below, so {@code =} is never stranded alone. When even the first operand overflows,
+     * the cast-division exception delegates to {@link BinaryExpressionPrinter} ({@code x = (T) a / b} stays one
+     * continuation line while it fits, keeping the cast attached to the divided value); every other binary value drops
+     * below the operator through the shared broken binary lines.
      */
     private Optional<Doc> assignmentWithBinaryValue(AssignExpr expression) {
         if (!(expression.getValue() instanceof BinaryExpr binaryExpression)) {
             return Optional.empty();
+        }
+        // Keep the value's first operand hugged onto the `= ` line and wrap the binary operator below, rather than
+        // stranding `=` alone, whenever that first line still fits. Mirrors VariableInitializerLayout's hug-onto-`=`.
+        if (binaryValueCanKeepFirstOperandWithOperator(expression, binaryExpression)) {
+            return Optional.of(
+                Doc.concat(
+                    rendering.render(expression.getTarget()),
+                    Doc.text(" " + expression.getOperator().asString() + " "),
+                    Doc.indent(binaryExpressionLines.apply(expression.getValue(), true))
+                )
+            );
         }
         if (shouldKeepCastDivisionContinuationFlat.test(binaryExpression)) {
             return Optional.of(
@@ -338,7 +360,7 @@ final class AssignmentExpressionPrinter {
         Doc target = rendering.render(expression.getTarget());
         String operator = expression.getOperator().asString();
         Doc lines = binaryExpressionLinesWithComments.apply(binaryValue);
-        if (lineCommentedBinaryCanKeepFirstOperandWithOperator(expression, binaryValue)) {
+        if (binaryValueCanKeepFirstOperandWithOperator(expression, binaryValue)) {
             return Doc.concat(target, Doc.text(" " + operator + " "), Doc.indent(lines));
         }
         return Doc.concat(
@@ -349,10 +371,11 @@ final class AssignmentExpressionPrinter {
     }
 
     /**
-     * Reports whether the first operand of a line-commented binary value still fits on the {@code target op} line, so the
-     * value can keep its source shape instead of dropping the whole binary below the operator.
+     * Reports whether the first operand of a binary value still fits on the {@code target op} line, so the value hugs the
+     * operator line instead of stranding {@code =} above the whole binary. Shared by the width-driven and line-commented
+     * binary-value arms.
      */
-    private boolean lineCommentedBinaryCanKeepFirstOperandWithOperator(AssignExpr expression, BinaryExpr binaryValue) {
+    private boolean binaryValueCanKeepFirstOperandWithOperator(AssignExpr expression, BinaryExpr binaryValue) {
         String firstOperandLine = compact.apply(expression.getTarget())
             + " "
             + expression.getOperator().asString()

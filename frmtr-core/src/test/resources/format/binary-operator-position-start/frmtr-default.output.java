@@ -59,8 +59,7 @@ public class BinaryOperations {
             + "1234567890"
             + "1234567890"
             + "1234567890";
-        lineLengthInAssignmentMoreThanPrintWidth =
-            "1234567890"
+        lineLengthInAssignmentMoreThanPrintWidth = "1234567890"
             + "1234567890"
             + "1234567890"
             + "1234567890"

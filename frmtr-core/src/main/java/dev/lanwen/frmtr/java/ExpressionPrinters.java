@@ -118,7 +118,9 @@ final class ExpressionPrinters {
             // field-reading lambda) because {@code methodCalls} is initialized after this call.
             this::binaryOperandCanonicalFanChain,
             context.sourceShapePolicy,
+            this::binaryFansChainOperand,
             compactSource::compact,
+            compactSource::compactFlat,
             compactSource::compactWithoutOwnComment,
             context.layoutWidth::continuationStatement,
             context.layoutWidth::blockStatement

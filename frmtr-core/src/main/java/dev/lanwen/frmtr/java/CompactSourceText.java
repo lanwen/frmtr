@@ -134,6 +134,16 @@ final class CompactSourceText {
         };
     }
 
+    /**
+     * Returns the flat compact text a caller should <em>emit</em> once a width gate (measuring {@link #compact(Node)})
+     * has already committed to the flat shape. Identical to {@link #compact(Node)} except a stray space a source-broken
+     * chain leaves before a member dot ({@code x .foo()}) is dropped, so the emitted line keeps canonical dot spacing
+     * without shifting the gate's verdict — the cleaned text is never wider than the measured text.
+     */
+    String compactFlat(Node node) {
+        return rawSource.dropSpaceBeforeChainDot(compact(node));
+    }
+
     private boolean containsRawLiteral(Node node) {
         return node.findFirst(StringLiteralExpr.class).isPresent()
             || node.findFirst(CharLiteralExpr.class).isPresent()

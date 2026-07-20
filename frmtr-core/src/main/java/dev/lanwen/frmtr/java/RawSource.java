@@ -108,6 +108,53 @@ final class RawSource {
     }
 
     /**
+     * Drops a single collapsed space that abuts a member/chain dot, so a compact snippet reconstructed from a
+     * source-broken chain ({@code x\n.foo()} collapsed to {@code x .foo()}) emits with canonical dot spacing. Only spaces
+     * that sit <em>between two non-whitespace characters and a following {@code .}</em> are removed; a line-leading space
+     * (the continuation indent after a {@code //} line comment) is left intact. String, character, text-block, and comment
+     * spans are copied verbatim, so a literal {@code " .html"} or a dot inside a comment is never rewritten.
+     *
+     * <p>This is an emit-only cleanup: callers keep measuring on {@link #normalizeWhitespace(String)} so a width gate's
+     * verdict never shifts, and pass it the chosen flat text only when that verdict already committed to the flat shape.
+     */
+    String dropSpaceBeforeChainDot(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        int index = 0;
+        while (index < text.length()) {
+            int blockCommentEnd = blockCommentSpanEnd(text, index);
+            if (blockCommentEnd >= 0) {
+                out.append(text, index, blockCommentEnd);
+                index = blockCommentEnd;
+                continue;
+            }
+            int lineCommentEnd = lineCommentSpanEnd(text, index);
+            if (lineCommentEnd >= 0) {
+                out.append(text, index, lineCommentEnd);
+                index = lineCommentEnd;
+                continue;
+            }
+            int literalEnd = literalSpanEnd(text, index);
+            if (literalEnd >= 0) {
+                out.append(text, index, literalEnd);
+                index = literalEnd;
+                continue;
+            }
+            char current = text.charAt(index);
+            if (
+                current == '.'
+                && out.length() >= 2
+                && out.charAt(out.length() - 1) == ' '
+                && !isCollapsibleWhitespace(out.charAt(out.length() - 2))
+            ) {
+                out.setLength(out.length() - 1);
+            }
+            out.append(current);
+            index++;
+        }
+        return out.toString();
+    }
+
+    /**
      * Applies whitespace collapsing and the assignment-{@code =} spacing normalization to non-literal regions only,
      * emitting string, character, and text-block literal spans verbatim so whitespace or an {@code =} inside a literal is
      * never rewritten.

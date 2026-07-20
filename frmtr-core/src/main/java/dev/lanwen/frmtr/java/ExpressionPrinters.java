@@ -188,6 +188,7 @@ final class ExpressionPrinters {
             binaries::hasLineComments,
             binaries::linesWithComments,
             compactSource::compact,
+            compactSource::compactFlat,
             context.layoutWidth::currentIndented,
             context.layoutWidth::continuationStatement,
             casts::nestedCastDepth,

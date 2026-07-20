@@ -395,13 +395,10 @@ final class VariableInitializerLayout {
             variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
             && !methodCallFinalTrailingLineComments(methodCall).isEmpty()
         ) {
-            // An enclosed-receiver suffix call ({@code (a + b).toCharArray(); // NOSONAR}) renders through the stable
-            // width-driven initializer gate, not the chain path. JavaParser binds the trailing comment to the field when
-            // the value is flat and to the call's selector when the receiver breaks; the chain path collapses the broken
-            // shape to an over-width flat line while the width gate keeps it broken, so the two attribution passes
-            // disagree forever. Route both through the same {@code variableWithInitializer} shape and re-home the comment
-            // as a width-free suffix, so the value breaks identically either way and the comment stays put.
-            if (methodCall.getScope().filter(EnclosedExpr.class::isInstance).isPresent()) {
+            // A method-call initializer whose only re-homable comment is the final trailing line comment renders through
+            // the stable width gate, not the under-measuring chain path (which omits the {@code NAME = } prefix and so
+            // collapses or breaks after {@code =} off the comment-free fixpoint); the tail re-homes as a width-free suffix.
+            if (methodCallInitializerReroutesToWidthGate(methodCall)) {
                 Doc value = variableWithInitializer(variable, methodCall, declarationPrefix, Doc.text(";"));
                 return Doc.concat(value, trailingLineComment(methodCallFinalTrailingLineComment(methodCall)));
             }
@@ -502,6 +499,35 @@ final class VariableInitializerLayout {
                 .map(comments::comment)
                 .reduce((first, second) -> Doc.concat(first, Doc.text(" "), second))
                 .orElse(Doc.EMPTY);
+    }
+
+    /**
+     * Reports whether a method-call initializer's final trailing line comment can be re-homed as a width-free suffix so the
+     * value renders through the width gate. True only for an unqualified call or an enclosed-receiver suffix call (the
+     * {@code (a + b).toCharArray(); // NOSONAR} subset), with no leading own comment and a tail JavaParser did not bind
+     * inside an argument subtree (which the value path already renders in place). A receiver-qualified call keeps its own
+     * attach path, because the width gate would otherwise flip-flop its shape between attach and break-after-{@code =}.
+     */
+    private boolean methodCallInitializerReroutesToWidthGate(MethodCallExpr methodCall) {
+        List<JavaCommentTrivia> finalTrailing = methodCallFinalTrailingLineComments(methodCall);
+        if (finalTrailing.isEmpty()) {
+            return false;
+        }
+        // Only an unqualified call or an enclosed-receiver suffix call has a source-neutral width gate. A call over a
+        // simple-name, field-access, or method-call/object-creation receiver keeps its attach path, whose shape the width
+        // gate would otherwise flip-flop between attach and break-after-`=`.
+        if (methodCall.getScope().filter(scope -> !(scope instanceof EnclosedExpr)).isPresent()) {
+            return false;
+        }
+        // A leading own comment on the call keeps the chain path that places it.
+        if (methodCall.getComment().isPresent() && commentPlacement.trailingLineComment(methodCall).isEmpty()) {
+            return false;
+        }
+        // Reject a tail JavaParser bound inside an argument subtree: the value path renders it there, so re-homing it as a
+        // width-free suffix would duplicate it. The call's own trailing tail is never rendered by the value path.
+        return finalTrailing.stream().noneMatch(trailing -> methodCall.getArguments().stream()
+                .flatMap(argument -> commentPlacement.containedComments(argument).stream())
+                .anyMatch(contained -> contained.comment() == trailing.comment()));
     }
 
     private Doc trailingLineComment(Doc comment) {
@@ -1262,6 +1288,20 @@ final class VariableInitializerLayout {
         if (canonicalFan.isPresent()) {
             return canonicalFan.orElseThrow();
         }
+        // A comment-bearing single call (an interior argument comment, or a re-homed final trailing comment) hugs its
+        // opener onto the `= ` line and breaks the argument list in place — the comment-free initializer shape — whenever
+        // `NAME = call(` fits. Decided source-neutrally so both comment-attribution passes agree; break-after-`=` stays
+        // the fallback when the opener overflows. Placed ahead of the source-shape-sensitive argument-break branches,
+        // whose fit verdict reads the author's line breaks and so oscillates for a comment-bearing call.
+        Optional<Doc> commentedOpenerHug = variableWithCommentedCallOpenerHug(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            methodCall
+        );
+        if (commentedOpenerHug.isPresent()) {
+            return commentedOpenerHug.orElseThrow();
+        }
         if (
             initializerSingleSimpleArgTailDotSplits(
                 variable,
@@ -1858,6 +1898,70 @@ final class VariableInitializerLayout {
             Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(methodCall)))
         );
         return Optional.of(Doc.bestFitting(List.of(argumentBreak, collapse), new int[] {1, 0}));
+    }
+
+    /**
+     * Hugs the opener of a comment-bearing single call onto the {@code = } line and breaks its argument list, the
+     * comment-free {@code NAME = call(}⏎args⏎{@code )} shape, when the opener fits. A contained argument comment (or a
+     * re-homed final trailing comment) otherwise makes the argument-break branches decline — they reject contained
+     * comments — so the call strands {@code =} on a flat pass and hugs on a re-format, oscillating.
+     *
+     * <p>Keyed purely on AST shape and the opener's fit at the rendered column, never on source line breaks, so both
+     * comment-attribution passes rebuild the same shape. Scoped to a single call over an absent or simple attachable
+     * receiver (unqualified, {@code name.}, {@code this.}, {@code super.}, {@code a.b.c.}); chains, object-creation roots,
+     * block-lambda hugs, and enclosed-receiver suffixes keep their own branches. The argument list is rendered through the
+     * shared argument printer, which claims the interior comments; the final trailing comment is never rendered here (the
+     * caller re-homes it as the statement suffix), so it is never dropped or duplicated.
+     */
+    private Optional<Doc> variableWithCommentedCallOpenerHug(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        if (
+            !sourceShapePolicy.hasContainedComments(methodCall)
+            && methodCallFinalTrailingLineComments(methodCall).isEmpty()
+        ) {
+            return Optional.empty();
+        }
+        // A leading own comment on the call is placed by the chain path, so don't hug over it (a re-homed final trailing
+        // comment is not a leading comment and stays eligible).
+        if (methodCall.getComment().isPresent() && commentPlacement.trailingLineComment(methodCall).isEmpty()) {
+            return Optional.empty();
+        }
+        if (
+            methodCall.getArguments().isEmpty()
+            || methodCallHasBlockLambdaArgument(methodCall)
+            || methodCallChainRootIsObjectCreation.test(methodCall)
+            || !singleCallHasHuggableOpenerReceiver(methodCall)
+            || !argumentBreakOpenerFits(variable, methodCall, flatName)
+        ) {
+            return Optional.empty();
+        }
+        // The shared call renderer claims the interior argument comments and breaks the argument list under the hugged
+        // opener; it never renders the call's re-homed final trailing comment, which the caller appends as the suffix.
+        return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
+    }
+
+    /**
+     * A single call whose receiver renders inline before its {@code prefix(} opener: an unqualified call or a call over a
+     * simple attachable scope ({@code name.}, {@code this.}, {@code super.}, a {@code a.b.c.} field access). Method-call and
+     * object-creation receivers (genuine chains) are excluded — their {@code prefix} would fold a whole sub-chain onto the
+     * assignment line rather than a clean opener.
+     */
+    private boolean singleCallHasHuggableOpenerReceiver(MethodCallExpr methodCall) {
+        Optional<Expression> scope = methodCall.getScope();
+        if (scope.isEmpty()) {
+            return true;
+        }
+        return scope
+                .filter(candidate -> candidate.isNameExpr()
+                        || candidate.isThisExpr()
+                        || candidate.isSuperExpr()
+                        || candidate.isFieldAccessExpr())
+                .filter(candidate -> !shouldPrintScopeAsDoc.test(candidate))
+                .isPresent();
     }
 
     /**

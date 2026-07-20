@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
@@ -59,7 +60,11 @@ final class BinaryExpressionPrinter {
 
     private final SourceShapePolicy sourceShapePolicy;
 
+    private final Predicate<Expression> binaryFansChainOperand;
+
     private final Function<Node, String> compact;
+
+    private final Function<Node, String> compactFlat;
 
     private final Function<Node, String> compactWithoutOwnComment;
 
@@ -79,7 +84,9 @@ final class BinaryExpressionPrinter {
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
             BiFunction<MethodCallExpr, LayoutContext, Optional<Doc>> canonicalFanChainRenderer,
             SourceShapePolicy sourceShapePolicy,
+            Predicate<Expression> binaryFansChainOperand,
             Function<Node, String> compact,
+            Function<Node, String> compactFlat,
             Function<Node, String> compactWithoutOwnComment,
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<String> blockStatementWidth
@@ -93,7 +100,9 @@ final class BinaryExpressionPrinter {
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
         this.canonicalFanChainRenderer = canonicalFanChainRenderer;
         this.sourceShapePolicy = sourceShapePolicy;
+        this.binaryFansChainOperand = binaryFansChainOperand;
         this.compact = compact;
+        this.compactFlat = compactFlat;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
@@ -217,6 +226,14 @@ final class BinaryExpressionPrinter {
                     > options.lineWidth()
             ) {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
+            }
+            // The width gate above already judged the parenthesized group fits flat. When the group holds a fluent chain
+            // the canonical rule fans, re-dispatching through {@code rendering.render} force-breaks that chain and
+            // oscillates against the {@code EnclosedExpr} path's compact-fits-flat verdict, so emit the cleaned flat text
+            // instead. A comment-bearing group still routes through the comment-aware renderer so contained comments are
+            // not dropped, and a pure-operator group keeps {@code rendering.render} to normalize its operator spacing.
+            if (!sourceShapePolicy.hasContainedComments(binaryOperand) && binaryFansChainOperand.test(binaryOperand)) {
+                return Doc.concat(Doc.text("("), Doc.text(compactFlat.apply(binaryOperand)), Doc.text(")"));
             }
             return Doc.concat(Doc.text("("), rendering.render(binaryOperand), Doc.text(")"));
         }

@@ -9,6 +9,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -220,17 +221,22 @@ final class MemberBlockPrinter {
     }
 
     /**
-     * Keeps a line comment that trails a nested type's closing brace on the same source line inline after that type
-     * instead of routing it to the next own line.
+     * Keeps a line comment that trails a member's closing brace or statement terminator on the same source line inline
+     * after that member instead of routing it to the next own line.
      *
-     * <p>A {@code //} after a nested type's closing brace ({@code class Beacon { ... }} {@code // inner beacon}) belongs
-     * to that brace line, but JavaParser exposes it as an enclosing-body orphan (type declarations do not claim trailing
-     * comments), so the interleaver would push it to the next line. This attaches each as a {@link Doc#lineSuffix(Doc)}
-     * on the type it trails and returns the remaining orphans for normal interleaving.
+     * <p>A {@code //} after a nested type's closing brace ({@code class Beacon { ... }} {@code // inner beacon}) or after
+     * a field whose initializer broke onto its own line ({@code byte[] header = {}{@code ...}}{@code }; // 4096 bytes})
+     * belongs to that terminator line, but JavaParser re-buckets it as an enclosing-body orphan once the terminator lands
+     * on its own line, so the interleaver would push it to the next line — and only in that broken shape, so the placement
+     * flips across passes. This attaches each as a {@link Doc#lineSuffix(Doc)} on the member it trails and returns the
+     * remaining orphans for normal interleaving, matching the hugged placement the flat shape already produces.
      *
-     * <p>Restricted to {@link TypeDeclaration} members (only a type's closing brace carries this convention) and to line
-     * comments beginning strictly after the type's end column on its end line. The attached doc claims under the same
-     * {@code (owner, INTERLEAVED)} anchor the interleaver would use, so claim ownership and idempotence are unchanged.
+     * <p>Restricted to {@link TypeDeclaration} members and to {@link FieldDeclaration} members whose initializer is an
+     * array (a type's closing brace and a broken array terminator carry this convention), and to line comments beginning
+     * strictly after the member's end column on its end line. A method-call-chain field is excluded because its own
+     * trailing-comment path already re-homes such a comment, and re-hugging one here would feed the chain's
+     * comment-bearing width gate and oscillate. The attached doc claims under the same {@code (owner, INTERLEAVED)} anchor
+     * the interleaver would use, so claim ownership and idempotence are unchanged.
      */
     private List<JavaCommentTrivia> attachInlineTrailingMemberComments(
             Node owner,
@@ -261,19 +267,41 @@ final class MemberBlockPrinter {
     }
 
     /**
-     * Finds the index of the nested type member that {@code comment} trails inline on the same source line, or {@code -1}
-     * when the comment is not an inline trailing line comment of any type member.
+     * Finds the index of the type or field member that {@code comment} trails inline on the same source line, or
+     * {@code -1} when the comment is not an inline trailing line comment of any such member.
+     *
+     * <p>The comment must also begin before the next member's line so that, when a collapsed re-shape puts several members
+     * on one physical line, a comment leading a far-later member is not hugged onto an earlier one it merely shares a line
+     * with — only the member the comment genuinely sits after, in the source-order gap before the next member, claims it.
      */
     private int inlineTrailingTypeMemberIndex(NodeList<BodyDeclaration<?>> members, JavaCommentTrivia comment) {
         if (!comment.isLine()) {
             return -1;
         }
         for (int index = 0; index < members.size(); index++) {
-            if (members.get(index) instanceof TypeDeclaration && comment.startsAfterNodeOnSameLine(members.get(index))) {
+            BodyDeclaration<?> member = members.get(index);
+            boolean beforeNextMember = index + 1 >= members.size()
+                || comment.startsBeforeBeginLine(members.get(index + 1));
+            if (
+                (member instanceof TypeDeclaration || isArrayInitializerField(member))
+                && comment.startsAfterNodeOnSameLine(member)
+                && beforeNextMember
+            ) {
                 return index;
             }
         }
         return -1;
+    }
+
+    /** Whether {@code member} is a field whose last declarator is initialized by an array — the broken-terminator shape. */
+    private boolean isArrayInitializerField(BodyDeclaration<?> member) {
+        if (!(member instanceof FieldDeclaration field) || field.getVariables().isEmpty()) {
+            return false;
+        }
+        return field.getVariable(field.getVariables().size() - 1)
+                .getInitializer()
+                .filter(ArrayInitializerExpr.class::isInstance)
+                .isPresent();
     }
 
     /**

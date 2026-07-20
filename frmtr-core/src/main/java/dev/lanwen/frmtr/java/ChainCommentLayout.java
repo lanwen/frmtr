@@ -290,6 +290,19 @@ final class ChainCommentLayout {
         commentPlacement.trailingLineComment(previous).ifPresent(candidates::add);
         candidates.addAll(commentPlacement.containedComments(previous));
         candidates.addAll(lineCommentCandidatesBeforeNextSegment(next));
+        // An empty `//` continuation marker that trails the previous segment's close line but that JavaParser rebound to
+        // the next selector's own name — the `) //` shape where the previous segment's argument list broke, so the marker
+        // no longer sits inside that argument — belongs to this gap. Offering the name's marker here lets the
+        // between-segments trailing slot claim it before the selector's own-name slot, so it stays hugged after the close
+        // on both passes. Restricted to a content-free marker so a genuine leading comment of the next selector (which may
+        // land on the close line only under a collapsed re-shape) keeps its own line; the shared same-line filter below
+        // then keeps even an empty marker attached only when it trails the previous close.
+        next.getName()
+                .getComment()
+                .map(JavaCommentTrivia::from)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(trivia -> trivia.comment().getContent().isBlank())
+                .ifPresent(candidates::add);
         // The three candidate sources overlap, so the same comment node can be offered more than once. Dedupe on
         // JavaParser comment identity rather than the record's value equality: structurally equal but distinct comment
         // nodes (e.g. two chain links carrying the same `// text`, or several empty `//` continuation markers) must each

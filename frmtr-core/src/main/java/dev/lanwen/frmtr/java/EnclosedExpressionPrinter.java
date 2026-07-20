@@ -42,6 +42,8 @@ final class EnclosedExpressionPrinter {
 
     private final Function<Node, String> compact;
 
+    private final Function<Node, String> compactFlat;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     private final ToIntFunction<String> continuationStatementWidth;
@@ -59,6 +61,7 @@ final class EnclosedExpressionPrinter {
             Predicate<BinaryExpr> binaryExpressionHasLineComments,
             Function<BinaryExpr, Doc> binaryLinesWithComments,
             Function<Node, String> compact,
+            Function<Node, String> compactFlat,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<Expression> nestedCastDepth,
@@ -71,6 +74,7 @@ final class EnclosedExpressionPrinter {
         this.binaryExpressionHasLineComments = binaryExpressionHasLineComments;
         this.binaryLinesWithComments = binaryLinesWithComments;
         this.compact = compact;
+        this.compactFlat = compactFlat;
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.nestedCastDepth = nestedCastDepth;
@@ -117,7 +121,9 @@ final class EnclosedExpressionPrinter {
             return parenthesizedLambdaBreak.apply(lambdaExpr);
         }
         if (currentIndentedWidth.applyAsInt(compact.apply(expression)) <= options.lineWidth()) {
-            return Doc.text(compact.apply(expression));
+            // Verdict measured on the dirty compact text; emit the space-before-dot-cleaned form (never wider) so a
+            // source-broken chain operand does not leak a stray {@code x .foo()} into the committed flat line.
+            return Doc.text(compactFlat.apply(expression));
         }
         return Doc.concat(Doc.text("("), rendering.render(expression.getInner()), Doc.text(")"));
     }

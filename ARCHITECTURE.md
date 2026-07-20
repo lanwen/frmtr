@@ -292,9 +292,14 @@ own, orphan, interleaved). JavaParser attaches a trailing comment by a whitespac
 test and available for comment-driven gates to adopt (the containment-hub adoption is staged; see the comment-attribution
 proposal). The real render then emits a comment only from its recorded owner and empty everywhere else,
 so a comment can be offered in several eagerly-built ranked layout arms without being dropped or duplicated — the
-renderer keeps only the arm it picks. Comment *text* rendering (Javadoc reflow, banner preservation, block/line
-normalization) is centralized in one routine keyed on parser kind. Many focused `*CommentLayout` helpers place comments
-within specific constructs (chains, control conditions, switch labels, parameters, module directives).
+renderer keeps only the arm it picks. A trailing line comment that follows a closing token — a statement/declaration
+terminator (`); // note`, `}; // note`) or a broken chain segment's close (`) //`) — is re-anchored to hug the token it
+trails even when a broken shape makes JavaParser re-bucket it as an enclosing-block/type orphan or the next selector's
+own name; the member/block interleavers and `ChainCommentLayout` claim it under the terminator's `INTERLEAVED` slot as a
+width-free `LineSuffix`, so it renders identically whether the inner expression is flat or broken. Comment *text*
+rendering (Javadoc reflow, banner preservation, block/line normalization) is centralized in one routine keyed on parser
+kind. Many focused `*CommentLayout` helpers place comments within specific constructs (chains, control conditions, switch
+labels, parameters, module directives).
 
 ### Correctness guardrails
 

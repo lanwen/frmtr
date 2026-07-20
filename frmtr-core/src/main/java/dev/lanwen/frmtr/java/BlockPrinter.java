@@ -8,7 +8,9 @@ import com.github.javaparser.ast.stmt.SwitchStmt;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -157,11 +159,19 @@ final class BlockPrinter {
     }
 
     private List<Doc> blockContents(BlockStmt block, JavaFormatRule<Statement> statementRenderer) {
+        List<Statement> statements = block.getStatements();
+        Map<Integer, JavaCommentTrivia> inlineTrailing = new HashMap<>();
+        List<JavaCommentTrivia> orphanComments = withoutInlineTrailingStatementComments(
+            statements,
+            blockOrphanComments(block),
+            inlineTrailing
+        );
         return commentInterleaver.interleave(
             block,
-            block.getStatements(),
-            blockOrphanComments(block),
-            (previous, current, index) -> printableStatement(previous, current, index, statementRenderer),
+            statements,
+            orphanComments,
+            (previous, current, index) -> printableStatement(previous, current, index, statementRenderer)
+                    .map(doc -> appendInlineTrailingStatementComment(doc, block, inlineTrailing.get(index))),
             new SourceOrderedCommentInterleaver.Spacing<>() {
                 @Override
                 public int beginLine(Statement sibling) {
@@ -220,6 +230,73 @@ final class BlockPrinter {
             return blockEmptyStatementComment(emptyStmt);
         }
         return Optional.of(statementRenderer.format(currentStatement, LayoutContext.root()));
+    }
+
+    /**
+     * Partitions the block's orphan comments into the ones that trail a statement's terminator on the same source line —
+     * recorded per statement index in {@code inlineTrailing} for the render callback to hug — and the rest, returned for
+     * normal interleaving.
+     *
+     * <p>A {@code //} after a statement whose expression broke onto several lines ({@code create(}{@code ...}{@code
+     * ); // lifetime}) belongs to the {@code );} line, but JavaParser re-buckets it as an enclosing-block orphan once the
+     * terminator lands on its own line, so the interleaver would push it to the next line — and only in that broken shape,
+     * so the placement flips across passes. Recording it here (rather than the source-order-sensitive interleave list) lets
+     * the callback re-attach it as a {@link Doc#lineSuffix(Doc)}, matching the hugged placement the flat shape produces,
+     * while every other orphan keeps its source-order interleave slot.
+     */
+    private List<JavaCommentTrivia> withoutInlineTrailingStatementComments(
+            List<Statement> statements,
+            List<JavaCommentTrivia> orphanComments,
+            Map<Integer, JavaCommentTrivia> inlineTrailing
+    ) {
+        List<JavaCommentTrivia> remaining = new ArrayList<>();
+        for (JavaCommentTrivia comment : orphanComments) {
+            int index = inlineTrailingStatementIndex(statements, comment);
+            if (index < 0) {
+                remaining.add(comment);
+                continue;
+            }
+            inlineTrailing.put(index, comment);
+        }
+        return remaining;
+    }
+
+    /**
+     * Finds the index of the statement that {@code comment} trails inline on the same source line, or {@code -1} when the
+     * comment is not an inline trailing line comment of any statement.
+     *
+     * <p>The comment must also begin before the next statement's line so that, when a collapsed re-shape puts several
+     * statements on one physical line, a comment leading a far-later statement is not hugged onto an earlier one it merely
+     * shares a line with — only the statement the comment genuinely sits after, in the source-order gap, claims it.
+     */
+    private int inlineTrailingStatementIndex(List<Statement> statements, JavaCommentTrivia comment) {
+        if (!comment.isLine()) {
+            return -1;
+        }
+        for (int index = 0; index < statements.size(); index++) {
+            Statement statement = statements.get(index);
+            boolean beforeNextStatement = index + 1 >= statements.size()
+                || comment.startsBeforeBeginLine(statements.get(index + 1));
+            if (
+                !(statement instanceof EmptyStmt)
+                && comment.startsAfterNodeOnSameLine(statement)
+                && beforeNextStatement
+            ) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    /** Hugs a recorded inline-trailing orphan after {@code doc} as a claimed line suffix, or returns {@code doc} as-is. */
+    private Doc appendInlineTrailingStatementComment(Doc doc, BlockStmt block, JavaCommentTrivia comment) {
+        if (comment == null) {
+            return doc;
+        }
+        Doc commentDoc = comments.comment(comment, block, OwnerSlot.INTERLEAVED);
+        return commentDoc == Doc.EMPTY
+            ? doc
+            : Doc.concat(doc, Doc.lineSuffix(Doc.concat(Doc.text(" "), commentDoc)));
     }
 
     private Doc sourceLineSeparator(int previousEndLine, int currentBeginLine) {

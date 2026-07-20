@@ -782,7 +782,15 @@ final class MethodCallChainPrinter {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
-                        chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix))
+                        // Segment sits alone on its own continuation line, so measure at the continuation column rather
+                        // than the beside-a-token source column, which flips its argument list between passes.
+                        chainContinuation(methodCallChainSegment(
+                            calls.getFirst(),
+                            Optional.empty(),
+                            finalSegmentSuffix,
+                            layoutWidth::continuationStatement,
+                            true
+                        ))
                     )
                 );
             }
@@ -797,7 +805,15 @@ final class MethodCallChainPrinter {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
-                        chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix))
+                        // Segment sits alone on its own continuation line, so measure at the continuation column rather
+                        // than the beside-a-token source column, which flips its argument list between passes.
+                        chainContinuation(methodCallChainSegment(
+                            calls.getFirst(),
+                            Optional.empty(),
+                            finalSegmentSuffix,
+                            layoutWidth::continuationStatement,
+                            true
+                        ))
                     )
                 );
             }
@@ -909,7 +925,16 @@ final class MethodCallChainPrinter {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
-                        chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix))
+                        // The segment lands alone on its own continuation line below the comment-carrying root, so measure
+                        // it at the continuation column, not the beside-a-token source column: the source estimate reads
+                        // the author's shape and flips the segment's argument list between broken and collapsed per pass.
+                        chainContinuation(methodCallChainSegment(
+                            calls.getFirst(),
+                            Optional.empty(),
+                            finalSegmentSuffix,
+                            layoutWidth::continuationStatement,
+                            true
+                        ))
                     )
                 );
             }
@@ -971,8 +996,16 @@ final class MethodCallChainPrinter {
                 chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.INLINE_PROMOTED_METHOD_CALL
                 && promotedNoArgRootScopeOverflows(methodRoot, firstLineWidth)
             ) {
+                // Segment sits alone on its own continuation line, so measure at the continuation column rather than the
+                // beside-a-token source column, which flips its argument list between passes.
                 return Optional.of(
-                    Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)))
+                    Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(
+                        calls.getFirst(),
+                        Optional.empty(),
+                        finalSegmentSuffix,
+                        layoutWidth::continuationStatement,
+                        true
+                    )))
                 );
             }
             MethodCallExpr probeCall = calls.getFirst();

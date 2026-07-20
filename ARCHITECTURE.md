@@ -296,10 +296,12 @@ renderer keeps only the arm it picks. A trailing line comment that follows a clo
 terminator (`); // note`, `}; // note`) or a broken chain segment's close (`) //`) — is re-anchored to hug the token it
 trails even when a broken shape makes JavaParser re-bucket it as an enclosing-block/type orphan or the next selector's
 own name; the member/block interleavers and `ChainCommentLayout` claim it under the terminator's `INTERLEAVED` slot as a
-width-free `LineSuffix`, so it renders identically whether the inner expression is flat or broken. Comment *text*
-rendering (Javadoc reflow, banner preservation, block/line normalization) is centralized in one routine keyed on parser
-kind. Many focused `*CommentLayout` helpers place comments within specific constructs (chains, control conditions, switch
-labels, parameters, module directives).
+width-free `LineSuffix`, so it renders identically whether the inner expression is flat or broken. A width-affecting
+shape gate can also consult ownership (`CommentTracker#claimedOutside`) so a local layout does not break itself to keep a
+trailing comment an enclosing slot already owns, matching its comment-free form and staying stable across passes. Comment
+*text* rendering (Javadoc reflow, banner preservation, block/line normalization) is centralized in one routine keyed on
+parser kind. Many focused `*CommentLayout` helpers place comments within specific constructs (chains, control conditions,
+switch labels, parameters, module directives).
 
 ### Correctness guardrails
 

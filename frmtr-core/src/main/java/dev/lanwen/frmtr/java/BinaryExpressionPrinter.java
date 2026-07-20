@@ -1129,9 +1129,16 @@ final class BinaryExpressionPrinter {
     ) {
         return commentPlacement.containedComments(expression).stream()
                 .filter(JavaCommentTrivia::isLine)
-                .anyMatch(comment -> leftLineComment
+                .filter(comment -> leftLineComment
                         .filter(left -> left.comment() == comment.comment())
                         .isEmpty())
+                // A line comment that trails the whole binary (not one sitting between two operands) and that an enclosing
+                // slot already claims — e.g. a statement-trailing `//` JavaParser mis-parked on the last operand — is
+                // rendered there, not dropped, so the flat shape need not break for it. That break otherwise flips with
+                // where JavaParser attributed the comment. Between-operand comments (not after the binary end) keep the
+                // comment-aware render so each surfaces beside its operand.
+                .anyMatch(comment -> !(comment.startsAfterNodeOnSameLine(expression)
+                        && comments.claimedOutside(comment, expression)))
             || hasBetweenOperandBlockComments(expression);
     }
 

@@ -120,6 +120,26 @@ final class CommentTracker {
         return owner == null || owner.equals(new OwnerKey(node, slot));
     }
 
+    /**
+     * Reports whether {@code trivia} is recorded to an owner that lies <em>outside</em> {@code subtree} — an enclosing or
+     * sibling slot will render it, so a layout local to {@code subtree} need not break itself to keep the comment.
+     *
+     * <p>Returns {@code false} for an unclaimed comment and for one whose owner is {@code subtree} or a node within it, so
+     * a comment a local layout must still place keeps its comment-aware shape.
+     */
+    boolean claimedOutside(JavaCommentTrivia trivia, Node subtree) {
+        OwnerKey owner = ownership.get(trivia.comment());
+        if (owner == null) {
+            return false;
+        }
+        for (Node node = owner.anchor(); node != null; node = node.getParentNode().orElse(null)) {
+            if (node == subtree) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     Doc leading(Node node) {
         return commentPlacement.leadingComment(node)
                 .map(t -> ownedComment(t, node, OwnerSlot.LEADING))

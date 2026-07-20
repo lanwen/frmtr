@@ -1,5 +1,7 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
@@ -102,7 +104,11 @@ final class BreakableArgumentExpressionPrinter {
     }
 
     private Optional<Doc> brokenArgument(Expression argument) {
-        if (sourceShapePolicy.hasContainedComments(argument)) {
+        // Keep the comment-aware nested broken form (brokenBinaryLines / forced-ternary branches) offered for a
+        // binary/ternary even when it carries comments; bailing it to flat here froze a comment-bearing concat and
+        // oscillated its continuation indent +0/+4. Only non-binary/ternary args (no comment-aware broken form) bail.
+        boolean commentAwareBrokenForm = argument instanceof BinaryExpr || argument instanceof ConditionalExpr;
+        if (!commentAwareBrokenForm && sourceShapePolicy.hasContainedComments(argument)) {
             return Optional.empty();
         }
         return brokenArgumentRenderer.apply(argument);

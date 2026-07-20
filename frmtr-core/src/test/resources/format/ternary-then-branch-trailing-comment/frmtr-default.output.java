@@ -15,9 +15,7 @@ class Sample {
             int fallback
     ) {
         int total = flag
-            ? firstOperandValue
-            + secondOperandValue
-            + thirdOperandValue // tail
+            ? firstOperandValue + secondOperandValue + thirdOperandValue // tail
             : fallback;
         return total;
     }

@@ -95,20 +95,10 @@ final class CompactRootBrokenSegmentLayout {
     }
 
     /**
-     * Breaks a method-call root's own argument list one argument per line and glues the single final segment to its
-     * closing parenthesis: {@code Type.create(}\n args \n{@code ).toRetry()}.
-     *
-     * <p>Reached when {@link #compactRootFinalSegmentLineOverflows} reports the whole chain over width at its rendered
-     * line position but the final segment has no arguments of its own to wrap ({@code .toRetry()}/{@code .build()}). It
-     * mirrors the shape a source-multiline root produces, but is reached for a flat source root that overflows only
-     * because it renders at a deep nesting column. Returns empty (leaving the existing flat layout) unless the root
-     * carries breakable arguments, is not already source-multiline, has no comments, and its opener {@code Type.create(}
-     * itself fits at {@code lineWidth}, so the broken shape is only chosen when it is both needed and valid.
-     *
-     * <p>{@code layout} is threaded so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
-     * available at this statement/field single-segment flat-gate. It is NOT consulted here: the opener-fit decision uses
-     * the fixed-budget {@code lineWidth.applyAsInt(…)} floor (the statement/field callers pass an empty-prefix
-     * context).
+     * Breaks a method-call root's arguments one-per-line and glues the no-arg final segment to its close
+     * ({@code Type.create(}\n args \n{@code ).toRetry()}), chosen when the chain is over width but the final segment
+     * has nothing of its own to wrap and the opener still fits. {@code layout} is threaded for signature parity but not
+     * consulted here — the opener-fit gate uses the fixed-budget {@code lineWidth}.
      */
     Optional<Doc> brokenRootWithAttachedFinalSegment(
             MethodCallExpr methodRoot,
@@ -188,11 +178,10 @@ final class CompactRootBrokenSegmentLayout {
     }
 
     /**
-     * Same broken-final-segment shape, but with {@code argumentLeadingComment} placed on its own line just after the
-     * opened selector's {@code (} and before the argument. The single-selector root-trailing {@code //} case renders here
-     * so the marker lands own-line above the broken argument on the receiver-trailing pass too — the same slot the
-     * argument-leading pass produces — instead of a {@code .to( //} suffix that flips between passes. Declines a hugged
-     * block-lambda argument when a comment is present so the caller keeps its hugging fallback.
+     * Same broken-final-segment shape with {@code argumentLeadingComment} placed own-line after the opened selector's
+     * {@code (}. Routing the single-selector root-trailing {@code //} here keeps the marker own-line above the broken
+     * argument on both passes instead of a {@code .to( //} suffix that flips. Declines a hugged block-lambda argument
+     * when a comment is present so the caller keeps its hugging fallback.
      */
     Optional<Doc> compactRootWithBrokenFinalSegment(
             Expression root,
@@ -222,16 +211,11 @@ final class CompactRootBrokenSegmentLayout {
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
         String callPrefix = compactSource.compact(root) + "." + typeArguments + call.getNameAsString();
-        // An object-creation root renders here as its whole compact form ({@code compactSource.compact(root)}) on the
-        // first line, so a wide constructor ({@code new LogValidator(12 args)}) would keep 256 columns flat and only break
-        // the final selector's arguments. Gate the compact-root shape on WIDTH: when the constructor-plus-selector opener
-        // ({@code new Type(args).selector(}) already overflows, defer so the chain falls through to the broken
-        // object-creation fan, which breaks the constructor's own argument list by width. Scoped to object-creation
-        // roots; method-call/field roots keep their existing routing.
-        if (
-            root instanceof ObjectCreationExpr
-            && compactRootLineWidth(root, callPrefix + "(", layout) > options.lineWidth()
-        ) {
+        // A wide constructor root renders flat here, so when the constructor-plus-selector opener overflows defer to the
+        // broken object-creation fan, which breaks the constructor's own arguments by width. Object-creation roots only.
+        boolean objectCreationOpenerOverflows = root instanceof ObjectCreationExpr
+            && compactRootLineWidth(root, callPrefix + "(", layout) > options.lineWidth();
+        if (objectCreationOpenerOverflows) {
             return Optional.empty();
         }
         if (!compactRootFirstLineFits(root, callPrefix, call.getArguments(), layout)) {
@@ -270,10 +254,8 @@ final class CompactRootBrokenSegmentLayout {
             Doc.HARD_LINE,
             Doc.text(")" + finalSegmentSuffix)
         );
-        // When the selector's sole argument is a single inner call/creation that would itself overflow its own exploded
-        // line, rank the opener-hug ({@code .thenReturn(List.of(new TopicData<>(} ⏎ …) flattest-first against this
-        // exploded shape, so the renderer hugs it onto the compact-root line only when its opener fits and otherwise keeps
-        // the exploded fallback. An argument that fits one exploded line keeps that cleaner shape.
+        // Offer the opener-hug flattest-first against the exploded shape so the renderer hugs onto the compact-root line
+        // only when its opener fits; an argument that already fits one exploded line keeps that cleaner shape.
         if (argumentLeadingComment == Doc.EMPTY
                 && segmentRenderer.segmentArgumentOpenerHugApplies(call)
                 && segmentRenderer.segmentArgumentOverflowsExplodedLine(call)) {
@@ -318,49 +300,38 @@ final class CompactRootBrokenSegmentLayout {
 
     /**
      * Measures a compact chain root's first line ({@code root.selector(args…}) at the column where the root renders.
-     *
-     * <p>The root's start column reconstructed from {@code range.begin.column} is a source-column read that understates
-     * the rendered column once the root is reindented shallower than its true block/type depth. This gate also considers
-     * the root's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type and block)
-     * and takes the <em>wider</em> of the two, so a root reindented flush-left inside deep nesting is not measured
-     * as fitting at its stale shallow column and hugged over width. This mirrors the sibling
-     * {@link ExpressionLambdaArgumentLayout} first-line gate and the depth-aware chain probes.
-     *
-     * <p>Two measurement modes, keyed on whether a caller has threaded the same-line leading prefix through
-     * {@link LayoutContext#leftEdgePrefix()}:
-     *
-     * <ul>
-     *   <li><strong>Prefix threaded.</strong> When a caller supplies its fixed leading prefix — the
-     *   {@code return } chain threads {@code "return "} — the rendered column is known exactly:
-     *   {@code nodeIndentWidth(root) + leftEdgePrefix.length() + firstLine.length()}. The source-column floor is
-     *   <em>dropped</em>, because it is only a stand-in for the prefix this arm measures directly and could over- or
-     *   under-count when the root is reindented away from its source column. A reindented-flat return chain whose compact
-     *   first line is under budget by the stale source column but over budget once {@code return } is added (the
-     *   {@code return } is worth exactly the missing width) is then correctly measured over width and fanned out.</li>
-     *   <li><strong>No prefix threaded.</strong> Every other caller passes {@code root()} (empty prefix), so the wider-of
-     *   rule applies: {@code max(source-column, nodeIndentWidth) + firstLine.length()}. The {@code nodeIndentWidth} arm
-     *   keeps a root reindented flush-left inside deep nesting from being measured as fitting at its stale shallow column
-     *   and hugged over width; the source column is kept as the <em>floor</em> because it is where these callers'
-     *   unmodelled leading prefix (a {@code NAME … = }, a continuation indent) lives. Dropping the floor for these callers
-     *   under-measures and regresses {@code source-multiline-method-root-chain-initializer}, so the floor stays for them.</li>
-     * </ul>
+     * When a caller threads its same-line prefix the column is known exactly; otherwise the wider-of rule guards against
+     * a root reindented flush-left inside deep nesting being measured at a stale shallow column.
      */
     private int compactRootLineWidth(
             Expression root,
             String firstLine,
             LayoutContext layout
     ) {
-        // With the same-line prefix threaded, measure at the exact rendered column and drop the source-column floor,
-        // which is only a stand-in for this prefix.
-        if (!layout.leftEdgePrefix().isEmpty()) {
-            return layoutWidth.nodeIndentWidth(root) + layout.leftEdgePrefix().length() + firstLine.length();
-        }
+        return layout.leftEdgePrefix().isEmpty()
+            ? widerOfSourceColumnAndRenderedIndent(root, firstLine)
+            : threadedPrefixColumn(root, firstLine, layout);
+    }
+
+    /**
+     * Exact rendered column when a caller threads its fixed same-line prefix (the {@code return } chain threads
+     * {@code "return "}): the source-column floor is dropped since it only stands in for the prefix measured here.
+     */
+    private int threadedPrefixColumn(Expression root, String firstLine, LayoutContext layout) {
+        return layoutWidth.nodeIndentWidth(root) + layout.leftEdgePrefix().length() + firstLine.length();
+    }
+
+    /**
+     * Wider of the root's source column and its rendered indent for callers with no threaded prefix. The source column
+     * is kept as the floor (it stands in for their unmodelled leading prefix); dropping it regresses
+     * {@code source-multiline-method-root-chain-initializer}.
+     */
+    private int widerOfSourceColumnAndRenderedIndent(Expression root, String firstLine) {
         return root.getRange()
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),
                     layoutWidth.nodeIndentWidth(root) + firstLine.length()))
-                // Rangeless (synthetic) fallback measures at the rendered column, mirroring the prefix-set arm's
-                // nodeIndentWidth term, instead of a fixed indentation baseline.
+                // Rangeless (synthetic) fallback measures at the rendered indent.
                 .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + firstLine.length());
     }
 

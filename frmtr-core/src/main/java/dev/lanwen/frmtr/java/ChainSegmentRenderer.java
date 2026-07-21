@@ -125,11 +125,8 @@ final class ChainSegmentRenderer {
             MethodCallChainTail finalSegmentSuffix,
             ToIntFunction<String> lineWidth
     ) {
-        // Measure the segment at the continuation column of the root's closing line (the {@code ")" + segment} closure),
-        // not the beside-a-token source column. This segment attaches to the broken root's {@code )} on its continuation
-        // line ({@code ).thenReturn(arg)}), so its argument-break gate must use that rendered column; the default
-        // source-column estimate reads the author's shape and flips the segment's argument list between broken and
-        // collapsed across passes (the {@code when(...).thenReturn(...)} family).
+        // Measure the segment at the continuation column of the root's closing line ({@code ).thenReturn(arg)}), not the
+        // beside-a-token source column which reads the author's shape and flips the argument list across passes.
         return methodCallChainSegment(
             expression,
             Optional.empty(),
@@ -206,15 +203,9 @@ final class ChainSegmentRenderer {
         if (huggedCommentedExpressionLambda.isPresent()) {
             return Doc.concat(segmentPrefix, huggedCommentedExpressionLambda.orElseThrow());
         }
-        // The chain-SELECTOR expression-lambda position. A chain selector whose sole trailing argument is an expression
-        // lambda ({@code .map(entry -> body)}) renders SOURCE-NEUTRALLY here. Reading source shape at this position would
-        // re-render the SAME selector two different ways across passes — the generic {@code Doc.group} argument shape when
-        // its arguments fit flat, a hug when they span lines — so the segment's rendered width would flip and any enclosing
-        // {@code bestFitting}/attach decision with it. Rendering AST-purely instead is what lets expr-lambda-selector
-        // chains fan without a withhold. {@link #sourceNeutralExpressionLambdaSegment} chooses between two pure-AST arms
-        // (flat selector vs. hugged/fanned body) with a {@link Doc#conditionalGroup}, so the DocRenderer picks hug-vs-break
-        // at the true live column. Block-lambda and comment-carrying lambdas are handled by the earlier branches (they
-        // never reach here), so this only ever sees a clean expression lambda.
+        // Chain-selector expression-lambda position ({@code .map(entry -> body)}), rendered source-neutrally: reading
+        // source shape here would re-render the same selector two ways across passes (flat group vs. hug) and flip any
+        // enclosing bestFitting/attach decision. Block-lambda and comment-carrying lambdas are handled above.
         Optional<Doc> sourceNeutralExpressionLambda = chainSelectorLambda.sourceNeutralExpressionLambdaSegment(
             prefix,
             expression,
@@ -283,11 +274,9 @@ final class ChainSegmentRenderer {
     }
 
     /**
-     * Whether the selector's sole argument is a single inner call/creation with its own arguments that the opener can hug
-     * onto the dotted line. Structural, comment/lambda-free (hugging a lambda or comment carrier strands the body), and
-     * indent-independent, so both passes offer the identical hug arm and the width choice is left to the renderer ranking.
-     * An inner call that is itself a chain ({@code RetryPolicy.restart().withResetChildren(true)}) is excluded: the chain
-     * printer owns its fan, and hugging mid-chain would break it after an inner selector's {@code (}.
+     * Whether the selector's sole argument is a single inner call/creation (with its own arguments) that the opener can
+     * hug onto the dotted line. Structural, comment/lambda-free, and indent-independent, so both passes offer the same
+     * hug arm. Excludes an inner chain — the chain printer owns its fan and hugging mid-chain would break it.
      */
     boolean segmentArgumentOpenerHugApplies(MethodCallExpr expression) {
         if (expression.getArguments().size() != 1 || sourceShapePolicy.hasContainedComments(expression)) {
@@ -310,10 +299,9 @@ final class ChainSegmentRenderer {
     }
 
     /**
-     * Whether the selector's single inner-call argument, rendered flat on its own exploded continuation line, overflows.
-     * Only then is the opener-hug worthwhile: when the exploded argument already fits one line, that shape is cleaner than
-     * hugging the opener and dangling the closer. Measured source-neutrally from the AST (rebuilt flat text at the
-     * argument's rendered indent) so the verdict is a fixpoint.
+     * Whether the selector's single inner-call argument, rendered flat on its own exploded continuation line, overflows —
+     * the only case where the opener-hug beats the cleaner exploded shape. Measured source-neutrally from the AST (flat
+     * text at the argument's rendered indent) so the verdict is a fixpoint.
      */
     boolean segmentArgumentOverflowsExplodedLine(MethodCallExpr expression) {
         String argumentFlat = compactSource.commentFree(expression.getArgument(0));
@@ -323,9 +311,8 @@ final class ChainSegmentRenderer {
 
     /**
      * Whether a SHORT final selector wraps a single call/creation argument that will not render flat — the shape that
-     * reads better attached to its receiver with the argument one indent deep than fanned. Short-name-gated so a longer
-     * selector keeps the exploded fan. The argument breaks either because it is an object-creation-rooted / rule-breaking
-     * chain (fans one selector per line at any width) or because its flat form overflows its own exploded line.
+     * reads better attached to its receiver, one indent deep, than fanned. Short-name-gated; the argument breaks either
+     * as an object-creation-rooted / rule-breaking chain or because its flat form overflows its own exploded line.
      */
     boolean finalSegmentAttachesShortBreakingCallArgument(MethodCallExpr call) {
         if (
@@ -380,22 +367,15 @@ final class ChainSegmentRenderer {
                     .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
                     .toList()
         );
-        // A block or Javadoc comment interspersed between two chain links — e.g. `.define(A)` then `/** doc */` then
-        // `.define(B)` — is parked on the B selector depending on layout. Recover it from the orphan pool first (the
-        // expanded shape) so a single source-position query owns the slot for every whitespace shape, then fall through
-        // to the selector's own comment (the canonical/collapsed shape). Both are claimed under the same anchor by
-        // identity, so whichever shape applies, the comment renders exactly once.
+        // A block/Javadoc comment interspersed between two chain links (`.define(A)` `/** doc */` `.define(B)`) is
+        // recovered from the orphan pool first (expanded shape), then falls through to the selector's own comment
+        // (collapsed shape). Both claim under the same anchor by identity, so it renders exactly once across shapes.
         Doc interspersedOrphans = chainComments.interspersedOrphanCommentsBeforeSelector(expression);
-        // JavaParser attaches a line comment that sits between the scope and the selector to the selector name as its own
-        // comment, so the same comment can also be offered by a neighboring slot: the leading-line slot above (same prefix
-        // call) or the previous segment's between-segments trailing slot. The name comment is offered here under its own
-        // (expression, OWN) ownership key — distinct from the bare (comment, INTERLEAVED) key those neighbors use — so the
-        // dry-run records the true first-traversal claimant and {@code ownsHere} suppresses whichever offer lost. Output
-        // is unchanged because the suppressed offer already lost the first-claim race and rendered empty. The
-        // same-prefix leading offer is also excluded by identity here so the name slot never re-claims this segment's own
-        // leading comment. A Javadoc selector comment is accepted alongside line and block comments because JavaParser
-        // parses a `/** ... */` between chain links as a Javadoc attached to the next selector, and dropping it on
-        // kind alone lost it in every shape.
+        // JavaParser attaches a comment sitting between scope and selector to the selector NAME, so a neighboring slot
+        // (this segment's leading-line, or the previous segment's trailing) can offer the same comment too. Claim it here
+        // under the (expression, OWN) key so the dry-run's first-traversal claimant wins and the losing offer renders
+        // empty — output unchanged. Javadoc is accepted alongside line/block: JavaParser parses a `/** */` between links
+        // as a selector Javadoc, and dropping it on kind alone loses it in every shape.
         Optional<Comment> rawNameComment = expression.getName()
                 .getComment()
                 .filter(comment -> comment instanceof LineComment

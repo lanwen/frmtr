@@ -121,13 +121,10 @@ final class ChainRootPromotionLayout {
     }
 
     /**
-     * Whether {@link #expressionRenderedChainRoot} renders an {@link MethodCallChainSourcePlanner.ChainRootRendering#EXPRESSION_RENDERER}
-     * root through {@link MethodCallPrinter#brokenMethodCall} — a multi-argument root that overflows its first line (or is
-     * a source-multiline type-like root that does not fit) — rather than through ordinary expression dispatch. The negation
-     * is the "plain expression-renderer root" case: {@code expressionRenderer.format(root, LayoutContext.root())}, which is
-     * exactly the root {@link ChainFanLayout#chainFanOut} builds, so the multi-segment fall-through can route through the
-     * shared fan-out builder byte-identically only when this returns {@code false}. Side-effect-free (no comment claim), so
-     * evaluating it to steer the fall-through never double-claims a comment.
+     * Whether {@link #expressionRenderedChainRoot} breaks a multi-argument root through
+     * {@link MethodCallPrinter#brokenMethodCall} rather than plain expression dispatch. The {@code false} case matches the
+     * root {@link ChainFanLayout#chainFanOut} builds, so the multi-segment fall-through routes through the shared fan-out
+     * builder byte-identically only then. Side-effect-free, so steering the fall-through with it never double-claims a comment.
      */
     boolean expressionRenderedChainRootBreaksMethodCall(
             Expression root,
@@ -266,10 +263,8 @@ final class ChainRootPromotionLayout {
         return Doc.group(
             Doc.concat(
                 rootDoc,
-                // Measure the segment as on its own continuation line: the softChainContinuation group drops it onto its
-                // own line when it breaks, so its argument-break gate must measure at the continuation column, not the
-                // source-column beside-a-token estimate — the latter reads the author's shape and flips the segment's
-                // argument list between broken and collapsed across passes.
+                // Measure the segment on its own continuation line (softChainContinuation drops it there when it breaks),
+                // not the beside-a-token source column which reads the author's shape and flips the argument list across passes.
                 softChainContinuation.apply(
                     segmentRenderer.methodCallChainSegment(
                         expression,
@@ -360,17 +355,11 @@ final class ChainRootPromotionLayout {
     }
 
     /**
-     * The true-column width oracle for a fanned chain selector's expression-lambda hug: the selector's rendered
-     * continuation column ({@link LayoutWidth#nodeIndentWidth} — the enclosing type/block indentation — plus the two
-     * continuation units the fan applies, the same {@code nodeIndentWidth(chain) + indentUnit * 2} column
-     * {@link ExpressionLambdaArgumentLayout} measures the hugged body at), widened with {@code Math.max} against the
-     * fixed budget the caller already threads so it is monotone (it can only ever measure the hug WIDER, never relax a
-     * break, so it cannot introduce a new over-width and stays a pure function of the AST). This corrects the fixed
-     * three-unit continuation budget's ({@link LayoutWidth#continuationStatement}) one-level under-count for a chain
-     * nested below a top-level statement, so the lambda-hug admission gate sees the selector's real overflow. It still
-     * under-counts a selector
-     * nested several argument levels deep — the general case needs the {@code leftEdgePrefix} column threaded through the
-     * fan — but is never worse than the budget it replaces.
+     * True-column width oracle for a fanned chain selector's expression-lambda hug: the selector's rendered continuation
+     * column ({@code nodeIndentWidth + indentUnit * 2}) widened with {@code Math.max} against the caller's fixed budget,
+     * so it is monotone — only ever measures the hug wider, never relaxes a break, and stays a pure function of the AST.
+     * Still under-counts a selector nested several argument levels deep (needs {@code leftEdgePrefix} threaded), but is
+     * never worse than the budget it replaces.
      */
     ToIntFunction<String> fannedSelectorColumnWidth(MethodCallExpr expression, ToIntFunction<String> fallback) {
         int continuationColumn = layoutWidth.nodeIndentWidth(expression) + options.indentUnit().length() * 2;
@@ -379,10 +368,8 @@ final class ChainRootPromotionLayout {
 
     private Doc brokenPromotedMethodCallRoot(MethodCallExpr expression) {
         String prefix = calls.methodCallPrefix(expression);
-        // When the promoted root's argument list carries unclaimed gap comments (e.g. trailing notes on each argument of
-        // Stream.concat(...) whose receiver sits on its own line under expand), route through the comment-aware
-        // argument-list renderer so those comments survive. parenthesized() returns empty when there are no such
-        // comments, so the comment-free path below stays byte-identical.
+        // Route through the comment-aware argument-list renderer so unclaimed gap comments on the root's arguments
+        // survive; parenthesized() returns empty when there are none, so the comment-free path below stays byte-identical.
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
         if (commentedArguments.isPresent()) {
             return commentedArguments.orElseThrow();

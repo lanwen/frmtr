@@ -169,7 +169,7 @@ final class LoopStatementLayout {
                 .filter(JavaCommentTrivia::isLine)
                 .filter(trivia -> !trivia.startsAfterEndOf(body))
                 .isPresent();
-        if (gapComments.isEmpty() && !bodyOwnsLeadingLineComment) {
+        if (gapComments.isEmpty() && !bodyOwnsLeadingLineComment && !joinedFormOverflows(controlStmt, body)) {
             return Optional.empty();
         }
         List<Doc> headerTrailing = new ArrayList<>();
@@ -199,6 +199,24 @@ final class LoopStatementLayout {
         }
         result.add(Doc.indent(Doc.concat(indented)));
         return Optional.of(Doc.concat(result));
+    }
+
+    /**
+     * Whether the braceless loop collapsed onto one line ({@code for (...) call(...);}) would overflow the width, forcing
+     * the body onto its own indented line instead of an over-width header. Source-neutral: it measures a comment-stripped
+     * clone rendered from the AST (its retained source token range is cleared) at the loop's indentation, so an author's
+     * wrapping cannot flip the verdict and the result is a fixpoint. A block body already breaks, so it never overflows.
+     */
+    private boolean joinedFormOverflows(Node loop, Statement body) {
+        if (body.isBlockStmt()) {
+            return false;
+        }
+        Node clone = loop.clone();
+        clone.removeComment();
+        List.copyOf(clone.getOrphanComments()).forEach(clone::removeOrphanComment);
+        List.copyOf(clone.getAllContainedComments()).forEach(Node::remove);
+        clone.setTokenRange(null);
+        return layoutWidth.nodeLine(loop, compact.apply(clone)) > options.lineWidth();
     }
 
     Doc forEachStatement(ForEachStmt statement) {

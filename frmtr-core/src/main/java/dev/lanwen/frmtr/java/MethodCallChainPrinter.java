@@ -682,6 +682,24 @@ final class MethodCallChainPrinter {
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
             chainWidthBreakExplain.record(expression, analysis, layout);
+            // A plain trivial-receiver two-selector chain whose SHORT final selector wraps one breakable call/creation
+            // argument attaches that opener and breaks the argument ONE indent deep, rather than fanning the outer chain
+            // and pushing the argument two indents deeper. Comment-free and short-name-gated so the fan-only comment
+            // shapes and longer selectors keep the fan; declines (falls through to the fan) when the opener overflows.
+            if (
+                !rootIsEnclosedFanningChain(root)
+                && calls.size() == 2
+                && calls.getFirst() instanceof MethodCallExpr
+                && !analysis.hasComments()
+                && !sourceShapePolicy.hasContainedComments(expression)
+                && finalSegmentAttachesShortBreakingCallArgument(calls.getLast())
+            ) {
+                Optional<Doc> attached = compactRootWithBrokenFinalSegment(
+                    calls.getFirst(), calls.getLast(), finalSegmentSuffix, lineWidth, layout);
+                if (attached.isPresent()) {
+                    return attached;
+                }
+            }
             Doc fanOut = chainFanOut(root, calls, finalSegmentSuffix, layout);
             if (rootIsEnclosedFanningChain(root)) {
                 return Optional.of(fanOut);
@@ -2963,6 +2981,42 @@ final class MethodCallChainPrinter {
         String argumentFlat = compactSource.commentFree(expression.getArgument(0));
         return layoutWidth.nodeIndentWidth(expression) + options.indentUnit().length() + argumentFlat.length()
             > options.lineWidth();
+    }
+
+    /**
+     * Whether a SHORT final selector wraps a single call/creation argument that will not render flat — the shape that
+     * reads better attached to its receiver with the argument one indent deep than fanned. Short-name-gated so a longer
+     * selector keeps the exploded fan. The argument breaks either because it is an object-creation-rooted / rule-breaking
+     * chain (fans one selector per line at any width) or because its flat form overflows its own exploded line.
+     */
+    private boolean finalSegmentAttachesShortBreakingCallArgument(MethodCallExpr call) {
+        if (
+            call.getNameAsString().length() >= SingleCallArgumentOpenerHugLayout.SHORT_CALL_NAME_LIMIT
+            || call.getArguments().size() != 1
+        ) {
+            return false;
+        }
+        Expression argument = call.getArgument(0);
+        NodeList<Expression> innerArguments;
+        if (argument instanceof MethodCallExpr inner) {
+            innerArguments = inner.getArguments();
+        } else if (argument instanceof ObjectCreationExpr creation) {
+            innerArguments = creation.getArguments();
+        } else {
+            return false;
+        }
+        if (innerArguments.isEmpty() || innerArguments.stream().anyMatch(LambdaExpr.class::isInstance)) {
+            return false;
+        }
+        if (argument instanceof MethodCallExpr innerChain) {
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis argumentAnalysis =
+                methodCallChainAnalysis(innerChain);
+            if (chainBreaksByRule(argumentAnalysis)
+                    || methodChainPlanner.rootObjectCreationNeedsBreak(argumentAnalysis)) {
+                return true;
+            }
+        }
+        return segmentArgumentOverflowsExplodedLine(call);
     }
 
     /**

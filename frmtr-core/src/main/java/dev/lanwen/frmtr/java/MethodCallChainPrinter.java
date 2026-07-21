@@ -97,6 +97,12 @@ final class MethodCallChainPrinter {
 
     private final ChainFanLayout chainFan;
 
+    private final ChainSegmentRenderer segmentRenderer;
+
+    private final ChainRootPromotionLayout rootPromotion;
+
+    private final CompactRootBrokenSegmentLayout compactRootBrokenSegment;
+
     private final ChainSegmentPaddingLayout chainSegmentPadding;
 
     MethodCallChainPrinter(
@@ -207,6 +213,56 @@ final class MethodCallChainPrinter {
             methodChainPlanner::promotesFirstCall
         );
         this.chainComments = new ChainCommentLayout(comments, commentPlacement, commentedExpressionLists);
+        this.segmentRenderer = new ChainSegmentRenderer(
+            types,
+            calls,
+            compactSource,
+            layoutWidth,
+            options,
+            sourceShapePolicy,
+            segmentWidth,
+            chainComments,
+            comments,
+            commentedExpressionLists,
+            chainSelectorLambda,
+            methodChainPlanner,
+            huggableBlockLambdaArguments,
+            commentedExpressionLambdaArgument,
+            this::methodCallChainAnalysis,
+            this::chainBreaksByRule
+        );
+        this.rootPromotion = new ChainRootPromotionLayout(
+            calls,
+            types,
+            compactSource,
+            layoutWidth,
+            options,
+            sourceShapePolicy,
+            methodChainPlanner,
+            commentedExpressionLists,
+            segmentRenderer,
+            expressionRenderer,
+            brokenObjectCreationRenderer,
+            this::chainContinuation,
+            this::softChainContinuation,
+            this::methodCallSegmentHasBlockLambdaArgument,
+            this::blockLambdaSegmentFirstLine,
+            this::rootLineWidth,
+            methodRoot -> methodCallChain(methodRoot, MethodCallBreakMode.FORCED, LayoutContext.root())
+        );
+        this.compactRootBrokenSegment = new CompactRootBrokenSegmentLayout(
+            segmentWidth,
+            options,
+            types,
+            compactSource,
+            layoutWidth,
+            calls,
+            sourceShapePolicy,
+            segmentRenderer,
+            huggableBlockLambdaArguments,
+            huggableBlockLambdaFirstLine,
+            expressionLambdaArgumentPlan
+        );
         this.chainFan = new ChainFanLayout(
             context.options,
             context.sourceShapePolicy,
@@ -1336,39 +1392,15 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> lineWidth,
             LayoutContext layout
     ) {
-        if (call.getArguments().stream().anyMatch(argument -> argument instanceof LambdaExpr)) {
-            return false;
-        }
-        String typeArguments = call.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String compactLine = compactSource.compact(methodRoot)
-            + "."
-            + typeArguments
-            + call.getNameAsString()
-            + "("
-            + segmentWidth.methodCallSegmentArgumentsWidthText(call.getArguments())
-            + ")"
-            + finalSegmentSuffix;
-        return lineWidth.applyAsInt(compactLine) > options.lineWidth();
+        return compactRootBrokenSegment.compactRootFinalSegmentLineOverflows(
+            methodRoot,
+            call,
+            finalSegmentSuffix,
+            lineWidth,
+            layout
+        );
     }
 
-    /**
-     * Breaks a method-call root's own argument list one argument per line and glues the single final segment to its
-     * closing parenthesis: {@code Type.create(}\n args \n{@code ).toRetry()}.
-     *
-     * <p>Reached when {@link #compactRootFinalSegmentLineOverflows} reports the whole chain over width at its rendered
-     * line position but the final segment has no arguments of its own to wrap ({@code .toRetry()}/{@code .build()}). It
-     * mirrors the shape a source-multiline root produces, but is reached for a flat source root that overflows only
-     * because it renders at a deep nesting column. Returns empty (leaving the existing flat layout) unless the root
-     * carries breakable arguments, is not already source-multiline, has no comments, and its opener {@code Type.create(}
-     * itself fits at {@code lineWidth}, so the broken shape is only chosen when it is both needed and valid.
-     *
-     * <p>{@code layout} is threaded so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
-     * available at this statement/field single-segment flat-gate. It is NOT consulted here: the opener-fit decision uses
-     * the fixed-budget {@code lineWidth.applyAsInt(…)} floor (the statement/field callers pass an empty-prefix
-     * context).
-     */
     private Optional<Doc> brokenRootWithAttachedFinalSegment(
             MethodCallExpr methodRoot,
             MethodCallExpr call,
@@ -1376,21 +1408,12 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> lineWidth,
             LayoutContext layout
     ) {
-        if (
-            methodRoot.getArguments().isEmpty()
-            || sourceShapePolicy.hasContainedComments(methodRoot)
-            || methodRoot.getArguments().stream().anyMatch(argument -> argument instanceof LambdaExpr)
-        ) {
-            return Optional.empty();
-        }
-        if (lineWidth.applyAsInt(calls.methodCallPrefix(methodRoot) + "(") > options.lineWidth()) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                calls.brokenMethodCall(methodRoot),
-                methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix, lineWidth)
-            )
+        return compactRootBrokenSegment.brokenRootWithAttachedFinalSegment(
+            methodRoot,
+            call,
+            finalSegmentSuffix,
+            lineWidth,
+            layout
         );
     }
 
@@ -1731,151 +1754,22 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> firstLineWidth,
             LayoutContext layout
     ) {
-        return switch (chainPlan.rootRendering()) {
-            case INLINE_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
-                ? promotedMethodCallRoot(methodCall, firstLineWidth, layout)
-                : expressionRenderer.format(chainPlan.root(), LayoutContext.root());
-            case GROUPED_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
-                ? groupedPromotedMethodCall(methodCall)
-                : expressionRenderer.format(chainPlan.root(), LayoutContext.root());
-            case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainPlan.root());
-            case EXPRESSION_RENDERER -> expressionRenderedChainRoot(chainPlan.root(), firstLineWidth);
-        };
+        return rootPromotion.methodCallChainRootDoc(chainPlan, firstLineWidth, layout);
     }
 
-    private Doc expressionRenderedChainRoot(
-            Expression root,
-            ToIntFunction<String> firstLineWidth
-    ) {
-        if (expressionRenderedChainRootBreaksMethodCall(root, firstLineWidth)) {
-            return calls.brokenMethodCall((MethodCallExpr) root);
-        }
-        return expressionRenderer.format(root, LayoutContext.root());
-    }
-
-    /**
-     * Whether {@link #expressionRenderedChainRoot} renders an {@link MethodCallChainSourcePlanner.ChainRootRendering#EXPRESSION_RENDERER}
-     * root through {@link MethodCallPrinter#brokenMethodCall} — a multi-argument root that overflows its first line (or is
-     * a source-multiline type-like root that does not fit) — rather than through ordinary expression dispatch. The negation
-     * is the "plain expression-renderer root" case: {@code expressionRenderer.format(root, LayoutContext.root())}, which is
-     * exactly the root {@link #chainFanOut} builds, so the multi-segment fall-through can route through the shared fan-out
-     * builder byte-identically only when this returns {@code false}. Side-effect-free (no comment claim), so evaluating it
-     * to steer the fall-through never double-claims a comment.
-     */
     private boolean expressionRenderedChainRootBreaksMethodCall(
             Expression root,
             ToIntFunction<String> firstLineWidth
     ) {
-        return root instanceof MethodCallExpr methodCall
-            && methodCall.getArguments().size() > 1
-            && firstLineWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth();
+        return rootPromotion.expressionRenderedChainRootBreaksMethodCall(root, firstLineWidth);
     }
 
     private Doc singleSegmentMethodRootDoc(MethodCallExpr methodRoot) {
-        Optional<Doc> sourceMultilineArguments =
-            calls.sourceMultilineArguments(methodRoot);
-        if (sourceMultilineArguments.isPresent()) {
-            return sourceMultilineArguments.orElseThrow();
-        }
-        Optional<Doc> brokenScopedMethodRoot =
-            brokenTypeLikeScopedMethodRoot(methodRoot);
-        if (brokenScopedMethodRoot.isPresent()) {
-            return brokenScopedMethodRoot.orElseThrow();
-        }
-        if (
-            // Measure the method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
-            layoutWidth.nodeLine(methodRoot, compactSourceWidthText(methodRoot)) > options.lineWidth()
-            || methodCallRootScopeOverflows(methodRoot)
-        ) {
-            return methodCallChain(methodRoot, MethodCallBreakMode.FORCED, LayoutContext.root())
-                    .orElseGet(() -> expressionRenderer.format(methodRoot, LayoutContext.root()));
-        }
-        return expressionRenderer.format(methodRoot, LayoutContext.root());
-    }
-
-    private Optional<Doc> brokenTypeLikeScopedMethodRoot(MethodCallExpr methodRoot) {
-        Optional<MethodCallExpr> scopedCall = methodRoot.getScope()
-                .filter(MethodCallExpr.class::isInstance)
-                .map(MethodCallExpr.class::cast)
-                .filter(call -> call.getArguments().size() > 1)
-                .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent())
-                // Measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
-                .filter(call -> layoutWidth.nodeLine(call, compactSourceWidthText(call)) > options.lineWidth());
-        if (scopedCall.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                calls.brokenMethodCall(scopedCall.orElseThrow()),
-                chainContinuation(methodCallChainSegment(methodRoot))
-            )
-        );
-    }
-
-    private boolean methodCallRootScopeOverflows(MethodCallExpr methodRoot) {
-        return methodRoot.getScope()
-                .filter(MethodCallExpr.class::isInstance)
-                .map(MethodCallExpr.class::cast)
-                // Measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
-                .map(scopedCall -> layoutWidth.nodeLine(scopedCall,
-                        compactSourceWidthText(scopedCall)
-                    ) > options.lineWidth()
-                )
-                .orElse(false);
-    }
-
-    private String compactSourceWidthText(Expression expression) {
-        // Source-neutral compact form, not normalizeWhitespace(rawWithoutOwnComment): the latter turns each source
-        // newline into a space, so an expression the author already wrapped measures wider than its flat form and the
-        // root/scope-overflow gates that consume this width flip their verdict between passes.
-        return compactSource.compactWithoutOwnComment(expression);
+        return rootPromotion.singleSegmentMethodRootDoc(methodRoot);
     }
 
     private Doc groupedPromotedMethodCall(MethodCallExpr expression) {
-        Optional<Doc> sourceMultilineArguments =
-            calls.sourceMultilineArguments(expression);
-        if (sourceMultilineArguments.isPresent()) {
-            return sourceMultilineArguments.orElseThrow();
-        }
-        if (
-            expression.getArguments().size() > 1
-            // Measure the promoted method call at its true rendered block/type depth (nodeLine) instead of CURRENT.
-            && !sourceShapePolicy.fitsOnOneLine(expression, text -> layoutWidth.nodeLine(expression, text))
-        ) {
-            return calls.brokenMethodCall(expression);
-        }
-        Optional<Doc> huggableExpressionLambda =
-            groupedPromotedExpressionLambda(expression);
-        if (huggableExpressionLambda.isPresent()) {
-            return huggableExpressionLambda.orElseThrow();
-        }
-        if (methodCallSegmentHasBlockLambdaArgument(expression)) {
-            return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
-                    // Measure the promoted block-lambda first line at its true rendered block/type depth
-                    // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-                    .filter(firstLine -> layoutWidth.nodeLine(expression, firstLine) <= options.lineWidth())
-                    .map(ignored -> expressionRenderer.format(expression, LayoutContext.root()))
-                    .orElseGet(() -> Doc.concat(
-                            expressionRenderer.format(expression.getScope().orElseThrow(), LayoutContext.root()),
-                            chainContinuation(methodCallChainSegment(expression))
-                    ));
-        }
-        return expression.getScope()
-                .map(scope -> Doc.group(
-                        Doc.concat(
-                            expressionRenderer.format(scope, LayoutContext.root()),
-                            softChainContinuation(methodCallChainSegment(expression))
-                        )
-                ))
-                .orElseGet(() -> expressionRenderer.format(expression, LayoutContext.root()));
-    }
-
-    /**
-     * A no-op stub: a promoted segment's trailing expression lambda is hugged or exploded by width upstream, so this
-     * always returns empty. Retained so the candidate-ladder dispatch in {@link #groupedPromotedMethodCall} stays wired.
-     */
-    private Optional<Doc> groupedPromotedExpressionLambda(MethodCallExpr expression) {
-        return Optional.empty();
+        return rootPromotion.groupedPromotedMethodCall(expression);
     }
 
     private Doc groupedPromotedRootWithSingleSegment(
@@ -1885,35 +1779,7 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix,
             LayoutContext layout
     ) {
-        if (methodCallSegmentHasBlockLambdaArgument(expression)) {
-            return blockLambdaSegmentFirstLine(compactSource.compact(root), expression)
-                    // Measure the promoted-root block-lambda first line at the root's true rendered block/type
-                    // depth ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-                    .filter(firstLine -> layoutWidth.nodeLine(root, firstLine) <= options.lineWidth())
-                    .map(ignored -> Doc.concat(rootDoc, methodCallChainSegment(expression, finalSegmentSuffix)))
-                    .orElseGet(() -> Doc.concat(
-                            rootDoc,
-                            chainContinuation(methodCallChainSegment(expression, finalSegmentSuffix))
-                    ));
-        }
-        return Doc.group(
-            Doc.concat(
-                rootDoc,
-                // Measure the segment as on its own continuation line: the softChainContinuation group drops it onto its
-                // own line when it breaks, so its argument-break gate must measure at the continuation column, not the
-                // source-column beside-a-token estimate — the latter reads the author's shape and flips the segment's
-                // argument list between broken and collapsed across passes.
-                softChainContinuation(
-                    methodCallChainSegment(
-                        expression,
-                        Optional.empty(),
-                        finalSegmentSuffix,
-                        layoutWidth::continuationStatement,
-                        true
-                    )
-                )
-            )
-        );
+        return rootPromotion.groupedPromotedRootWithSingleSegment(root, rootDoc, expression, finalSegmentSuffix, layout);
     }
 
     private Optional<String> blockLambdaSegmentFirstLine(String root, MethodCallExpr expression) {
@@ -1950,46 +1816,13 @@ final class MethodCallChainPrinter {
      * LiteralExpr}); a lambda, method-call, multi-argument, or already-multiline tail is not simple and still opens
      * exactly as before.
      */
-    private boolean refuseOpeningSingleSimpleObjectRootChainTail(
-            Expression root,
-            MethodCallExpr call
-    ) {
-        return root instanceof ObjectCreationExpr
-            && segmentWidth.singleSimpleMethodCallSegmentArgument(call);
-    }
-
-    private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
-        return compactRootWithBrokenFinalSegment(
-            root,
-            call,
-            MethodCallChainTail.EMPTY,
-            layoutWidth::currentIndented,
-            LayoutContext.root()
-        );
-    }
-
     private Optional<Doc> compactRootWithBrokenFinalSegment(
             Expression root,
             MethodCallExpr call,
             ToIntFunction<String> lineWidth,
             LayoutContext layout
     ) {
-        return compactRootWithBrokenFinalSegment(root, call, MethodCallChainTail.EMPTY, lineWidth, layout);
-    }
-
-    private Optional<Doc> compactRootWithBrokenFinalSegment(
-            Expression root,
-            MethodCallExpr call,
-            MethodCallChainTail finalSegmentSuffix,
-            LayoutContext layout
-    ) {
-        return compactRootWithBrokenFinalSegment(
-            root,
-            call,
-            finalSegmentSuffix,
-            layoutWidth::currentIndented,
-            layout
-        );
+        return compactRootBrokenSegment.compactRootWithBrokenFinalSegment(root, call, lineWidth, layout);
     }
 
     private Optional<Doc> compactRootWithBrokenFinalSegment(
@@ -1999,16 +1832,9 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> lineWidth,
             LayoutContext layout
     ) {
-        return compactRootWithBrokenFinalSegment(root, call, finalSegmentSuffix, lineWidth, layout, Doc.EMPTY);
+        return compactRootBrokenSegment.compactRootWithBrokenFinalSegment(root, call, finalSegmentSuffix, lineWidth, layout);
     }
 
-    /**
-     * Same broken-final-segment shape, but with {@code argumentLeadingComment} placed on its own line just after the
-     * opened selector's {@code (} and before the argument. The single-selector root-trailing {@code //} case renders here
-     * so the marker lands own-line above the broken argument on the receiver-trailing pass too — the same slot the
-     * argument-leading pass produces — instead of a {@code .to( //} suffix that flips between passes. Declines a hugged
-     * block-lambda argument when a comment is present so the caller keeps its hugging fallback.
-     */
     private Optional<Doc> compactRootWithBrokenFinalSegment(
             Expression root,
             MethodCallExpr call,
@@ -2017,190 +1843,14 @@ final class MethodCallChainPrinter {
             LayoutContext layout,
             Doc argumentLeadingComment
     ) {
-        if (call.getArguments().isEmpty()) {
-            return Optional.empty();
-        }
-        if (refuseOpeningSingleSimpleObjectRootChainTail(root, call)) {
-            return Optional.empty();
-        }
-        // The object-creation-root compact-root path has no source-shape bail: whether the constructor root stays compact
-        // is decided by the width gate below (`compactRootFirstLineFits`), so a source-multiline root converges on the
-        // same verdict.
-        if (
-            !(root instanceof MethodCallExpr)
-            && !(root instanceof ObjectCreationExpr)
-            && !(root instanceof FieldAccessExpr)
-        ) {
-            return Optional.empty();
-        }
-        String typeArguments = call.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String callPrefix = compactSource.compact(root) + "." + typeArguments + call.getNameAsString();
-        // An object-creation root renders here as its whole compact form ({@code compactSource.compact(root)}) on the
-        // first line, so a wide constructor ({@code new LogValidator(12 args)}) would keep 256 columns flat and only break
-        // the final selector's arguments. Gate the compact-root shape on WIDTH: when the constructor-plus-selector opener
-        // ({@code new Type(args).selector(}) already overflows, defer so the chain falls through to the broken
-        // object-creation fan, which breaks the constructor's own argument list by width. Scoped to object-creation
-        // roots; method-call/field roots keep their existing routing.
-        if (
-            root instanceof ObjectCreationExpr
-            && compactRootLineWidth(root, callPrefix + "(", layout) > options.lineWidth()
-        ) {
-            return Optional.empty();
-        }
-        if (!compactRootFirstLineFits(root, callPrefix, call.getArguments(), layout)) {
-            return Optional.empty();
-        }
-        Optional<Doc> huggableLambda =
-            huggableBlockLambdaArguments.apply(callPrefix, call.getArguments());
-        if (huggableLambda.isPresent()) {
-            if (argumentLeadingComment != Doc.EMPTY) {
-                return Optional.empty();
-            }
-            return Optional.of(Doc.concat(huggableLambda.orElseThrow(), finalSegmentSuffix.doc()));
-        }
-        String prefix = callPrefix + "(";
-        if (
-            root instanceof ObjectCreationExpr
-            && compactRootLineWidth(root, prefix, layout) > options.lineWidth()
-        ) {
-            return Optional.empty();
-        }
-        if (lineWidth.applyAsInt(prefix + ")") > options.lineWidth()) {
-            return Optional.empty();
-        }
-        Doc argumentList = calls.methodCallArgumentList(callPrefix, call.getArguments(), Doc.HARD_LINE);
-        Doc openedArguments = argumentLeadingComment == Doc.EMPTY
-            ? argumentList
-            : Doc.concat(argumentLeadingComment, Doc.HARD_LINE, argumentList);
-        Doc exploded = Doc.concat(
-            Doc.text(prefix),
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    openedArguments
-                )
-            ),
-            Doc.HARD_LINE,
-            Doc.text(")" + finalSegmentSuffix)
+        return compactRootBrokenSegment.compactRootWithBrokenFinalSegment(
+            root,
+            call,
+            finalSegmentSuffix,
+            lineWidth,
+            layout,
+            argumentLeadingComment
         );
-        // When the selector's sole argument is a single inner call/creation that would itself overflow its own exploded
-        // line, rank the opener-hug ({@code .thenReturn(List.of(new TopicData<>(} ⏎ …) flattest-first against this
-        // exploded shape, so the renderer hugs it onto the compact-root line only when its opener fits and otherwise keeps
-        // the exploded fallback. An argument that fits one exploded line keeps that cleaner shape.
-        if (argumentLeadingComment == Doc.EMPTY
-                && segmentArgumentOpenerHugApplies(call)
-                && segmentArgumentOverflowsExplodedLine(call)) {
-            Doc hugged = Doc.concat(Doc.text(prefix), argumentList, Doc.text(")" + finalSegmentSuffix));
-            return Optional.of(Doc.bestFitting(List.of(hugged, exploded)));
-        }
-        return Optional.of(exploded);
-    }
-
-    private boolean compactRootFirstLineFits(
-            Expression root,
-            String callPrefix,
-            NodeList<Expression> arguments,
-            LayoutContext layout
-    ) {
-        Optional<String> blockLambdaFirstLine = huggableBlockLambdaFirstLine.apply(callPrefix, arguments);
-        if (
-            blockLambdaFirstLine
-                    .filter(
-                        firstLine -> compactRootLineWidth(
-                            root,
-                            firstLine,
-                            layout
-                        ) > options.lineWidth()
-                    )
-                    .isPresent()
-        ) {
-            return false;
-        }
-        Optional<ExpressionLambdaArgumentLayout.Plan> expressionLambdaPlan = expressionLambdaArgumentPlan.plan(
-            callPrefix,
-            arguments,
-            layout
-        );
-        return expressionLambdaPlan
-                .map(plan -> plan.firstLineFits(
-                        line -> compactRootLineWidth(root, line, layout),
-                        options.lineWidth()
-                ))
-                .orElse(true);
-    }
-
-    /**
-     * Measures a compact chain root's first line ({@code root.selector(args…}) at the column where the root renders.
-     *
-     * <p>The root's start column reconstructed from {@code range.begin.column} is a source-column read that understates
-     * the rendered column once the root is reindented shallower than its true block/type depth. This gate also considers
-     * the root's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type and block)
-     * and takes the <em>wider</em> of the two, so a root reindented flush-left inside deep nesting is not measured
-     * as fitting at its stale shallow column and hugged over width. This mirrors the sibling
-     * {@link ExpressionLambdaArgumentLayout} first-line gate and the depth-aware chain probes.
-     *
-     * <p>Two measurement modes, keyed on whether a caller has threaded the same-line leading prefix through
-     * {@link LayoutContext#leftEdgePrefix()}:
-     *
-     * <ul>
-     *   <li><strong>Prefix threaded.</strong> When a caller supplies its fixed leading prefix — the
-     *   {@code return } chain threads {@code "return "} — the rendered column is known exactly:
-     *   {@code nodeIndentWidth(root) + leftEdgePrefix.length() + firstLine.length()}. The source-column floor is
-     *   <em>dropped</em>, because it is only a stand-in for the prefix this arm measures directly and could over- or
-     *   under-count when the root is reindented away from its source column. A reindented-flat return chain whose compact
-     *   first line is under budget by the stale source column but over budget once {@code return } is added (the
-     *   {@code return } is worth exactly the missing width) is then correctly measured over width and fanned out.</li>
-     *   <li><strong>No prefix threaded.</strong> Every other caller passes {@code root()} (empty prefix), so the wider-of
-     *   rule applies: {@code max(source-column, nodeIndentWidth) + firstLine.length()}. The {@code nodeIndentWidth} arm
-     *   keeps a root reindented flush-left inside deep nesting from being measured as fitting at its stale shallow column
-     *   and hugged over width; the source column is kept as the <em>floor</em> because it is where these callers'
-     *   unmodelled leading prefix (a {@code NAME … = }, a continuation indent) lives. Dropping the floor for these callers
-     *   under-measures and regresses {@code source-multiline-method-root-chain-initializer}, so the floor stays for them.</li>
-     * </ul>
-     */
-    private int compactRootLineWidth(
-            Expression root,
-            String firstLine,
-            LayoutContext layout
-    ) {
-        // With the same-line prefix threaded, measure at the exact rendered column and drop the source-column floor,
-        // which is only a stand-in for this prefix.
-        if (!layout.leftEdgePrefix().isEmpty()) {
-            return layoutWidth.nodeIndentWidth(root) + layout.leftEdgePrefix().length() + firstLine.length();
-        }
-        return root.getRange()
-                .map(range -> Math.max(
-                    Math.max(0, range.begin.column + 1) + firstLine.length(),
-                    layoutWidth.nodeIndentWidth(root) + firstLine.length()))
-                // Rangeless (synthetic) fallback measures at the rendered column, mirroring the prefix-set arm's
-                // nodeIndentWidth term, instead of a fixed indentation baseline.
-                .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + firstLine.length());
-    }
-
-    private boolean expressionLambdaBodyOpenerOverflows(
-            Expression root,
-            String callPrefix,
-            NodeList<Expression> arguments,
-            LayoutContext layout
-    ) {
-        return expressionLambdaArgumentPlan.plan(callPrefix, arguments, layout)
-                .filter(plan -> plan.bodyOpenerFitsOnContinuation(layoutWidth::continuationStatement, options.lineWidth()))
-                .filter(plan -> plan.bodyOpenerOverflows(
-                        line -> compactRootLineWidth(root, line, layout),
-                        options.lineWidth()
-                ))
-                .isPresent();
-    }
-
-    private String compactRootCallPrefix(Expression root, MethodCallExpr expression) {
-        return compactSource.compact(root)
-            + "."
-            + expression.getTypeArguments()
-                    .map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">")
-                    .orElse("")
-            + expression.getNameAsString();
     }
 
     /**
@@ -2480,64 +2130,14 @@ final class MethodCallChainPrinter {
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {
-        Doc scope = expression.getScope()
-                .map(node -> expressionRenderer.format(node, LayoutContext.root()))
-                .orElse(Doc.EMPTY);
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String arguments = "(" + compactSource.compactJoin(expression.getArguments()) + ")";
-        return Doc.concat(scope, Doc.text("." + typeArguments + expression.getNameAsString() + arguments));
-    }
-
-    private Doc promotedMethodCallRoot(
-            MethodCallExpr expression,
-            ToIntFunction<String> firstLineWidth,
-            LayoutContext layout
-    ) {
-        Optional<Doc> sourceMultilineArguments =
-            calls.sourceMultilineArguments(expression);
-        if (sourceMultilineArguments.isPresent()) {
-            return sourceMultilineArguments.orElseThrow();
-        }
-        if (promotedRootArgumentsShouldBreak(expression, firstLineWidth, layout)) {
-            return brokenPromotedMethodCallRoot(expression);
-        }
-        if (promotedNoArgRootScopeOverflows(expression, firstLineWidth)) {
-            return expression.getScope()
-                    .filter(FieldAccessExpr.class::isInstance)
-                    .map(FieldAccessExpr.class::cast)
-                    .map(scope -> promotedFieldAccessRootMethodCall(scope, expression))
-                    .or(() -> expression.getScope().map(
-                            scope -> Doc.concat(
-                                expressionRenderer.format(scope, LayoutContext.root()),
-                                chainContinuation(methodCallChainSegment(expression))
-                            )
-                    ))
-                    .orElseGet(() -> inlineMethodCall(expression));
-        }
-        return inlineMethodCall(expression);
-    }
-
-    private Doc promotedFieldAccessRootMethodCall(FieldAccessExpr scope, MethodCallExpr expression) {
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        return Doc.concat(
-            Doc.text(compactSource.compact(scope.getScope())),
-            chainContinuation(
-                Doc.text("." + scope.getNameAsString() + "." + typeArguments + expression.getNameAsString() + "()")
-            )
-        );
+        return rootPromotion.inlineMethodCall(expression);
     }
 
     private boolean promotedNoArgRootScopeOverflows(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth
     ) {
-        return expression.getArguments().isEmpty()
-            && expression.getScope().filter(FieldAccessExpr.class::isInstance).isPresent()
-            && !sourceShapePolicy.fitsOnOneLine(expression, firstLineWidth);
+        return rootPromotion.promotedNoArgRootScopeOverflows(expression, firstLineWidth);
     }
 
     private boolean promotedRootArgumentsShouldBreak(
@@ -2545,79 +2145,19 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> firstLineWidth,
             LayoutContext layout
     ) {
-        if (expression.getArguments().size() <= 1) {
-            return false;
-        }
-        String compact = compactSource.compact(expression);
-        // The fixed one-indent term was OR-dominated — rootLineWidth is never smaller than
-        // nodeIndentWidth(root) + compact.length(), which already dominates the one-indent baseline — so the
-        // rendered-column comparison alone yields the identical verdict.
-        return rootLineWidth(expression, compact, layout) > options.lineWidth();
+        return rootPromotion.promotedRootArgumentsShouldBreak(expression, firstLineWidth, layout);
     }
 
-    /**
-     * The true-column width oracle for a fanned chain selector's expression-lambda hug: the selector's rendered
-     * continuation column ({@link LayoutWidth#nodeIndentWidth} — the enclosing type/block indentation — plus the two
-     * continuation units the fan applies, the same {@code nodeIndentWidth(chain) + indentUnit * 2} column
-     * {@link ExpressionLambdaArgumentLayout} measures the hugged body at), widened with {@code Math.max} against the
-     * fixed budget the caller already threads so it is monotone (it can only ever measure the hug WIDER, never relax a
-     * break, so it cannot introduce a new over-width and stays a pure function of the AST). This corrects the fixed
-     * three-unit continuation budget's ({@link LayoutWidth#continuationStatement}) one-level under-count for a chain
-     * nested below a top-level statement, so the lambda-hug admission gate sees the selector's real overflow. It still
-     * under-counts a selector
-     * nested several argument levels deep — the general case needs the {@code leftEdgePrefix} column threaded through the
-     * fan — but is never worse than the budget it replaces.
-     */
     private ToIntFunction<String> fannedSelectorColumnWidth(MethodCallExpr expression, ToIntFunction<String> fallback) {
-        int continuationColumn = layoutWidth.nodeIndentWidth(expression) + options.indentUnit().length() * 2;
-        return text -> Math.max(fallback.applyAsInt(text), continuationColumn + text.length());
-    }
-
-
-    private Doc brokenPromotedMethodCallRoot(MethodCallExpr expression) {
-        String prefix = calls.methodCallPrefix(expression);
-        // When the promoted root's argument list carries unclaimed gap comments (e.g. trailing notes on each argument of
-        // Stream.concat(...) whose receiver sits on its own line under expand), route through the comment-aware
-        // argument-list renderer so those comments survive. parenthesized() returns empty when there are no such
-        // comments, so the comment-free path below stays byte-identical.
-        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
-        if (commentedArguments.isPresent()) {
-            return commentedArguments.orElseThrow();
-        }
-        return Doc.concat(
-            Doc.text(prefix + "("),
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    calls.methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
-                )
-            ),
-            Doc.HARD_LINE,
-            Doc.text(")")
-        );
+        return rootPromotion.fannedSelectorColumnWidth(expression, fallback);
     }
 
     private Doc methodCallChainSegment(MethodCallExpr expression) {
-        return methodCallChainSegment(expression, false);
+        return segmentRenderer.methodCallChainSegment(expression);
     }
 
     private Doc methodCallChainSegment(MethodCallExpr expression, MethodCallChainTail finalSegmentSuffix) {
-        return methodCallChainSegment(expression, Optional.empty(), finalSegmentSuffix);
-    }
-
-    private Doc methodCallChainSegment(MethodCallExpr expression, boolean reserveStatementTerminator) {
-        return methodCallChainSegment(expression, reserveStatementTerminator, layoutWidth::continuationStatement);
-    }
-
-    private Doc methodCallChainSegmentAttachedToRootClose(
-            MethodCallExpr expression,
-            MethodCallChainTail finalSegmentSuffix
-    ) {
-        return methodCallChainSegmentAttachedToRootClose(
-            expression,
-            finalSegmentSuffix,
-            layoutWidth::currentIndented
-        );
+        return segmentRenderer.methodCallChainSegment(expression, finalSegmentSuffix);
     }
 
     private Doc methodCallChainSegmentAttachedToRootClose(
@@ -2625,18 +2165,7 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix,
             ToIntFunction<String> lineWidth
     ) {
-        // Measure the segment at the continuation column of the root's closing line (the {@code ")" + segment} closure),
-        // not the beside-a-token source column. This segment attaches to the broken root's {@code )} on its continuation
-        // line ({@code ).thenReturn(arg)}), so its argument-break gate must use that rendered column; the default
-        // source-column estimate reads the author's shape and flips the segment's argument list between broken and
-        // collapsed across passes (the {@code when(...).thenReturn(...)} family).
-        return methodCallChainSegment(
-            expression,
-            Optional.empty(),
-            finalSegmentSuffix,
-            segment -> lineWidth.applyAsInt(")" + segment),
-            true
-        );
+        return segmentRenderer.methodCallChainSegmentAttachedToRootClose(expression, finalSegmentSuffix, lineWidth);
     }
 
     private ToIntFunction<String> objectRootSegmentWidth(
@@ -2801,306 +2330,29 @@ final class MethodCallChainPrinter {
         return Doc.indent(Doc.concat(Doc.HARD_LINE, doc));
     }
 
-    private Doc brokenMethodCallChainSegment(
-            MethodCallExpr expression,
-            MethodCallChainTail finalSegmentSuffix
-    ) {
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        return brokenMethodCallSegment(
-            expression,
-            "." + typeArguments + expression.getNameAsString(),
-            Doc.EMPTY,
-            finalSegmentSuffix
-        );
-    }
-
-    private Doc methodCallChainSegment(
-            MethodCallExpr expression,
-            boolean reserveStatementTerminator,
-            ToIntFunction<String> compactSegmentWidth
-    ) {
-        return methodCallChainSegment(
-            expression,
-            reserveStatementTerminator,
-            compactSegmentWidth,
-            MethodCallChainTail.EMPTY,
-            false
-        );
-    }
-
-    private Doc methodCallChainSegment(
-            MethodCallExpr expression,
-            boolean reserveStatementTerminator,
-            ToIntFunction<String> compactSegmentWidth,
-            MethodCallChainTail finalSegmentSuffix,
-            boolean segmentOnOwnLine
-    ) {
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String prefix = "." + typeArguments + expression.getNameAsString();
-        Doc segmentPrefix = methodCallSegmentPrefix(expression);
-        if (expression.getArguments().isEmpty()) {
-            Optional<Doc> commentedArguments =
-                calls.emptyMethodCallArguments(prefix, expression);
-            if (commentedArguments.isPresent()) {
-                return Doc.concat(segmentPrefix, commentedArguments.orElseThrow(), finalSegmentSuffix.doc());
-            }
-            return Doc.concat(segmentPrefix, Doc.text(prefix + "()" + finalSegmentSuffix));
-        }
-        Optional<Doc> sourceMultilineArguments = sourceMultilineMethodCallSegmentArguments(prefix, expression, finalSegmentSuffix);
-        if (sourceMultilineArguments.isPresent()) {
-            return Doc.concat(segmentPrefix, sourceMultilineArguments.orElseThrow());
-        }
-        Optional<Doc> huggableLambda =
-            huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
-        if (huggableLambda.isPresent()) {
-            return Doc.concat(segmentPrefix, huggableLambda.orElseThrow(), finalSegmentSuffix.doc());
-        }
-        Optional<Doc> commentedExpressionLambda =
-            commentedExpressionLambdaArgument.apply(prefix, expression);
-        if (commentedExpressionLambda.isPresent()) {
-            return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
-        }
-        Optional<Doc> huggedCommentedExpressionLambda = chainSelectorLambda.huggedCommentCarryingExpressionLambdaSegment(prefix, expression, finalSegmentSuffix);
-        if (huggedCommentedExpressionLambda.isPresent()) {
-            return Doc.concat(segmentPrefix, huggedCommentedExpressionLambda.orElseThrow());
-        }
-        // The chain-SELECTOR expression-lambda position. A chain selector whose sole trailing argument is an expression
-        // lambda ({@code .map(entry -> body)}) renders SOURCE-NEUTRALLY here. Reading source shape at this position would
-        // re-render the SAME selector two different ways across passes — the generic {@code Doc.group} argument shape when
-        // its arguments fit flat, a hug when they span lines — so the segment's rendered width would flip and any enclosing
-        // {@code bestFitting}/attach decision with it. Rendering AST-purely instead is what lets expr-lambda-selector
-        // chains fan without a withhold. {@link #sourceNeutralExpressionLambdaSegment} chooses between two pure-AST arms
-        // (flat selector vs. hugged/fanned body) with a {@link Doc#conditionalGroup}, so the DocRenderer picks hug-vs-break
-        // at the true live column. Block-lambda and comment-carrying lambdas are handled by the earlier branches (they
-        // never reach here), so this only ever sees a clean expression lambda.
-        Optional<Doc> sourceNeutralExpressionLambda = chainSelectorLambda.sourceNeutralExpressionLambdaSegment(
-            prefix,
-            expression,
-            segmentPrefix,
-            finalSegmentSuffix,
-            segmentOnOwnLine,
-            compactSegmentWidth
-        );
-        if (sourceNeutralExpressionLambda.isPresent()) {
-            return sourceNeutralExpressionLambda.orElseThrow();
-        }
-        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
-        if (commentedArguments.isPresent()) {
-            return Doc.concat(segmentPrefix, commentedArguments.orElseThrow(), finalSegmentSuffix.doc());
-        }
-        String compactSegment = prefix
-            + "("
-            + segmentWidth.methodCallSegmentArgumentsWidthText(expression.getArguments())
-            + ")"
-            + finalSegmentSuffix;
-        if (segmentWidth.methodCallSegmentArgumentsShouldBreak(
-                expression,
-                reserveStatementTerminator,
-                compactSegment,
-                compactSegmentWidth,
-                segmentOnOwnLine
-            )) {
-            return brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
-        }
-        return Doc.concat(
-            segmentPrefix,
-            Doc.group(
-                Doc.concat(
-                    Doc.text(prefix + "("),
-                    Doc.indent(
-                        Doc.concat(
-                            Doc.SOFT_LINE,
-                            calls.methodCallArgumentList(prefix, expression.getArguments(), Doc.LINE)
-                        )
-                    ),
-                    Doc.SOFT_LINE,
-                    Doc.text(")" + finalSegmentSuffix)
-                )
-            )
-        );
-    }
-
     private Doc brokenMethodCallSegment(
             MethodCallExpr expression,
             String prefix,
             Doc segmentPrefix,
             MethodCallChainTail finalSegmentSuffix
     ) {
-        return Doc.concat(
-            segmentPrefix,
-            Doc.text(prefix + "("),
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    calls.methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
-                )
-            ),
-            Doc.HARD_LINE,
-            Doc.text(")" + finalSegmentSuffix)
-        );
+        return segmentRenderer.brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
     }
 
-    /**
-     * Whether the selector's sole argument is a single inner call/creation with its own arguments that the opener can hug
-     * onto the dotted line. Structural, comment/lambda-free (hugging a lambda or comment carrier strands the body), and
-     * indent-independent, so both passes offer the identical hug arm and the width choice is left to the renderer ranking.
-     * An inner call that is itself a chain ({@code RetryPolicy.restart().withResetChildren(true)}) is excluded: the chain
-     * printer owns its fan, and hugging mid-chain would break it after an inner selector's {@code (}.
-     */
     private boolean segmentArgumentOpenerHugApplies(MethodCallExpr expression) {
-        if (expression.getArguments().size() != 1 || sourceShapePolicy.hasContainedComments(expression)) {
-            return false;
-        }
-        Expression argument = expression.getArgument(0);
-        if (argument instanceof MethodCallExpr call) {
-            return !call.getArguments().isEmpty()
-                && call.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()
-                && !sourceShapePolicy.hasContainedComments(call)
-                && call.getArguments().stream().noneMatch(LambdaExpr.class::isInstance);
-        }
-        if (argument instanceof ObjectCreationExpr creation) {
-            return !creation.getArguments().isEmpty()
-                && creation.getAnonymousClassBody().isEmpty()
-                && !sourceShapePolicy.hasContainedComments(creation)
-                && creation.getArguments().stream().noneMatch(LambdaExpr.class::isInstance);
-        }
-        return false;
+        return segmentRenderer.segmentArgumentOpenerHugApplies(expression);
     }
 
-    /**
-     * Whether the selector's single inner-call argument, rendered flat on its own exploded continuation line, overflows.
-     * Only then is the opener-hug worthwhile: when the exploded argument already fits one line, that shape is cleaner than
-     * hugging the opener and dangling the closer. Measured source-neutrally from the AST (rebuilt flat text at the
-     * argument's rendered indent) so the verdict is a fixpoint.
-     */
     private boolean segmentArgumentOverflowsExplodedLine(MethodCallExpr expression) {
-        String argumentFlat = compactSource.commentFree(expression.getArgument(0));
-        return layoutWidth.nodeIndentWidth(expression) + options.indentUnit().length() + argumentFlat.length()
-            > options.lineWidth();
+        return segmentRenderer.segmentArgumentOverflowsExplodedLine(expression);
     }
 
-    /**
-     * Whether a SHORT final selector wraps a single call/creation argument that will not render flat — the shape that
-     * reads better attached to its receiver with the argument one indent deep than fanned. Short-name-gated so a longer
-     * selector keeps the exploded fan. The argument breaks either because it is an object-creation-rooted / rule-breaking
-     * chain (fans one selector per line at any width) or because its flat form overflows its own exploded line.
-     */
     private boolean finalSegmentAttachesShortBreakingCallArgument(MethodCallExpr call) {
-        if (
-            call.getNameAsString().length() >= SingleCallArgumentOpenerHugLayout.SHORT_CALL_NAME_LIMIT
-            || call.getArguments().size() != 1
-        ) {
-            return false;
-        }
-        Expression argument = call.getArgument(0);
-        NodeList<Expression> innerArguments;
-        if (argument instanceof MethodCallExpr inner) {
-            innerArguments = inner.getArguments();
-        } else if (argument instanceof ObjectCreationExpr creation) {
-            innerArguments = creation.getArguments();
-        } else {
-            return false;
-        }
-        if (innerArguments.isEmpty() || innerArguments.stream().anyMatch(LambdaExpr.class::isInstance)) {
-            return false;
-        }
-        if (argument instanceof MethodCallExpr innerChain) {
-            MethodCallChainSourcePlanner.MethodCallChainAnalysis argumentAnalysis =
-                methodCallChainAnalysis(innerChain);
-            if (chainBreaksByRule(argumentAnalysis)
-                    || methodChainPlanner.rootObjectCreationNeedsBreak(argumentAnalysis)) {
-                return true;
-            }
-        }
-        return segmentArgumentOverflowsExplodedLine(call);
-    }
-
-    /**
-     * A no-op stub: a chain segment's argument list breaks by width rather than being preserved in its authored
-     * multi-line shape, so this always returns empty. Retained so the candidate-ladder dispatch in
-     * {@link #methodCallChainSegment} stays wired.
-     */
-    private Optional<Doc> sourceMultilineMethodCallSegmentArguments(
-            String prefix,
-            MethodCallExpr expression,
-            MethodCallChainTail finalSegmentSuffix
-    ) {
-        return Optional.empty();
-    }
-
-    private Doc methodCallSegmentPrefix(MethodCallExpr expression) {
-        List<JavaCommentTrivia> leadingComments = chainComments.leadingLineCommentsBeforeSegment(expression);
-        Doc leading = Doc.concat(
-            leadingComments
-                    .stream()
-                    .map(comments::comment)
-                    .filter(comment -> comment != Doc.EMPTY)
-                    .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
-                    .toList()
-        );
-        // A block or Javadoc comment interspersed between two chain links — e.g. `.define(A)` then `/** doc */` then
-        // `.define(B)` — is parked on the B selector depending on layout. Recover it from the orphan pool first (the
-        // expanded shape) so a single source-position query owns the slot for every whitespace shape, then fall through
-        // to the selector's own comment (the canonical/collapsed shape). Both are claimed under the same anchor by
-        // identity, so whichever shape applies, the comment renders exactly once.
-        Doc interspersedOrphans = chainComments.interspersedOrphanCommentsBeforeSelector(expression);
-        // JavaParser attaches a line comment that sits between the scope and the selector to the selector name as its own
-        // comment, so the same comment can also be offered by a neighboring slot: the leading-line slot above (same prefix
-        // call) or the previous segment's between-segments trailing slot. The name comment is offered here under its own
-        // (expression, OWN) ownership key — distinct from the bare (comment, INTERLEAVED) key those neighbors use — so the
-        // dry-run records the true first-traversal claimant and {@code ownsHere} suppresses whichever offer lost. Output
-        // is unchanged because the suppressed offer already lost the first-claim race and rendered empty. The
-        // same-prefix leading offer is also excluded by identity here so the name slot never re-claims this segment's own
-        // leading comment. A Javadoc selector comment is accepted alongside line and block comments because JavaParser
-        // parses a `/** ... */` between chain links as a Javadoc attached to the next selector, and dropping it on
-        // kind alone lost it in every shape.
-        Optional<Comment> rawNameComment = expression.getName()
-                .getComment()
-                .filter(comment -> comment instanceof LineComment
-                        || comment instanceof BlockComment
-                        || comment instanceof JavadocComment)
-                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()))
-                .filter(comment -> leadingComments.stream().noneMatch(leadingTrivia -> leadingTrivia.comment() == comment));
-        Doc nameComment = rawNameComment
-                .map(comment -> comments.comment(comment, expression, OwnerSlot.OWN))
-                .orElse(Doc.EMPTY);
-        if (nameComment == Doc.EMPTY) {
-            return Doc.concat(leading, interspersedOrphans);
-        }
-        Doc namePrefix = rawNameComment
-                .filter(comment -> comment instanceof BlockComment
-                        && CommentIndex.startsOnSameLine(comment, expression.getName())
-                )
-                .map(ignored -> Doc.concat(nameComment, Doc.text(" ")))
-                .orElseGet(() -> Doc.concat(nameComment, Doc.HARD_LINE));
-        return Doc.concat(leading, interspersedOrphans, namePrefix);
+        return segmentRenderer.finalSegmentAttachesShortBreakingCallArgument(call);
     }
 
     private List<Doc> methodCallChainSegments(List<MethodCallExpr> calls, MethodCallChainTail finalSegmentSuffix) {
-        List<Doc> segments = new ArrayList<>();
-        for (int i = 0; i < calls.size(); i++) {
-            Optional<MethodCallExpr> next = i + 1 < calls.size() ? Optional.of(calls.get(i + 1)) : Optional.empty();
-            // Every segment in this one-per-line layout renders alone on its own continuation line, so the final
-            // segment must be measured at the continuation indent rather than its stale source column.
-            segments.add(
-                methodCallChainSegment(
-                    calls.get(i),
-                    next,
-                    next.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY,
-                    layoutWidth::continuationStatement,
-                    true
-                )
-            );
-        }
-        return segments;
-    }
-
-    private Doc methodCallChainSegment(MethodCallExpr expression, Optional<MethodCallExpr> nextCall) {
-        return methodCallChainSegment(expression, nextCall, MethodCallChainTail.EMPTY);
+        return segmentRenderer.methodCallChainSegments(calls, finalSegmentSuffix);
     }
 
     private Doc methodCallChainSegment(
@@ -3108,7 +2360,7 @@ final class MethodCallChainPrinter {
             Optional<MethodCallExpr> nextCall,
             MethodCallChainTail finalSegmentSuffix
     ) {
-        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, layoutWidth::continuationStatement);
+        return segmentRenderer.methodCallChainSegment(expression, nextCall, finalSegmentSuffix);
     }
 
     private Doc methodCallChainSegment(
@@ -3117,7 +2369,7 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix,
             ToIntFunction<String> compactSegmentWidth
     ) {
-        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, compactSegmentWidth, false);
+        return segmentRenderer.methodCallChainSegment(expression, nextCall, finalSegmentSuffix, compactSegmentWidth);
     }
 
     private Doc methodCallChainSegment(
@@ -3127,72 +2379,25 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> compactSegmentWidth,
             boolean segmentOnOwnLine
     ) {
-        MethodCallChainTail segmentSuffix = nextCall.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY;
-        // A single method-call argument that itself trails a line comment binds that comment inside the argument, though
-        // it belongs after this segment's `)`. Claim the segment's trailing slot before rendering the argument (first
-        // offer wins the ownership pre-pass) so the argument renders comment-free and the comment stays a stable `) // c`.
-        boolean claimTrailingBeforeArgument =
-            expression.getArguments().size() == 1
-            && expression.getArgument(0) instanceof MethodCallExpr argument
-            && chainComments.hasOwnTrailingLineComment(argument);
-        Doc claimedTrailingComment = claimTrailingBeforeArgument
-            ? segmentTrailingComment(expression, nextCall)
-            : Doc.EMPTY;
-        Doc segment = methodCallChainSegment(
+        return segmentRenderer.methodCallChainSegment(
             expression,
-            nextCall.isEmpty(),
+            nextCall,
+            finalSegmentSuffix,
             compactSegmentWidth,
-            segmentSuffix,
             segmentOnOwnLine
         );
-        Doc trailingComment = claimTrailingBeforeArgument
-            ? claimedTrailingComment
-            : segmentTrailingComment(expression, nextCall);
-        if (trailingComment == Doc.EMPTY) {
-            return segment;
-        }
-        return Doc.concat(segment, Doc.lineSuffix(Doc.concat(Doc.text(" "), trailingComment)));
-    }
-
-    /** The segment's between-segments trailing line comment ({@code nextCall} present) or its final trailing comment. */
-    private Doc segmentTrailingComment(MethodCallExpr expression, Optional<MethodCallExpr> nextCall) {
-        return nextCall
-                .map(next -> chainComments.trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
-                .orElseGet(() -> chainComments.finalTrailingLineComment(expression));
     }
 
     private Doc appendFinalSegmentSuffix(Doc doc, MethodCallChainTail finalSegmentSuffix) {
-        return finalSegmentSuffix.appendTo(doc);
+        return segmentRenderer.appendFinalSegmentSuffix(doc, finalSegmentSuffix);
     }
 
     private Doc fieldAccessMethodCallSegment(FieldAccessExpr fieldAccess, MethodCallExpr methodCall) {
-        String typeArguments = methodCall.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        return Doc.text(
-            fieldAccessSuffixAfterMethodRoot(fieldAccess)
-                + "."
-                + typeArguments
-                + methodCall.getNameAsString()
-                + "("
-                + compactSource.compactJoin(methodCall.getArguments())
-                + ")"
-        );
-    }
-
-    private String fieldAccessSuffixAfterMethodRoot(FieldAccessExpr fieldAccess) {
-        Expression scope = fieldAccess.getScope();
-        if (scope instanceof MethodCallExpr) {
-            return "." + fieldAccess.getNameAsString();
-        }
-        if (scope instanceof FieldAccessExpr innerFieldAccess) {
-            return fieldAccessSuffixAfterMethodRoot(innerFieldAccess) + "." + fieldAccess.getNameAsString();
-        }
-        return "." + fieldAccess.getNameAsString();
+        return segmentRenderer.fieldAccessMethodCallSegment(fieldAccess, methodCall);
     }
 
     record MethodCallChainTail(String text) {
-        private static final MethodCallChainTail EMPTY = new MethodCallChainTail("");
+        static final MethodCallChainTail EMPTY = new MethodCallChainTail("");
 
         static MethodCallChainTail of(String text) {
             return text.isEmpty() ? EMPTY : new MethodCallChainTail(text);

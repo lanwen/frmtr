@@ -276,7 +276,12 @@ position a chain can appear (initializers, assignment RHS, `return`, call/constr
 statement expressions, lambda bodies). Array initializers follow an analogous structural fan-at-three rule.
 
 The chain family is the largest cluster in the `java` package: `MethodCallChainPrinter` and `MethodCallPrinter` are the
-entry points; `ChainFanLayout` holds the break-rule registries and fan builders; `MethodCallChainSourcePlanner`,
+entry points; `ChainFanLayout` holds the break-rule registries and fan builders; `ChainSegmentRenderer` renders the
+individual `.selector(args)` links (flat, width-broken, force-broken, comment/lambda-carrying, root-close-attached) and
+their prefixes; `ChainRootPromotionLayout` renders the chain root in each promotion shape (inline, grouped, broken,
+expression-rendered) and owns the promoted-root argument-break gates; `CompactRootBrokenSegmentLayout` builds the
+compact-root-with-broken-final-segment shapes (root and selector on one line, only the final argument list broken) and
+the sibling that breaks the root's arguments and glues a no-arg segment to its close; `MethodCallChainSourcePlanner`,
 `ChainSelectorLambdaLayout`, `LambdaBodyChainFanLayout`, `PackedMethodCallChainLayout`, and `VariableInitializerLayout`
 handle the surrounding positions.
 

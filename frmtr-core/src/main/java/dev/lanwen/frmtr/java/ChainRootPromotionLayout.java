@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.java.MethodCallChainPrinter.MethodCallChainTail;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -140,36 +141,36 @@ final class ChainRootPromotionLayout {
             && firstLineWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth();
     }
 
+    /**
+     * Ranks the single-segment method root against a broken alternative at the true rendered column when one is offered,
+     * so the renderer — not a source-estimate gate — decides the break; with no broken alternative the inline root stands.
+     */
     Doc singleSegmentMethodRootDoc(MethodCallExpr methodRoot) {
         Optional<Doc> sourceMultilineArguments =
             calls.sourceMultilineArguments(methodRoot);
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        Optional<Doc> brokenScopedMethodRoot =
-            brokenTypeLikeScopedMethodRoot(methodRoot);
-        if (brokenScopedMethodRoot.isPresent()) {
-            return brokenScopedMethodRoot.orElseThrow();
+        Doc inline = expressionRenderer.format(methodRoot, LayoutContext.root());
+        Optional<Doc> broken = brokenTypeLikeScopedMethodRoot(methodRoot)
+                .or(() -> forcedRootMethodCallChain.apply(methodRoot));
+        if (broken.isEmpty()) {
+            return inline;
         }
-        if (
-            // Measure the method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
-            layoutWidth.nodeLine(methodRoot, compactSourceWidthText(methodRoot)) > options.lineWidth()
-            || methodCallRootScopeOverflows(methodRoot)
-        ) {
-            return forcedRootMethodCallChain.apply(methodRoot)
-                    .orElseGet(() -> expressionRenderer.format(methodRoot, LayoutContext.root()));
-        }
-        return expressionRenderer.format(methodRoot, LayoutContext.root());
+        return Doc.bestFitting(List.of(inline, broken.orElseThrow()));
     }
 
+    /**
+     * The type-like scoped-root break shape ({@code Type.factory(a, b)} broken, selector continued) offered as the broken
+     * ranking candidate when the root's scope is a promoting multi-argument call. Width is left to the renderer, which
+     * ranks this against the inline root at the true column.
+     */
     private Optional<Doc> brokenTypeLikeScopedMethodRoot(MethodCallExpr methodRoot) {
         Optional<MethodCallExpr> scopedCall = methodRoot.getScope()
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
                 .filter(call -> call.getArguments().size() > 1)
-                .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent())
-                // Measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
-                .filter(call -> layoutWidth.nodeLine(call, compactSourceWidthText(call)) > options.lineWidth());
+                .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent());
         if (scopedCall.isEmpty()) {
             return Optional.empty();
         }
@@ -181,22 +182,10 @@ final class ChainRootPromotionLayout {
         );
     }
 
-    private boolean methodCallRootScopeOverflows(MethodCallExpr methodRoot) {
-        return methodRoot.getScope()
-                .filter(MethodCallExpr.class::isInstance)
-                .map(MethodCallExpr.class::cast)
-                // Measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
-                .map(scopedCall -> layoutWidth.nodeLine(scopedCall,
-                        compactSourceWidthText(scopedCall)
-                    ) > options.lineWidth()
-                )
-                .orElse(false);
-    }
-
     private String compactSourceWidthText(Expression expression) {
         // Source-neutral compact form, not normalizeWhitespace(rawWithoutOwnComment): the latter turns each source
         // newline into a space, so an expression the author already wrapped measures wider than its flat form and the
-        // root/scope-overflow gates that consume this width flip their verdict between passes.
+        // width gate that consumes it flips its verdict between passes.
         return compactSource.compactWithoutOwnComment(expression);
     }
 
@@ -206,9 +195,18 @@ final class ChainRootPromotionLayout {
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
+        boolean multiArg = expression.getArguments().size() > 1;
+        boolean blockLambda = methodCallSegmentHasBlockLambdaArgument.test(expression);
+        if (multiArg && !blockLambda) {
+            // Rank the grouped selector shape against the fully-broken argument list at the true rendered column; the
+            // grouped form wins by fewer lines whenever it fits, so the renderer breaks arguments only when it must. A
+            // block-lambda argument keeps the estimate pre-emption below — its hard-break body defeats fewest-lines ranking.
+            Doc grouped = groupedPromotedSelector(expression);
+            return Doc.bestFitting(List.of(grouped, calls.brokenMethodCall(expression)));
+        }
         if (
-            expression.getArguments().size() > 1
-            // Measure the promoted method call at its true rendered block/type depth (nodeLine) instead of CURRENT.
+            multiArg
+            // Measure the promoted block-lambda call at its true rendered block/type depth (nodeLine) instead of CURRENT.
             && !sourceShapePolicy.fitsOnOneLine(expression, text -> layoutWidth.nodeLine(expression, text))
         ) {
             return calls.brokenMethodCall(expression);
@@ -219,9 +217,9 @@ final class ChainRootPromotionLayout {
             return huggableExpressionLambda.orElseThrow();
         }
         if (methodCallSegmentHasBlockLambdaArgument.test(expression)) {
+            // Gate the hug on the block-lambda first line at its true rendered block/type depth (nodeLine); the
+            // hard-break lambda body defeats fewest-lines ranking, so keep the opener width gate rather than bestFitting.
             return blockLambdaSegmentFirstLine.apply(compactSource.compact(expression.getScope().orElseThrow()), expression)
-                    // Measure the promoted block-lambda first line at its true rendered block/type depth
-                    // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
                     .filter(firstLine -> layoutWidth.nodeLine(expression, firstLine) <= options.lineWidth())
                     .map(ignored -> expressionRenderer.format(expression, LayoutContext.root()))
                     .orElseGet(() -> Doc.concat(
@@ -229,6 +227,15 @@ final class ChainRootPromotionLayout {
                             chainContinuation.apply(segmentRenderer.methodCallChainSegment(expression))
                     ));
         }
+        return groupedPromotedSelector(expression);
+    }
+
+    /**
+     * The grouped promoted-root shape: the scope with its selector on a soft continuation, wrapped in a group so the
+     * renderer keeps it flat when it fits and drops the selector to its own line otherwise. Scope-less calls fall back to
+     * plain expression dispatch.
+     */
+    private Doc groupedPromotedSelector(MethodCallExpr expression) {
         return expression.getScope()
                 .map(scope -> Doc.group(
                         Doc.concat(

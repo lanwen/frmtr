@@ -320,7 +320,7 @@ final class LambdaExpressionPrinter {
         // shapes ({@code .all().get()}, {@code .stream()}, {@code .isPresent()}) have an argument-less outermost call, so
         // the opener path returns empty for them and they fall here. It self-gates to fan-threshold comment/lambda-free
         // carriers ({@code lambdaBodyCanonicalFanChain} returns empty otherwise — object-creation roots,
-        // chain-selector-hosted lambdas, comment/lambda chains), so every other body still reaches the unchanged branches
+        // comment/lambda chains), so every other body still reaches the unchanged branches
         // below byte-identically.
         Optional<Doc> chainArrowBestFitting = expressionBody.filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
@@ -410,7 +410,7 @@ final class LambdaExpressionPrinter {
      * the broken arm wins only when it overflows; both arms are pure AST functions, so the verdict is a fixpoint.
      *
      * <p>Returns empty when {@code lambdaBodyCanonicalFanChain} withholds the fan (a non-fan chain, an object-creation
-     * root, a chain-selector-hosted lambda, or any comment/block-lambda carrier) or when the lambda parameters must break
+     * root, or any comment/block-lambda carrier) or when the lambda parameters must break
      * or carry comments (those keep their dedicated header shapes), so every such body reaches the unchanged branches below.
      */
     private Optional<Doc> lambdaBodyChainArrowBestFitting(

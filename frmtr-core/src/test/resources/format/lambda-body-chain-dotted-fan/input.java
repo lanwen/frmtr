@@ -18,7 +18,7 @@ final class LambdaBodyChainDottedFan {
         return listeners.entrySet().stream().map(listener -> new VotersEndpoint().setName(listener.getKey().value()).setHost(listener.getValue().getHostString())).collect(Collectors.toList());
     }
 
-    List<KafkaMetric> keepsChainSelectorHostedLambdaBodyPacked(Metrics metrics) {
+    List<KafkaMetric> fansChainSelectorHostedLambdaBody(Metrics metrics) {
         return metrics.metrics().entrySet().stream().filter(entry -> entry.getKey().description().contains("The number of active connections for this listener")).map(Map.Entry::getValue).collect(Collectors.toList());
     }
 }

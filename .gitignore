@@ -5,7 +5,10 @@ bin/
 *.class
 *.log
 .DS_Store
+
+# Code-intelligence tooling
 codedb.snapshot
+.codegraph/
 
 # IDE
 .idea/

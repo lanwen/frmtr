@@ -279,7 +279,12 @@ The chain family is the largest cluster in the `java` package: `MethodCallChainP
 entry points; `ChainFanLayout` holds the break-rule registries and fan builders; `ChainSegmentRenderer` renders the
 individual `.selector(args)` links (flat, width-broken, force-broken, comment/lambda-carrying, root-close-attached) and
 their prefixes; `ChainRootPromotionLayout` renders the chain root in each promotion shape (inline, grouped, broken,
-expression-rendered) and owns the promoted-root argument-break gates; `CompactRootBrokenSegmentLayout` builds the
+expression-rendered): the grouped-promoted multi-argument root ranks its grouped and fully-broken shapes with
+`Doc.bestFitting` at the true rendered column (the single-segment method-root break uses the same form but its caller
+offers no broken alternative, so that ranking is inert), while a `LayoutWidth.nodeLine` indentation estimate still gates
+the block-lambda multi-argument pre-emption and both block-lambda root hugs — the grouped-promoted hug and the
+single-segment promoted-root hug — whose hard-break lambda bodies defeat fewest-lines ranking;
+`CompactRootBrokenSegmentLayout` builds the
 compact-root-with-broken-final-segment shapes (root and selector on one line, only the final argument list broken) and
 the sibling that breaks the root's arguments and glues a no-arg segment to its close; `MethodCallChainSourcePlanner`,
 `ChainSelectorLambdaLayout`, `LambdaBodyChainFanLayout`, `PackedMethodCallChainLayout`, and `VariableInitializerLayout`

@@ -307,12 +307,10 @@ public class Variables {
     }
 
     void assignment() {
-        fileSystemDetails = FileHandlerDetails.builder().fileSystemType(
-            EntityUtils.update(
-                entity.getFileSystemDetails().getFileSystemType(),
-                update.getFileSystemDetails().getFileSystemType()
-            )
-        );
+        fileSystemDetails = FileHandlerDetails.builder().fileSystemType(EntityUtils.update(
+            entity.getFileSystemDetails().getFileSystemType(),
+            update.getFileSystemDetails().getFileSystemType()
+        ));
 
         selectedRegion = hasDedicatedRegion ? dedicatedRegion : sharedRegion;
 

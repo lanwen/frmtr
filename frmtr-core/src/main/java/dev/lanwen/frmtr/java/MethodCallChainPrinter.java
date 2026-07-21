@@ -2051,19 +2051,28 @@ final class MethodCallChainPrinter {
         Doc openedArguments = argumentLeadingComment == Doc.EMPTY
             ? argumentList
             : Doc.concat(argumentLeadingComment, Doc.HARD_LINE, argumentList);
-        return Optional.of(
-            Doc.concat(
-                Doc.text(prefix),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        openedArguments
-                    )
-                ),
-                Doc.HARD_LINE,
-                Doc.text(")" + finalSegmentSuffix)
-            )
+        Doc exploded = Doc.concat(
+            Doc.text(prefix),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    openedArguments
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(")" + finalSegmentSuffix)
         );
+        // When the selector's sole argument is a single inner call/creation that would itself overflow its own exploded
+        // line, rank the opener-hug ({@code .thenReturn(List.of(new TopicData<>(} ⏎ …) flattest-first against this
+        // exploded shape, so the renderer hugs it onto the compact-root line only when its opener fits and otherwise keeps
+        // the exploded fallback. An argument that fits one exploded line keeps that cleaner shape.
+        if (argumentLeadingComment == Doc.EMPTY
+                && segmentArgumentOpenerHugApplies(call)
+                && segmentArgumentOverflowsExplodedLine(call)) {
+            Doc hugged = Doc.concat(Doc.text(prefix), argumentList, Doc.text(")" + finalSegmentSuffix));
+            return Optional.of(Doc.bestFitting(List.of(hugged, exploded)));
+        }
+        return Optional.of(exploded);
     }
 
     private boolean compactRootFirstLineFits(
@@ -2896,6 +2905,45 @@ final class MethodCallChainPrinter {
             Doc.HARD_LINE,
             Doc.text(")" + finalSegmentSuffix)
         );
+    }
+
+    /**
+     * Whether the selector's sole argument is a single inner call/creation with its own arguments that the opener can hug
+     * onto the dotted line. Structural, comment/lambda-free (hugging a lambda or comment carrier strands the body), and
+     * indent-independent, so both passes offer the identical hug arm and the width choice is left to the renderer ranking.
+     * An inner call that is itself a chain ({@code RetryPolicy.restart().withResetChildren(true)}) is excluded: the chain
+     * printer owns its fan, and hugging mid-chain would break it after an inner selector's {@code (}.
+     */
+    private boolean segmentArgumentOpenerHugApplies(MethodCallExpr expression) {
+        if (expression.getArguments().size() != 1 || sourceShapePolicy.hasContainedComments(expression)) {
+            return false;
+        }
+        Expression argument = expression.getArgument(0);
+        if (argument instanceof MethodCallExpr call) {
+            return !call.getArguments().isEmpty()
+                && call.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()
+                && !sourceShapePolicy.hasContainedComments(call)
+                && call.getArguments().stream().noneMatch(LambdaExpr.class::isInstance);
+        }
+        if (argument instanceof ObjectCreationExpr creation) {
+            return !creation.getArguments().isEmpty()
+                && creation.getAnonymousClassBody().isEmpty()
+                && !sourceShapePolicy.hasContainedComments(creation)
+                && creation.getArguments().stream().noneMatch(LambdaExpr.class::isInstance);
+        }
+        return false;
+    }
+
+    /**
+     * Whether the selector's single inner-call argument, rendered flat on its own exploded continuation line, overflows.
+     * Only then is the opener-hug worthwhile: when the exploded argument already fits one line, that shape is cleaner than
+     * hugging the opener and dangling the closer. Measured source-neutrally from the AST (rebuilt flat text at the
+     * argument's rendered indent) so the verdict is a fixpoint.
+     */
+    private boolean segmentArgumentOverflowsExplodedLine(MethodCallExpr expression) {
+        String argumentFlat = compactSource.commentFree(expression.getArgument(0));
+        return layoutWidth.nodeIndentWidth(expression) + options.indentUnit().length() + argumentFlat.length()
+            > options.lineWidth();
     }
 
     /**

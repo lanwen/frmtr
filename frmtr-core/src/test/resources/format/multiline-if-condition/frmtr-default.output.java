@@ -111,11 +111,9 @@ class MultilineIfConditionSample {
                     if (Arrays.equals(publish.getPayloadAsBytes(), "modified".getBytes(StandardCharsets.UTF_8))) {
                         received.complete(null);
                     } else {
-                        received.completeExceptionally(
-                            new IllegalArgumentException(
-                                "unexpected payload: " + new String(publish.getPayloadAsBytes())
-                            )
-                        );
+                        received.completeExceptionally(new IllegalArgumentException(
+                            "unexpected payload: " + new String(publish.getPayloadAsBytes())
+                        ));
                     }
                 });
     }

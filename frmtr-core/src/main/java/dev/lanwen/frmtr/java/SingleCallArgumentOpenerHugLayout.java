@@ -25,9 +25,6 @@ import java.util.function.Function;
  */
 final class SingleCallArgumentOpenerHugLayout {
 
-    /** A wrapping call is "short" when its selector name is under this many symbols (brackets and dots excluded). */
-    private static final int SHORT_CALL_NAME_LIMIT = 8;
-
     private final FormatterOptions options;
 
     private final SourceShapePolicy sourceShapePolicy;
@@ -117,9 +114,9 @@ final class SingleCallArgumentOpenerHugLayout {
      * Whether the opener-hug owns this call: a single inner call/creation argument with its own arguments, no comments on
      * either the wrapping call or the inner argument, and no inner lambda argument (those keep their own layouts). The hug
      * decision is structural and indent-independent — the single argument ({@code inner(…)} or {@code new Type<>(…)}) is
-     * "the single entity" a wrapping call keeps on its opener line — but only a <em>short</em> wrapping call
-     * ({@code List.of}, {@code when}, {@code verify}: selector name under {@link #SHORT_CALL_NAME_LIMIT} symbols) reads
-     * well as a {@code short(inner(} opener; a longer wrapper keeps the exploded list. The remaining {@code nodeIndentWidth}
+     * "the single entity" a wrapping call keeps on its opener line, regardless of the wrapping call's name length; whether
+     * the {@code wrap(inner(} opener actually fits is left to the renderer, which ranks the hug against the exploded list at
+     * the live column and keeps the hug only when it fits. The remaining {@code nodeIndentWidth}
      * read is purely the break-versus-flat gate: while the flat whole-call may fit, defer to the generic group, which alone
      * measures the caller-appended terminator ({@code ;}) / chain suffix that a {@link Doc#bestFitting} flat arm cannot see,
      * so the hug only fires once flat overflows even at that lower-bound column. A pure function of the AST (no source-shape
@@ -130,7 +127,6 @@ final class SingleCallArgumentOpenerHugLayout {
         if (
             expression.getArguments().size() != 1
             || sourceShapePolicy.hasContainedComments(expression)
-            || expression.getNameAsString().length() >= SHORT_CALL_NAME_LIMIT
         ) {
             return false;
         }

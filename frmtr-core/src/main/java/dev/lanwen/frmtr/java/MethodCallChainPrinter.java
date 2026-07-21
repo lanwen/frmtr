@@ -11,6 +11,7 @@ import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithArguments;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -628,6 +629,10 @@ final class MethodCallChainPrinter {
                 && !forcedSingleCallPrefixOverflows(breakMode, expression, lineWidth)
                 && !(breakMode.isForced() && root instanceof ObjectCreationExpr)
                 && !rootObjectCreationNeedsBreak
+                // A block-bodied lambda in the object-creation ROOT of a single-selector chain
+                // ({@code new Observer(x -> {…}).run()}) must fan open, not collapse flat. Keyed on the root only: a
+                // block lambda in the SELECTOR ({@code runner.attach(x -> {…})}) still hugs through the flat render.
+                && !analysis.rootHasBlockLambdaArgument()
                 && !analysis.rootHasComments()
                 // A root-to-first-selector `//` line comment (e.g. `new X(...) // note`⏎`.with(...)`) rides in
                 // hasInterSegmentLineComment but NOT rootHasComments, so without this a single-selector chain would
@@ -2261,7 +2266,7 @@ final class MethodCallChainPrinter {
             chainComments::methodCallSegmentHasComment,
             chainComments::methodCallSegmentHasNameComment,
             chainComments::methodCallSegmentHasArgumentGapComment,
-            this::methodCallSegmentHasBlockLambdaArgument,
+            this::expressionHasBlockLambdaArgument,
             chainComments::methodCallChainHasTrailingLineComments,
             chainComments::rootHasTrailingLineCommentBeforeFirstSegment,
             chainComments::chainHasInterSegmentLineComment
@@ -2380,6 +2385,20 @@ final class MethodCallChainPrinter {
                 .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr
                         && lambdaExpr.getBody().isBlockStmt()
                 );
+    }
+
+    /**
+     * Whether a chain root or selector carries a block-bodied lambda argument, spanning both method-call and
+     * object-creation roots ({@code new X(state -> {...})}) so a constructor-rooted chain fans like its call-rooted twin
+     * instead of collapsing flat.
+     */
+    private boolean expressionHasBlockLambdaArgument(Expression expression) {
+        return expression instanceof NodeWithArguments<?> withArguments
+                && withArguments.getArguments()
+                        .stream()
+                        .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr
+                                && lambdaExpr.getBody().isBlockStmt()
+                        );
     }
 
     private boolean canBreakAfterCompactExpressionLambdaRoot(

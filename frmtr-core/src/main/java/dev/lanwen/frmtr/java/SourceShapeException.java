@@ -50,11 +50,11 @@ enum SourceShapeException {
         List.of("tryResources")
     ),
 
-    /** Whether a node carries contained comments, gating whether a compact reconstruction is safe. */
+    /** Whether a node carries contained or trailing comments, gating whether a compact reconstruction is safe. */
     COMMENT_PRESENCE_GATE(
         Stability.FIXPOINT_SAFE,
         "Gates compact reconstruction on comment presence — a correctness gate, not an aesthetic; comments are preserved verbatim.",
-        List.of("hasContainedComments")
+        List.of("hasContainedComments", "hasTrailingLineComment")
     );
 
     /** How stable across formatting passes a read is — the property that decides whether it stays or is retired. */

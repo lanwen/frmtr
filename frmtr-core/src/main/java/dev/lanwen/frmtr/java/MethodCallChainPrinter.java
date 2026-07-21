@@ -752,6 +752,10 @@ final class MethodCallChainPrinter {
             && !sourceShapePolicy.hasContainedComments(root)
             && !sourceShapePolicy.hasContainedComments(calls.getFirst())
             && !chainComments.methodCallSegmentHasComment(calls.getFirst())
+            // A terminal `.to("") // note` trails a line comment past the call's last token that the strictly-interior
+            // contained-comment scan misses; this compact-root arm never emits it, so withhold and let the
+            // comment-preserving fan/segment path below carry it.
+            && chainComments.finalTrailingLineComments(calls.getFirst()).isEmpty()
             && !analysis.rootHasBlockLambdaArgument()
         ) {
             Expression probeRoot = root;
@@ -771,6 +775,44 @@ final class MethodCallChainPrinter {
             Doc rootDoc = singleSegmentMethodRootDoc(methodRoot);
             Doc rootTrailingComment = chainComments.rootTrailingLineCommentBeforeFirstSegment(methodRoot, calls);
             if (rootTrailingComment != Doc.EMPTY) {
+                // A genuine between-selector `//` trailing the root on its own line hugs the root close as a line suffix
+                // ({@code from(…) //}) while the sole selector still fans onto its own continuation line, whenever that
+                // selector fits flat there. On reformat the marker again trails the root and precedes the fanned selector,
+                // so the same receiver-line-suffix fixpoint recurs and both source geometries converge.
+                if (fannedFinalSegmentFitsFlat(calls.getFirst(), finalSegmentSuffix)) {
+                    return Optional.of(
+                        Doc.concat(
+                            rootDoc,
+                            Doc.lineSuffix(Doc.concat(Doc.text(" "), rootTrailingComment)),
+                            chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix))
+                        )
+                    );
+                }
+                // Otherwise the selector's argument overflows: hugging the comment as a `.to( //` line suffix flips to an
+                // argument-leading own-line comment on the reformat, since the collapsed opener re-buckets the marker
+                // inside its parens. Render it own-line above the broken argument on this pass too, matching that
+                // argument-leading fixpoint, so both source geometries converge.
+                if (
+                    compactRootFinalSegmentLineOverflows(
+                        methodRoot,
+                        calls.getFirst(),
+                        finalSegmentSuffix,
+                        lineWidth,
+                        layout
+                    )
+                ) {
+                    Optional<Doc> brokenWithLeadingComment = compactRootWithBrokenFinalSegment(
+                        methodRoot,
+                        calls.getFirst(),
+                        finalSegmentSuffix,
+                        lineWidth,
+                        layout,
+                        rootTrailingComment
+                    );
+                    if (brokenWithLeadingComment.isPresent()) {
+                        return brokenWithLeadingComment;
+                    }
+                }
                 rootDoc = Doc.concat(rootDoc, Doc.lineSuffix(Doc.concat(Doc.text(" "), rootTrailingComment)));
             }
             // A leading line comment on the only segment ({@code lookup(a)} then {@code // c1} on its own line then
@@ -1088,6 +1130,55 @@ final class MethodCallChainPrinter {
                 : methodCallChainSegment(calls.getFirst(), finalSegmentSuffix);
             return Optional.of(Doc.concat(rootDoc, singleSegment));
         }
+        // A promoted static-factory root with exactly one post-factory selector whose ONLY comment is a trailing line
+        // comment past the chain's last token ({@code Mockito.when(x).thenReturn(...); // note}) attaches the selector to
+        // the root and breaks its argument list, matching the comment-free promoted-single-selector shape above. Without
+        // this, JavaParser binding that statement-trailing comment to the chain forces the segment onto the one-per-line
+        // fan, flipping against the comment-free re-format (where the same comment binds to the enclosing statement) forever.
+        // The canonical {@code hasContainedComments} gate keeps this to chains with nothing strictly inside — an interior
+        // argument comment stays on the comment-preserving fan. The comment rides as a placement-stable line suffix after
+        // the closed selector, claimed once, so the statement renderer never re-emits it.
+        if (
+            root instanceof MethodCallExpr promotedFactoryRoot
+            && calls.size() == 1
+            && !firstSegmentAttachedToRoot
+            && (chainPlan.rootRendering()
+                    == MethodCallChainSourcePlanner.ChainRootRendering.GROUPED_PROMOTED_METHOD_CALL
+                || chainPlan.rootRendering()
+                    == MethodCallChainSourcePlanner.ChainRootRendering.INLINE_PROMOTED_METHOD_CALL)
+            && analysis.hasComments()
+            && chainCommentsAreOnlyTrailingLine(analysis)
+            && !sourceShapePolicy.hasContainedComments(expression)
+            && !analysis.hasBlockLambdaArgument()
+            && !methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
+            && !sourceShapePolicy.hasContainedComments(promotedFactoryRoot)
+            && compactRootFinalSegmentLineOverflows(
+                promotedFactoryRoot,
+                calls.getFirst(),
+                finalSegmentSuffix,
+                lineWidth,
+                layout
+            )
+        ) {
+            Optional<Doc> attach = compactRootWithBrokenFinalSegment(
+                promotedFactoryRoot,
+                calls.getFirst(),
+                finalSegmentSuffix,
+                lineWidth,
+                layout
+            );
+            if (attach.isPresent()) {
+                Doc trailing = chainComments.finalTrailingLineComment(calls.getFirst());
+                return Optional.of(
+                    trailing == Doc.EMPTY
+                        ? attach.orElseThrow()
+                        : Doc.concat(
+                            attach.orElseThrow(),
+                            Doc.lineSuffix(Doc.concat(Doc.text(" "), trailing))
+                        )
+                );
+            }
+        }
         // Record the width break only here, where the printer has committed to the broken one-segment-per-line chain
         // this method's PrinterWrap describes. The earlier deferral branches hand rendering to a different printer that
         // does not lay the chain out one per line, so recording before them could attribute a "N segments, one per line"
@@ -1189,6 +1280,32 @@ final class MethodCallChainPrinter {
      * (a {@code STATEMENT}/{@code root()} context whose {@code leftEdgePrefix} is empty), matching the sibling
      * {@link #compactRootLineWidth} gate this parameter mirrors.
      */
+    /**
+     * Whether the sole selector fits flat on its own fanned continuation line ({@code nodeIndentWidth + two units}), so a
+     * between-selector comment can keep it fanned rather than break its argument list. Reads only the AST (compact-joined
+     * arguments at the selector's rendered depth), so the verdict is source-neutral and stable across passes; a selector
+     * carrying its own interior comments defers, since compact-joining would not reflect them.
+     */
+    private boolean fannedFinalSegmentFitsFlat(MethodCallExpr call, MethodCallChainTail finalSegmentSuffix) {
+        if (
+            call.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
+        ) {
+            return false;
+        }
+        String typeArguments = call.getTypeArguments()
+                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
+                .orElse("");
+        String segment = "."
+            + typeArguments
+            + call.getNameAsString()
+            + "("
+            + compactSource.compactJoin(call.getArguments())
+            + ")"
+            + finalSegmentSuffix;
+        int continuationColumn = layoutWidth.nodeIndentWidth(call) + options.indentUnit().length() * 2;
+        return continuationColumn + segment.length() <= options.lineWidth();
+    }
+
     private boolean compactRootFinalSegmentLineOverflows(
             MethodCallExpr methodRoot,
             MethodCallExpr call,
@@ -1859,6 +1976,24 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> lineWidth,
             LayoutContext layout
     ) {
+        return compactRootWithBrokenFinalSegment(root, call, finalSegmentSuffix, lineWidth, layout, Doc.EMPTY);
+    }
+
+    /**
+     * Same broken-final-segment shape, but with {@code argumentLeadingComment} placed on its own line just after the
+     * opened selector's {@code (} and before the argument. The single-selector root-trailing {@code //} case renders here
+     * so the marker lands own-line above the broken argument on the receiver-trailing pass too — the same slot the
+     * argument-leading pass produces — instead of a {@code .to( //} suffix that flips between passes. Declines a hugged
+     * block-lambda argument when a comment is present so the caller keeps its hugging fallback.
+     */
+    private Optional<Doc> compactRootWithBrokenFinalSegment(
+            Expression root,
+            MethodCallExpr call,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> lineWidth,
+            LayoutContext layout,
+            Doc argumentLeadingComment
+    ) {
         if (call.getArguments().isEmpty()) {
             return Optional.empty();
         }
@@ -1897,6 +2032,9 @@ final class MethodCallChainPrinter {
         Optional<Doc> huggableLambda =
             huggableBlockLambdaArguments.apply(callPrefix, call.getArguments());
         if (huggableLambda.isPresent()) {
+            if (argumentLeadingComment != Doc.EMPTY) {
+                return Optional.empty();
+            }
             return Optional.of(Doc.concat(huggableLambda.orElseThrow(), finalSegmentSuffix.doc()));
         }
         String prefix = callPrefix + "(";
@@ -1909,13 +2047,17 @@ final class MethodCallChainPrinter {
         if (lineWidth.applyAsInt(prefix + ")") > options.lineWidth()) {
             return Optional.empty();
         }
+        Doc argumentList = calls.methodCallArgumentList(callPrefix, call.getArguments(), Doc.HARD_LINE);
+        Doc openedArguments = argumentLeadingComment == Doc.EMPTY
+            ? argumentList
+            : Doc.concat(argumentLeadingComment, Doc.HARD_LINE, argumentList);
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix),
                 Doc.indent(
                     Doc.concat(
                         Doc.HARD_LINE,
-                        calls.methodCallArgumentList(callPrefix, call.getArguments(), Doc.HARD_LINE)
+                        openedArguments
                     )
                 ),
                 Doc.HARD_LINE,

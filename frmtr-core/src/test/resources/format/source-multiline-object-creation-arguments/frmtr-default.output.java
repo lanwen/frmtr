@@ -23,14 +23,12 @@ class SourceMultilineObjectCreationArgumentsSample {
     }
 
     void publish(RouteSelection selection, DecisionSink decisionSink, AuditTrail auditTrail) {
-        decisionSink.record(
-            new AuditedRouteDecision(
-                selection.primaryCandidate(),
-                selection.fallbackCandidate(),
-                auditTrail.currentWindow(),
-                decisionSink.deliveryMode()
-            )
-        );
+        decisionSink.record(new AuditedRouteDecision(
+            selection.primaryCandidate(),
+            selection.fallbackCandidate(),
+            auditTrail.currentWindow(),
+            decisionSink.deliveryMode()
+        ));
     }
 
     void fail(ShipmentRequest request, RouteSelection selection, Throwable cause) {

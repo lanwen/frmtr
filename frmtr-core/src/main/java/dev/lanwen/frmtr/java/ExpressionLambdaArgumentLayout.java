@@ -598,6 +598,7 @@ final class ExpressionLambdaArgumentLayout {
         if (
             body.isEmpty()
             || sourceShapePolicy.hasContainedComments(lambdaExpr)
+            || lambdaBodyHasTrailingLineComment(lambdaExpr)
         ) {
             return Optional.empty();
         }
@@ -1267,6 +1268,36 @@ final class ExpressionLambdaArgumentLayout {
                 .map(LambdaExpr.class::cast)
                 .map(nested -> parameters + " -> " + lambdaParameters.apply(nested) + " ->")
                 .orElse(parameters + " ->");
+    }
+
+    /**
+     * Reports whether the opener-hug would drop a trailing {@code // note} the hug's own render never emits.
+     *
+     * <p>A comment on a descendant of the hugged body call (e.g. after the terminal call's last argument) is always
+     * dropped when the hug re-renders that argument list. The lambda's OWN trailing comment is instead placed by an
+     * enclosing method-call chain when one continues past this call, so only a standalone call drops it — withhold there.
+     */
+    private boolean lambdaBodyHasTrailingLineComment(LambdaExpr lambdaExpr) {
+        if (huggableBodyExpression(lambdaExpr).map(sourceShapePolicy::hasTrailingLineComment).orElse(false)) {
+            return true;
+        }
+        return sourceShapePolicy.hasTrailingLineComment(lambdaExpr)
+            && !enclosingCallContinuesChain(lambdaExpr);
+    }
+
+    /**
+     * Reports whether the call hosting {@code lambdaExpr} is a chain selector with a further selector after it, so a
+     * chain printer — not this hug — owns the lambda's trailing comment.
+     */
+    private boolean enclosingCallContinuesChain(LambdaExpr lambdaExpr) {
+        return lambdaExpr.getParentNode()
+                .filter(MethodCallExpr.class::isInstance)
+                .flatMap(call -> call.getParentNode()
+                        .filter(MethodCallExpr.class::isInstance)
+                        .map(MethodCallExpr.class::cast)
+                        .flatMap(MethodCallExpr::getScope)
+                        .filter(scope -> scope == call))
+                .isPresent();
     }
 
     private Optional<Expression> huggableBodyExpression(LambdaExpr lambdaExpr) {

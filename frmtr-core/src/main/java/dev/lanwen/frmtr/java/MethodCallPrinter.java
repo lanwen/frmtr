@@ -172,7 +172,9 @@ final class MethodCallPrinter {
             context.layoutWidth,
             this::methodCallPrefix,
             this::methodCallArgumentList,
-            this::brokenMethodCall
+            this::brokenMethodCall,
+            objectCreationPrefix,
+            brokenObjectCreationRenderer
         );
     }
 
@@ -1394,16 +1396,16 @@ final class MethodCallPrinter {
         if (
             expression.getArguments().size() != 1
             || !(expression.getArgument(0) instanceof MethodCallExpr argument)
-            // Comments block the fan, except the argument chain's own last-selector trailing line comment: the fan
-            // ({@code chainFanOut}) re-emits that slot, so a `call(chain.a().b() // note)` still fans instead of freezing
-            // flat over width and flipping fan<->collapse when the comment re-buckets onto the selector on the next pass.
-            || (sourceShapePolicy.hasContainedComments(expression)
-                && !argumentChainHasOnlyTrailingLineComment(expression, argument))
             || expression.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
             || hostIsChainSegment(expression)
         ) {
             return Optional.empty();
         }
+        // Compute the source-neutral fan first: a non-empty fan means {@code canonicalFanChain} already admits the
+        // argument's comments (a comment it cannot re-emit makes it decline, returning empty), so a comment-bearing
+        // fanning argument commits the stable exploded shape below rather than dropping to the generic force-fan. This is
+        // relocation-invariant: a statement-trailing comment that re-buckets from outside the host call's token span onto
+        // an inner argument line — flipping {@code hasContainedComments} between passes — no longer flips hug<->fan.
         Optional<Doc> fan = methodChains.canonicalFanChain(argument, "", LayoutContext.root());
         if (fan.isEmpty()) {
             return Optional.empty();
@@ -1416,10 +1418,15 @@ final class MethodCallPrinter {
             Doc.HARD_LINE,
             Doc.text(")")
         );
-        // A trailing-comment argument chain commits the exploded shape directly: a line comment closes the hugged arm's
-        // dangling `)` line, and a nested breaking selector can make the exploded arm not "fit" so the fit-ranked
+        // A comment-bearing fan-chain argument commits the exploded shape directly: a line comment closes the hugged
+        // arm's dangling `)` line, and a nested breaking selector can make the exploded arm not "fit" so the fit-ranked
         // bestFitting would pick the comment-unsafe hugged arm and oscillate. The exploded shape is the stable one.
-        if (sourceShapePolicy.hasContainedComments(expression)) {
+        //
+        // Read BOTH comment signals so the verdict is independent of where the comment currently sits: a statement-trailing
+        // line comment binds AFTER the call's last token on the flat pass ({@code hasTrailingLineComment}) but relocates
+        // INTO the call's token span once the argument breaks across lines ({@code hasContainedComments}). Their union fires
+        // on every pass, so the flat pass commits the exploded fan instead of hugging and then re-fanning on the next pass.
+        if (sourceShapePolicy.hasContainedComments(expression) || sourceShapePolicy.hasTrailingLineComment(expression)) {
             return Optional.of(exploded);
         }
         // Prefer breaking right after the call's `(` — the chain argument on its own indented
@@ -1431,19 +1438,6 @@ final class MethodCallPrinter {
         // of the hugged first line and both wrap the SAME source-neutral fan, the exploded arm fits whenever the hugged
         // one does, so the verdict is deterministic and idempotent — both passes rebuild and rank the same two shapes.
         return Optional.of(Doc.bestFitting(List.of(exploded, hugged), new int[] {1, 0}));
-    }
-
-    /**
-     * Reports that {@code expression}'s only contained comments are the argument chain's final-selector trailing line
-     * comment — the one comment shape the fan preserves ({@code chainFanOut} re-emits it), so the single-fan-chain seam
-     * may still fan the argument instead of dropping to the flat comment-aware list.
-     */
-    private boolean argumentChainHasOnlyTrailingLineComment(MethodCallExpr expression, MethodCallExpr argument) {
-        if (!methodChains.chainFansByCanonicalRuleWithTrailingLineComment(argument)) {
-            return false;
-        }
-        List<Comment> argumentComments = argument.getAllContainedComments();
-        return expression.getAllContainedComments().stream().allMatch(argumentComments::contains);
     }
 
     /**
@@ -1872,6 +1866,14 @@ final class MethodCallPrinter {
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
         if (renderedTrailing.isEmpty()) {
+            // The argument's own trailing comment was pre-claimed by an outer owner (the chain segment's #410 slot),
+            // so this flat text would render the argument comment-free at its stale source width and hide its own
+            // breaks — hugging it over the line at a deep continuation column. Decline so the argument falls through to
+            // the renderer-ranked breakable path, which fans it at the true rendered column; a genuinely comment-free
+            // compact-with-suffix argument keeps the flat form.
+            if (!trailingComments.isEmpty()) {
+                return Optional.empty();
+            }
             return Optional.of(Doc.text(code));
         }
         return Optional.of(Doc.concat(Doc.text(code), Doc.text(" "), Doc.join(Doc.text(" "), renderedTrailing)));

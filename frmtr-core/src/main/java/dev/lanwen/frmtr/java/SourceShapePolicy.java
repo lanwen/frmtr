@@ -64,13 +64,31 @@ final class SourceShapePolicy {
     }
 
     /**
-     * Reports whether a node contains comments, using the run index for original nodes and JavaParser for detached clones.
-     * The fallback preserves comment-stripping render paths whose cloned trees are absent from the run snapshot.
+     * Reports whether a node contains comments, whitespace-invariantly for original nodes and via JavaParser for detached
+     * clones. Original nodes read the canonical token-span binding so the gate converges where JavaParser's line-sensitive
+     * attachment flips; the clone fallback preserves comment-stripping render paths absent from the run snapshot.
      */
     boolean hasContainedComments(Node node) {
-        return commentPolicy.contains(node)
-            ? commentPolicy.hasContainedComments(node)
-            : !node.getAllContainedComments().isEmpty();
+        if (!commentPolicy.contains(node)) {
+            return !node.getAllContainedComments().isEmpty();
+        }
+        return commentPolicy.canonicalKnows(node)
+            ? commentPolicy.canonicalHasContainedComments(node)
+            : commentPolicy.hasContainedComments(node);
+    }
+
+    /**
+     * Reports whether {@code node} carries a line comment that begins after its last code token — the trailing position
+     * the strictly interior {@link #hasContainedComments} scan misses (JavaParser may bind it to the last child). A
+     * comment-dropping render path gates on this so a trailing {@code // note} still withholds the drop.
+     */
+    boolean hasTrailingLineComment(Node node) {
+        if (!commentPolicy.contains(node)) {
+            return false;
+        }
+        return commentPolicy.trailingLineComment(node).isPresent()
+            || commentPolicy.containedComments(node).stream()
+                    .anyMatch(comment -> comment.isLine() && comment.startsAfterEndOf(node));
     }
 
     /**

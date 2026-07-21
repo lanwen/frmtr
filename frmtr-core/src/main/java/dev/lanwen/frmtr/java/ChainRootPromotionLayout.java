@@ -18,6 +18,11 @@ import java.util.function.ToIntFunction;
  * grouped, broken, expression-rendered, and their field-access / no-arg / single-segment sub-shapes. This helper owns the
  * root-doc switch and the width gates that decide whether a promoted root breaks its own arguments; it leaves segment
  * rendering, the continuation indent, chain analysis, and the imperative dispatch to the caller.
+ *
+ * <p>Kicks in when the chain root is promoted or grouped rather than plainly dotted onto, e.g. the static-factory root of
+ * {@code IntStream.iterate(50, next -> next + 7).limit(22).toArray()}. See fixtures
+ * {@code expression-lambda-factory-promotion}, {@code promoted-root-segment-continuation-width}, and
+ * {@code qualified-static-chain-root}.
  */
 final class ChainRootPromotionLayout {
 

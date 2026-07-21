@@ -26,6 +26,11 @@ import java.util.function.ToIntFunction;
  * width-broken, force-broken, comment/lambda-carrying, and root-close-attached. This helper owns the segment renderer's
  * candidate ladder, the selector prefix (leading/interspersed/name comments), the final-segment suffix, and the field-access
  * suffix; it leaves chain analysis, the fan/root shapes, the continuation indent, and the comment-claim policy to the caller.
+ *
+ * <p>Kicks in for any chain that emits its selectors as separate links, e.g.
+ * {@code builder.stream(src).groupByKey().count(named).suppress(config) // note} — each {@code .selector(args)} and its
+ * trailing comment is rendered here. See fixtures {@code chain-segment-argument-trailing-comment-after-close},
+ * {@code method-chain-segment-arguments}, and {@code method-chain-member-access} (field-access segment).
  */
 final class ChainSegmentRenderer {
 

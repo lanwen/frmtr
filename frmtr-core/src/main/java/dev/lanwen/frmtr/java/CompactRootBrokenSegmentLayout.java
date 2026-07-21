@@ -19,6 +19,12 @@ import java.util.function.ToIntFunction;
  * and breaks only the final segment's argument list ({@code root.selector(}\n args \n{@code )}), plus the sibling that
  * breaks the root's own arguments and glues a no-arg segment to its close. This helper owns those broken shapes and the
  * width gates that decide when they apply; it leaves chain analysis, the fan, and segment rendering to the caller.
+ *
+ * <p>Kicks in when the root and its selector fit on one line but the final segment must break — e.g.
+ * {@code ConnectionPlanner.between(primary, secondary).establishRoute(active, fallback)} keeps the root flat and breaks
+ * {@code establishRoute(}'s arguments — or when a no-arg tail glues to a broken root, e.g.
+ * {@code when(sharePartition.acquire(...)).thenReturn(...)}. See fixtures {@code method-chain-ranked-broken-segment},
+ * {@code broken-root-attached-segment-continuation-width}, and {@code source-multiline-method-root-chain-initializer}.
  */
 final class CompactRootBrokenSegmentLayout {
 

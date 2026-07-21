@@ -11,12 +11,11 @@ class ChainHostedBuilderArgumentWidth {
     }
 
     void registerCreatableTopic(CreateTopicsRequestData request, String topicName, short replicationFactor) {
-        request.topics()
-                .add(
-                    new CreatableTopic()
-                            .setName(topicName)
-                            .setNumPartitions(12)
-                            .setReplicationFactor(replicationFactor)
-                );
+        request.topics().add(
+            new CreatableTopic()
+                    .setName(topicName)
+                    .setNumPartitions(12)
+                    .setReplicationFactor(replicationFactor)
+        );
     }
 }

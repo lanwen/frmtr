@@ -26,7 +26,7 @@ import java.util.function.Function;
 final class SingleCallArgumentOpenerHugLayout {
 
     /** A wrapping call is "short" when its selector name is under this many symbols (brackets and dots excluded). */
-    private static final int SHORT_CALL_NAME_LIMIT = 8;
+    static final int SHORT_CALL_NAME_LIMIT = 8;
 
     private final FormatterOptions options;
 

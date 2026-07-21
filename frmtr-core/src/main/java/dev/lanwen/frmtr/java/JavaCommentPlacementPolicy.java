@@ -33,6 +33,8 @@ final class JavaCommentPlacementPolicy {
 
     private JavaCommentMap commentMap;
 
+    private CanonicalCommentBinding canonicalBinding;
+
     private final Map<Node, Map<Integer, List<JavaCommentTrivia>>> containedCommentsByBeginLine =
         new IdentityHashMap<>();
 
@@ -49,6 +51,7 @@ final class JavaCommentPlacementPolicy {
             throw new IllegalStateException("Java comment placement policy is already initialized for this print run");
         }
         commentMap = JavaCommentMap.from(unit);
+        canonicalBinding = CanonicalCommentBinding.from(unit);
         containedCommentsByBeginLine.clear();
         contentBeginLines.clear();
     }
@@ -401,6 +404,24 @@ final class JavaCommentPlacementPolicy {
      */
     boolean hasContainedComments(Node node) {
         return !containedComments(node).isEmpty();
+    }
+
+    /**
+     * Reports whether the canonical binding has a whitespace-invariant span for {@code node} in this run.
+     *
+     * <p>Only live parsed-unit nodes with computed code-token spans are known; detached clones and range-less recovered
+     * nodes are not, so a caller falls back to the JavaParser-derived answer for those.
+     */
+    boolean canonicalKnows(Node node) {
+        return canonicalBinding().knows(node);
+    }
+
+    /**
+     * Reports whether {@code node} canonically contains any comment — a comment token strictly between the node's first
+     * and last code tokens. Whitespace-invariant, so it converges where JavaParser's line-sensitive attachment flips.
+     */
+    boolean canonicalHasContainedComments(Node node) {
+        return canonicalBinding().hasContainedComments(node);
     }
 
     /**
@@ -859,5 +880,12 @@ final class JavaCommentPlacementPolicy {
             throw new IllegalStateException("Java comment placement policy has not been initialized for a print run");
         }
         return commentMap;
+    }
+
+    private CanonicalCommentBinding canonicalBinding() {
+        if (canonicalBinding == null) {
+            throw new IllegalStateException("Java comment placement policy has not been initialized for a print run");
+        }
+        return canonicalBinding;
     }
 }

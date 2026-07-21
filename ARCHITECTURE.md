@@ -287,10 +287,11 @@ can drop or duplicate them. Ownership is settled up front: a **`JavaCommentMap`*
 **`JavaCommentPlacementPolicy`** index the source's comments, and a **`CommentTracker`** pre-pass (the record-only dry
 run above) records the single `(node, slot)` owner of every comment across all families (leading, trailing, adjacent,
 own, orphan, interleaved). JavaParser attaches a trailing comment by a whitespace-sensitive rule, so
-**`CanonicalCommentBinding`** offers a whitespace-invariant alternative — a comment→node skeleton (`preceding`/
-`following`/`enclosing`) and token-span containment computed from the code-token stream — proven invariant by a property
-test and available for comment-driven gates to adopt (the containment-hub adoption is staged; see the comment-attribution
-proposal). The real render then emits a comment only from its recorded owner and empty everywhere else,
+**`CanonicalCommentBinding`** supplies a whitespace-invariant binding — a comment→node skeleton (`preceding`/
+`following`/`enclosing`) and token-span containment computed from the code-token stream, proven invariant by a property
+test. The containment hub `SourceShapePolicy.hasContainedComments` reads it, so comment-presence layout gates decide the
+same way regardless of how the input happened to wrap; a comment trailing a node past its last code token is not
+"contained", so gates that withhold a comment-dropping path also consult the canonical trailing-comment owner. The real render then emits a comment only from its recorded owner and empty everywhere else,
 so a comment can be offered in several eagerly-built ranked layout arms without being dropped or duplicated — the
 renderer keeps only the arm it picks. A trailing line comment that follows a closing token — a statement/declaration
 terminator (`); // note`, `}; // note`) or a broken chain segment's close (`) //`) — is re-anchored to hug the token it

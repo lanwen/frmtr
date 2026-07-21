@@ -8,6 +8,7 @@ import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -44,6 +45,10 @@ final class IfStatementLayout {
 
     private final ControlConditionPrinter controlConditions;
 
+    private final FormatterOptions options;
+
+    private final LayoutWidth layoutWidth;
+
     private final JavaFormatRule<Statement> statementRenderer;
 
     private final Function<Expression, Doc> ifConditionRenderer;
@@ -66,6 +71,8 @@ final class IfStatementLayout {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             ControlConditionPrinter controlConditions,
+            FormatterOptions options,
+            LayoutWidth layoutWidth,
             JavaFormatRule<Statement> statementRenderer,
             Function<Expression, Doc> ifConditionRenderer,
             Function<Node, Doc> sameLineBlockCommentBeforeNode,
@@ -79,6 +86,8 @@ final class IfStatementLayout {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.controlConditions = controlConditions;
+        this.options = options;
+        this.layoutWidth = layoutWidth;
         this.statementRenderer = statementRenderer;
         this.ifConditionRenderer = ifConditionRenderer;
         this.sameLineBlockCommentBeforeNode = sameLineBlockCommentBeforeNode;
@@ -119,7 +128,7 @@ final class IfStatementLayout {
         // between the two slots: a comment before it is a separator (this gap slot), one after it leads a braceless else
         // body — those render indented under `else` via the braceless-body handler, and claiming the body block here
         // keeps the two slots from double-owning a line.
-        boolean thenBrokeBraceless = bracelessThenBrokeOnLeadingComment(statement);
+        boolean thenBrokeBraceless = bracelessThenBrokeOnLeadingComment(statement) || joinedFormOverflows(statement);
         Optional<Statement> bracelessElse = statement.getElseStmt()
                 .filter(elseStatement -> !elseStatement.isEmptyStmt())
                 .filter(elseStatement -> !elseStatement.isIfStmt())
@@ -145,6 +154,12 @@ final class IfStatementLayout {
         if (conditionTrailingLineComment != Doc.EMPTY) {
             docs.add(Doc.text(" "));
             docs.add(conditionTrailingLineComment);
+            docs.add(ifThenStatementAfterConditionTrailingComment(statement));
+        } else if (joinedFormOverflows(statement) && !statement.getThenStmt().isBlockStmt()) {
+            // The collapsed one-line if/else would overflow, so break the braceless then onto its own indented line
+            // (the else side follows via thenBrokeBraceless). The trailing space before the HARD_LINE is trimmed by the
+            // renderer, leaving `if (cond)` alone on its line.
+            docs.add(Doc.text(" "));
             docs.add(ifThenStatementAfterConditionTrailingComment(statement));
         } else {
             docs.add(Doc.text(" "));
@@ -525,6 +540,28 @@ final class IfStatementLayout {
                 .filter(JavaCommentTrivia::isLine)
                 .filter(trivia -> !trivia.startsAfterEndOf(thenStatement))
                 .isPresent();
+    }
+
+    /**
+     * Whether the braceless if/else collapsed onto one line would overflow the line width, forcing then (and a simple
+     * else) onto their own lines. Source-neutral: it measures a comment-stripped clone rendered from the AST (its
+     * retained source token range is cleared) at the statement's indentation, so an author's wrapping cannot flip the
+     * verdict and the result is a fixpoint. An else-if or block else lands on its own line(s), so it is dropped before
+     * measuring — only the collapsible head shares the line.
+     */
+    private boolean joinedFormOverflows(IfStmt statement) {
+        if (statement.getThenStmt().isBlockStmt()) {
+            return false;
+        }
+        IfStmt clone = statement.clone();
+        clone.getElseStmt()
+                .filter(elseStatement -> elseStatement.isIfStmt() || elseStatement.isBlockStmt())
+                .ifPresent(elseStatement -> clone.setElseStmt(null));
+        clone.removeComment();
+        List.copyOf(clone.getOrphanComments()).forEach(clone::removeOrphanComment);
+        List.copyOf(clone.getAllContainedComments()).forEach(Node::remove);
+        clone.setTokenRange(null);
+        return layoutWidth.nodeLine(statement, compact.apply(clone)) > options.lineWidth();
     }
 
     /**

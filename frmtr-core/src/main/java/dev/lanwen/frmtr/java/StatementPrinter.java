@@ -255,6 +255,8 @@ final class StatementPrinter {
             comments,
             commentPlacement,
             controlConditions,
+            options,
+            layoutWidth,
             statementRenderer,
             ifConditionRenderer,
             sameLineBlockCommentBeforeNode,

@@ -158,7 +158,7 @@ final class MethodCallChainSourcePlanner {
             Predicate<MethodCallExpr> segmentHasComment,
             Predicate<MethodCallExpr> segmentHasNameComment,
             Predicate<MethodCallExpr> segmentHasArgumentGapComment,
-            Predicate<MethodCallExpr> segmentHasBlockLambdaArgument,
+            Predicate<Expression> segmentHasBlockLambdaArgument,
             Predicate<List<MethodCallExpr>> chainHasTrailingLineComments,
             BiPredicate<Expression, List<MethodCallExpr>> rootHasTrailingLineComment,
             BiPredicate<Expression, List<MethodCallExpr>> chainHasInterSegmentLineComment
@@ -167,8 +167,9 @@ final class MethodCallChainSourcePlanner {
         Expression root = methodCallChainRoot(expression, calls);
         boolean rootHasComments = sourceShapePolicy.hasContainedComments(root)
             || rootToFirstSelectorGapHasBlockComment(root, calls);
-        boolean rootHasBlockLambdaArgument = root instanceof MethodCallExpr methodRoot
-            && segmentHasBlockLambdaArgument.test(methodRoot);
+        // A block-bodied lambda argument forces the chain open whether the root is a method call ({@code observe(x -> {…})})
+        // or an object creation ({@code new Observer(x -> {…})}), so a constructor root fans like its call-rooted twin.
+        boolean rootHasBlockLambdaArgument = segmentHasBlockLambdaArgument.test(root);
         boolean hasTrailingLineComments = chainHasTrailingLineComments.test(calls);
         // A line comment JavaParser attaches as the ROOT's own trailing comment (the root-to-first-selector gap, e.g.
         // {@code new Zone(...) // note}⏎{@code .with(...)}) is invisible to {@code rootHasComments} (the containment scan

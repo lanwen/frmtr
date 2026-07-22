@@ -696,17 +696,25 @@ final class ChainFanLayout {
         // The fanned tail hangs at the plain continuation indent, anchored on the attached opener, not on the bare root:
         // a short root ({@code env}) would otherwise trip {@code chainContinuation}'s root-padding branch and align the
         // tail under the short root. For a long root this is byte-identical to the root-continuation it replaces.
-        return Doc.concat(
+        Doc attached = Doc.concat(
             fanRootDoc(candidate.root()),
             attachedFirstSelectorDoc(calls.getFirst()),
             chainContinuation.apply(
                 Doc.join(Doc.HARD_LINE, methodCallChainSegments.apply(fannedSelectors, candidate.tail()))
             )
         );
+        // {@code bestFitting} ranks the attach-safe leaf first selector against the fan-from-first shape so an overflowing
+        // opener breaks after the receiver instead of stranding it over width. A lambda-carrying first selector
+        // ({@link #bareNameReceiverFirstSelectorHugsLambda}) is NOT ranked — it would flip the fan even where the hug fits.
+        if (firstSelectorAttachesSafely(calls.getFirst())) {
+            return Doc.bestFitting(List.of(attached, fanSelectorsLayout(candidate)));
+        }
+        return attached;
     }
 
     // Renders the attached first selector for {@link #fanTrivialReceiverAttachLayout}. An attach-SAFE leaf selector renders
-    // as one flat atomic {@code .selector(...)} token ({@link #attachedFirstSelectorSegment}); a bare-name-receiver
+    // as a single {@code .selector(...)} token that never breaks at a selector boundary
+    // ({@link #attachedFirstSelectorSegment}); a bare-name-receiver
     // lambda-carrying first selector renders through the ordinary source-neutral segment renderer so its lambda body can
     // break by width at the attached column ({@link #bareNameReceiverFirstSelectorHugsLambda}). The lambda selector is the
     // sole element of the segment list, so the renderer measures it as a standalone segment with no trailing suffix.
@@ -792,8 +800,9 @@ final class ChainFanLayout {
     }
 
     /**
-     * Renders a trivial-receiver chain's attach-safe first selector ({@link #firstSelectorAttachesSafely}) as one flat,
-     * SOURCE-NEUTRAL {@code .selector(arg, …)} token glued to the root's opening line in {@link #chainFanOut}. The selector
+     * Renders a trivial-receiver chain's attach-safe first selector ({@link #firstSelectorAttachesSafely}) as a single,
+     * SOURCE-NEUTRAL {@code .selector(arg, …)} token that never breaks at a selector boundary, glued to the root's opening
+     * line in {@link #chainFanOut}. The selector
      * has only simple leaf arguments and no comment (both guaranteed by the attach-safe gate), so the compact join is its
      * complete rendering and it can never open its own broken argument list.
      *
@@ -803,7 +812,8 @@ final class ChainFanLayout {
      * over width (a long root prefix, e.g. a cast-wrapped initializer {@code (List<Foo>) fluentTemplate.to("…")}), that
      * source-driven break becomes VISIBLE and flips across passes: the flat re-format then keeps the selector inline while
      * the original multiline source broke it (the salesforce {@code CompositeApiCollectionsManualIT} oscillation). Emitting
-     * one flat text makes the attached selector's shape a pure function of the AST, so both passes render it identically
+     * one source-neutral {@code Doc.text} makes the attached selector's shape a pure function of the AST, so both passes
+     * render it identically
      * even when the opening line is unavoidably over width — matching google-java-format, which attaches regardless of
      * width and never re-breaks such a leaf selector.
      */

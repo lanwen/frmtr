@@ -22,7 +22,8 @@ class HandleRegistry {
                                 .validateChecksumAgainstSource()
                                 .normalizeDisplayName()
                                 .next()
-                                .flatMap(primaryCandidate -> resolutionAuditTrailService.recordResolutionOutcomeEvent(primaryCandidate)
+                                .flatMap(primaryCandidate -> resolutionAuditTrailService
+                                        .recordResolutionOutcomeEvent(primaryCandidate)
                                         .withResolvedTimestamp()
                                         .withRequestingActor()
                                         .persistReceipt()

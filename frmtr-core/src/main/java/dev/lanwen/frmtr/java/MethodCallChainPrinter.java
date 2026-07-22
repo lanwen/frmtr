@@ -779,17 +779,21 @@ final class MethodCallChainPrinter {
             // regardless of nesting depth. For the shallow single-level case where the flat arm fits, both combinators
             // agree, and the conditionalGroup is strictly better when the flat arm overflows.
             //
-            // A chain whose final selector carries a lambda whose body CANNOT render flat (a block lambda, or an expression
-            // lambda whose body itself nests a lambda — {@link #lambdaArgumentForcesMultilineBody}) is the exception: its
-            // flat compact never "fits flat", so a conditionalGroup would fan the receiver on every pass, but the standalone
-            // lambda-body renderer ({@code LambdaExpressionPrinter}) still decides that body's shape from a deferred
-            // lambda-arrow source-shape read, which oscillates once the receiver is un-collapsed. (Only the
-            // block/nested-lambda arrow reads here still do that deferred source-shape read; the sibling
-            // method-call-body arrow read does not.) Such a chain keeps the {@link Doc#bestFitting} arm
-            // (rendered collapsed), so it does not introduce a new oscillation.
+            // A nested-lambda body ({@link #lambdaArgumentForcesMultilineBody}) normally keeps the {@link Doc#bestFitting}
+            // arm (rendered collapsed): its flat compact never fits, so a conditionalGroup would fan the receiver every
+            // pass while the deferred lambda-arrow renderer still shapes the body, and the two oscillate. The exception is
+            // a body that is ITSELF a source-neutral fanning chain ({@code lambdaBodyChainFansByCanonicalRule}) — its arrow
+            // shape is decided source-neutrally, so a conditionalGroup stays stable AND fans in break mode on overflow
+            // instead of collapsing a deep reactive pipeline onto one runaway flat line (what bestFitting picks when both
+            // arms overflow: its fewest-lines tie-break takes the single flat arm).
             List<Doc> arms = List.of(flat, fanOut);
             boolean bodyForcesMultiline = calls.getLast().getArguments().stream()
                     .anyMatch(this::lambdaArgumentForcesMultilineBody);
+            boolean bodyIsSourceNeutralFanningChain = calls.getLast().getArguments().stream()
+                    .filter(LambdaExpr.class::isInstance)
+                    .map(LambdaExpr.class::cast)
+                    .flatMap(lambda -> lambda.getExpressionBody().stream())
+                    .anyMatch(body -> body instanceof MethodCallExpr call && lambdaBodyChainFansByCanonicalRule(call));
             // A body-forces-multiline chain whose lambda body carries a contained comment cannot use the {@code flat}
             // compact arm at all: {@code compactSource.compact} routes a comment-bearing subtree through
             // {@code compactTokenText}, which only collapses whitespace RUNS, so every {@code //} line comment de-indents
@@ -802,7 +806,8 @@ final class MethodCallChainPrinter {
             if (bodyForcesMultiline && sourceShapePolicy.hasContainedComments(expression)) {
                 return Optional.of(fanOut);
             }
-            return Optional.of(bodyForcesMultiline ? Doc.bestFitting(arms) : Doc.conditionalGroup(arms));
+            boolean collapseArm = bodyForcesMultiline && !bodyIsSourceNeutralFanningChain;
+            return Optional.of(collapseArm ? Doc.bestFitting(arms) : Doc.conditionalGroup(arms));
         }
         // A chain that must fan ONLY to preserve an inter-segment {@code //} line comment ({@link ChainCommentLayout#chainHasInterSegmentLineComment})
         // would otherwise collapse in the source-shape fall-through below and DROP the comment (the

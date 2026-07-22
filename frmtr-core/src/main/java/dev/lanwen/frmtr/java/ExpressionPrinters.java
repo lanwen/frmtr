@@ -560,7 +560,7 @@ final class ExpressionPrinters {
      * comment/lambda-free lambda-body chain, produced ONCE at {@link LayoutContext#root()} so
      * {@link LambdaExpressionPrinter} can wrap the identical fan Doc into both arms of its break-after-{@code ->} vs
      * attach-root-to-{@code ->} {@code Doc.bestFitting}. Empty for a chain the lambda-body fan withholds (object-creation
-     * root, chain-selector-hosted lambda, or any comment/lambda carrier). Scoped to
+     * root or any comment/lambda carrier). Scoped to
      * {@link #lambdaBodyChainFansByCanonicalRule} for idempotence: the fan renders the root at column zero, so an
      * object-creation root would oscillate its {@code new X()} hug across passes.
      */

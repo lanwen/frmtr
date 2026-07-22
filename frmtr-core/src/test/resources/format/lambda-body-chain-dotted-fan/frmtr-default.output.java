@@ -30,13 +30,14 @@ final class LambdaBodyChainDottedFan {
                 .collect(Collectors.toList());
     }
 
-    List<KafkaMetric> keepsChainSelectorHostedLambdaBodyPacked(Metrics metrics) {
+    List<KafkaMetric> fansChainSelectorHostedLambdaBody(Metrics metrics) {
         return metrics.metrics()
                 .entrySet()
                 .stream()
-                .filter(entry -> entry.getKey().description().contains(
-                        "The number of active connections for this listener"
-                ))
+                .filter(entry -> entry.getKey()
+                        .description()
+                        .contains("The number of active connections for this listener")
+                )
                 .map(Map.Entry::getValue)
                 .collect(Collectors.toList());
     }

@@ -18,10 +18,11 @@ final class LambdaExpressionArgumentOpener {
                         requestedMarks,
                         frame.toTransitEnvelope()
                 ))
-                .doOnNext(outcome -> journalWriter.atInfo().addValue("frame", frame.toMap())
-                            .addValue("packet", packet.sender())
-                            .addValue("matched", outcome.getOrDefault("route", false))
-                            .log("Recorded transit decision")
+                .doOnNext(outcome -> journalWriter.atInfo()
+                        .addValue("frame", frame.toMap())
+                        .addValue("packet", packet.sender())
+                        .addValue("matched", outcome.getOrDefault("route", false))
+                        .log("Recorded transit decision")
                 )
                 .switchIfEmpty(FlowResult.empty());
     }
@@ -74,8 +75,10 @@ final class LambdaExpressionArgumentOpener {
 
     GatewayPlan route(GatewayPlan plan, Resolver resolver) {
         return defaults(plan)
-                .routeRules(rules -> rules.pathMatchers("/ready", "/ready/**", "/about").allow().pathMatchers("/**")
-                            .guarded()
+                .routeRules(rules -> rules.pathMatchers("/ready", "/ready/**", "/about")
+                        .allow()
+                        .pathMatchers("/**")
+                        .guarded()
                 )
                 .tokenRelay(relay -> relay.managerResolver(resolver))
                 .build();
@@ -83,8 +86,9 @@ final class LambdaExpressionArgumentOpener {
 
     ResponseSpec keepsSourceMultilineChainLambda(WebClient client, Map<String, String> query, String account) {
         return client.get()
-                .uri(spec -> spec.path("/metrics/{account}/summary").queryParams(MultiValueMap.fromSingleValue(query))
-                            .build(account)
+                .uri(spec -> spec.path("/metrics/{account}/summary")
+                        .queryParams(MultiValueMap.fromSingleValue(query))
+                        .build(account)
                 )
                 .exchange();
     }
@@ -163,10 +167,10 @@ final class LambdaExpressionArgumentOpener {
     StubFlow keepsLoggingBodyUnderLimit(StubFlow source, Logger log, String itemId) {
         return source.prepare()
                 .then(source.expire(itemId, DEFAULT_TTL))
-                .doOnError(error -> log.atError().addValue("item.id", itemId).log(
-                        "Failed to persist buffered event for item",
-                        error
-                ))
+                .doOnError(error -> log.atError()
+                        .addValue("item.id", itemId)
+                        .log("Failed to persist buffered event for item", error)
+                )
                 .then();
     }
 
@@ -301,10 +305,11 @@ final class LambdaExpressionArgumentOpener {
                                         projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
                                     )
                                     .findFirst()
-                                    .orElseGet(() -> ProjectedWindowUsageSnapshot.builder().tenantId(tenantId)
-                                                .accountingWindow(accountingWindow)
-                                                .usage(UsageCount.EMPTY)
-                                                .build()
+                                    .orElseGet(() -> ProjectedWindowUsageSnapshot.builder()
+                                            .tenantId(tenantId)
+                                            .accountingWindow(accountingWindow)
+                                            .usage(UsageCount.EMPTY)
+                                            .build()
                                     );
                         })
                         .collect(Collectors.toList())

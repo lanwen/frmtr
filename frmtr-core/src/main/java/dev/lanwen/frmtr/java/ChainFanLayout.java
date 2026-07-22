@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
@@ -491,56 +490,13 @@ final class ChainFanLayout {
      * are already source-shape-stable for them; they remain the deferred slice here (the nested-root gap the
      * chain-path-unification plan calls out for {@code chainFanOut} rendering a non-name root at {@code root()}).
      *
-     * <p>Also withheld: a body-chain whose lambda is the argument of a <em>chain-selector</em> call
-     * ({@code stream.filter(e -> e.getKey().description().contains(...))}). When the outer chain fans, that
-     * {@code .filter(...)} selector is re-rendered by the chain printer's own segment path rather than reaching the
-     * lambda-hug seam, so the body's fan-vs-pack verdict is owned by two different code paths across passes and flips
-     * (the kafka {@code SelectorTest} shape). Restricting the fan to lambdas hosted by a call with a non-call scope (a
-     * statement-level or receiver-rooted call such as {@code verifier.assertEachRoute(h -> …)}) keeps the hug column and
-     * its owner stable. This is a conservative withhold — it only ever removes a fan, never forces one — so it cannot
-     * introduce a new oscillation.
+     * <p>A chain-selector-hosted lambda body ({@code stream.filter(e -> e.getKey()...)}) still fans — the arrow hugs its
+     * root, so no arrow strands above a wrapping body — because {@code chainFanOut} renders source-neutrally at
+     * {@code root()}, immune to the hosting call's column.
      */
     boolean lambdaBodyChainFansByCanonicalRule(MethodCallExpr expression) {
         return chainFansByCanonicalRule(expression)
-            && !(methodCallChainAnalysis.apply(expression).root() instanceof ObjectCreationExpr)
-            && !lambdaBodyHostedByChainSelector(expression);
-    }
-
-    /**
-     * Reports whether the expression-lambda whose body is {@code bodyChain} is itself an argument of a method call that is
-     * a selector in a longer chain (its scope is another {@code MethodCallExpr}), e.g. the {@code .filter(...)} in
-     * {@code stream.filter(e -> bodyChain)}. Such a hosting call reindents when the outer chain fans, moving the lambda
-     * body's rendered column and its layout owner between passes, so the lambda-body canonical fan is withheld there.
-     */
-    private boolean lambdaBodyHostedByChainSelector(MethodCallExpr bodyChain) {
-        // Withhold when the lambda whose body is {@code bodyChain} is an argument of a method call that is itself a chain
-        // selector (its scope is another method call): the outer chain reindents that {@code .filter(e -> …)} host when it
-        // fans, moving the body's rendered column and its layout owner between passes. The body chain sits under its lambda
-        // through a statement/parenthesis wrapper ({@code bodyChain → ExpressionStmt → LambdaExpr}), so walk up to the
-        // nearest enclosing {@link LambdaExpr} before inspecting the hosting call.
-        return enclosingLambda(bodyChain)
-                .flatMap(Node::getParentNode)
-                .filter(MethodCallExpr.class::isInstance)
-                .map(MethodCallExpr.class::cast)
-                .flatMap(MethodCallExpr::getScope)
-                .filter(MethodCallExpr.class::isInstance)
-                .isPresent();
-    }
-
-    private Optional<LambdaExpr> enclosingLambda(MethodCallExpr bodyChain) {
-        Optional<Node> current = bodyChain.getParentNode();
-        while (current.isPresent()) {
-            Node node = current.orElseThrow();
-            if (node instanceof LambdaExpr lambdaExpr) {
-                return Optional.of(lambdaExpr);
-            }
-            if (node instanceof MethodCallExpr || node instanceof ObjectCreationExpr) {
-                // Reached an enclosing call before any lambda — this chain is not a lambda body in the current subtree.
-                return Optional.empty();
-            }
-            current = node.getParentNode();
-        }
-        return Optional.empty();
+            && !(methodCallChainAnalysis.apply(expression).root() instanceof ObjectCreationExpr);
     }
 
     /**

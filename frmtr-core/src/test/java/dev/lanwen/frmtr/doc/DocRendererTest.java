@@ -930,4 +930,72 @@ final class DocRendererTest {
         // The plain render() path returns the text with no per-line signal; renderIndented() opts into accumulating it.
         assertThat(renderer(80).renderIndented(doc).lines()).isNotEmpty();
     }
+
+    @Test
+    void atIndentResetsToAbsoluteLevelDiscardingTheAmbientIndent() {
+        // Two ambient indent layers put the surrounding scope at level 2. The atIndent(1, …) inside them resets the
+        // base to an absolute level 1, and the inner indent adds one more, so the break lands at level 2 (4 spaces) —
+        // NOT the ambient level 2 plus the inner indent (level 3, 6 spaces) a plain indent would have produced.
+        Doc doc = Doc.indent(Doc.indent(
+            Doc.atIndent(1, Doc.indent(Doc.concat(Doc.text("head"), Doc.HARD_LINE, Doc.text("anchored"))))
+        ));
+
+        assertThat(renderer(80).render(doc)).isEqualTo(
+            """
+                head
+                    anchored"""
+        );
+    }
+
+    @Test
+    void atIndentAnchorsTheColumnTheBestFittingRankingSeesSoWrappingInItFlipsTheWinner() {
+        // A best-fitting node with a fewer-lines alternative (index 0) whose continuation is 19 wide, and a more-lines
+        // fallback (index 1) whose continuations are short. The winner turns on whether that 19-wide continuation fits,
+        // which depends on the indent column the line-count ranking measures the continuation at.
+        Doc fewerLinesWideContinuation =
+            Doc.concat(Doc.text("value ="), Doc.HARD_LINE, Doc.text("configuredTimeoutMs"));
+        Doc moreLinesShortContinuations = Doc.concat(
+            Doc.text("value ="),
+            Doc.HARD_LINE,
+            Doc.text("config"),
+            Doc.HARD_LINE,
+            Doc.text(".timeoutMs()")
+        );
+        Doc node = Doc.bestFitting(java.util.List.of(fewerLinesWideContinuation, moreLinesShortContinuations));
+
+        // Left at three ambient indent layers (level 3 = 6 columns), the ranking measures the 19-wide continuation at
+        // column 6 (= 25 > 20): index 0 overflows, so only the fitting three-line fallback survives the fit gate.
+        Doc ambient = Doc.indent(Doc.indent(Doc.indent(node)));
+        assertThat(renderer(20).render(ambient)).isEqualTo(
+            """
+                value =
+                      config
+                      .timeoutMs()"""
+        );
+
+        // Wrapped in atIndent(0) inside the same three ambient layers, the anchor resets the base to level 0, so the
+        // ranking now measures that continuation at column 0 (= 19 <= 20): index 0 fits and, being fewer lines, wins.
+        // The flipped winner is the observable proof the line-count ranking read the anchored column, not the ambient.
+        Doc anchored = Doc.indent(Doc.indent(Doc.indent(Doc.atIndent(0, node))));
+        assertThat(renderer(20).render(anchored)).isEqualTo(
+            """
+                value =
+                configuredTimeoutMs"""
+        );
+    }
+
+    @Test
+    void containsHardLineRecursesThroughAtIndent() {
+        // The structural query descends into an AtIndent's inner doc: a hard line under an anchor is still a hard line.
+        assertThat(DocRenderer.containsHardLine(Doc.atIndent(2, Doc.concat(Doc.text("x"), Doc.HARD_LINE)))).isTrue();
+        assertThat(DocRenderer.containsHardLine(Doc.atIndent(2, Doc.text("x")))).isFalse();
+    }
+
+    @Test
+    void atIndentRejectsNegativeLevelButAllowsZero() {
+        // A negative level makes render crash (StringBuilder.repeat) while width probes silently mismeasure; the guard
+        // turns that latent render/measure divergence into an immediate localized failure. Level 0 is the valid floor.
+        assertThatThrownBy(() -> Doc.atIndent(-1, Doc.text("x"))).isInstanceOf(IllegalArgumentException.class);
+        assertThat(Doc.atIndent(0, Doc.text("x"))).isInstanceOf(Doc.AtIndent.class);
+    }
 }

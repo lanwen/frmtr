@@ -6,6 +6,7 @@ import java.util.List;
 
 public sealed interface Doc
     permits
+        Doc.AtIndent,
         Doc.BestFitting,
         Doc.BreakParent,
         Doc.Concat,
@@ -97,6 +98,18 @@ public sealed interface Doc
 
     static Doc indent(Doc doc) {
         return new Indent(doc);
+    }
+
+    /**
+     * Renders {@code doc} with the indent level reset to the absolute {@code level}, discarding the ambient accumulated
+     * indent; a nested {@link Indent} inside adds relative to this new base. The level is a static node fact, so render
+     * and every width/line-count probe read the identical column with no shared renderer state.
+     */
+    static Doc atIndent(int level, Doc doc) {
+        if (level < 0) {
+            throw new IllegalArgumentException("atIndent level must be >= 0, got " + level);
+        }
+        return new AtIndent(level, doc);
     }
 
     static Doc ifBreak(Doc breakDoc, Doc flatDoc) {
@@ -361,6 +374,9 @@ public sealed interface Doc
     record BreakParent() implements Doc {}
 
     record Indent(Doc doc) implements Doc {}
+
+    /** Absolute-indent anchor; see {@link #atIndent(int, Doc)}. */
+    record AtIndent(int level, Doc doc) implements Doc {}
 
     /**
      * A flat-first layout group. {@code groupId} is an optional identity (nullable): when set, the renderer records

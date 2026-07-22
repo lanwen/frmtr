@@ -274,6 +274,10 @@ public final class DocExplainRenderer {
                 case Doc.Indent indented -> {
                     return render(indented.doc(), indent + 1, mode, enclosingLabel);
                 }
+                case Doc.AtIndent anchored -> {
+                    // Reset to the absolute level so the traced column matches the anchored column DocRenderer emits.
+                    return render(anchored.doc(), anchored.level(), mode, enclosingLabel);
+                }
                 case Doc.Group group -> {
                     int available = lineWidth - column;
                     boolean fits = widths.fits(group.doc(), available);

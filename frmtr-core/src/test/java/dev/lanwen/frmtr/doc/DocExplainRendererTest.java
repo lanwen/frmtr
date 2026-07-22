@@ -323,6 +323,53 @@ final class DocExplainRendererTest {
     }
 
     @Test
+    void atIndentAnchoredColumnDrivesTheSameBestFittingChoiceInExplainAsInRender() {
+        // The --explain trace must account for an AtIndent anchor's column exactly as DocRenderer does. A best-fitting
+        // node whose winner turns on the continuation column is placed under three ambient indent layers; anchoring it
+        // to level 0 flips the winner from the fitting three-line fallback (index 1, at the ambient column 6) to the
+        // fewer-lines index 0 (at the anchored column 0). If explain read the ambient column it would record a
+        // different winner than the render emits.
+        Doc fewerLinesWideContinuation =
+            Doc.concat(Doc.text("value ="), Doc.HARD_LINE, Doc.text("configuredTimeoutMs"));
+        Doc moreLinesShortContinuations = Doc.concat(
+            Doc.text("value ="),
+            Doc.HARD_LINE,
+            Doc.text("config"),
+            Doc.HARD_LINE,
+            Doc.text(".timeoutMs()")
+        );
+        Doc node = Doc.bestFitting(List.of(fewerLinesWideContinuation, moreLinesShortContinuations));
+        Doc ambient = Doc.indent(Doc.indent(Doc.indent(node)));
+        Doc anchored = Doc.indent(Doc.indent(Doc.indent(Doc.atIndent(0, node))));
+
+        FormatterOptions options = TestFormatterOptions.forLayout(
+            20,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            false
+        );
+
+        // Without the anchor the ambient column (6) drops index 0; the trace records the three-line fallback (index 1).
+        assertThat(chosenBestFittingIndex(options, ambient)).isEqualTo(1);
+
+        // With atIndent(0) the anchored column (0) lets index 0 fit and win; the trace and the render must agree on it.
+        assertThat(chosenBestFittingIndex(options, anchored)).isEqualTo(0);
+        assertThat(new DocRenderer(options).render(anchored)).isEqualTo(
+            """
+                value =
+                configuredTimeoutMs"""
+        );
+    }
+
+    private static int chosenBestFittingIndex(FormatterOptions options, Doc doc) {
+        return new DocExplainRenderer(options).explain(doc, List.of())
+                .bestFittingDecisions()
+                .getFirst()
+                .chosenIndex();
+    }
+
+    @Test
     void prunesStructuralWrappersButKeepsLabelsAndGroups() {
         Doc doc = Doc.concat(
             Doc.text("prefix "),

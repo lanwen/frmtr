@@ -163,7 +163,7 @@ The combinator vocabulary groups into a handful of concerns:
 |---|---|---|
 | Literal content | `Text`, `Concat` | Emit and join text. |
 | Break opportunities | `Line`, `SoftLine`, `HardLine`, `BreakParent` | Optional vs. required line breaks; `BreakParent` forces the nearest enclosing group to break without printing a newline. |
-| Indentation | `Indent` | Increase indent after breaks. |
+| Indentation | `Indent`, `AtIndent` | `Indent` increases indent after breaks (relative); `AtIndent` renders its subtree at an absolute indent level, discarding the ambient indent so render and every width probe read the same anchored column. |
 | Width decisions | `Group`, `Fill`, `ConditionalGroup`, `BestFitting` | How a subtree chooses flat vs. broken (see below). |
 | Conditional content | `IfBreak` | Different output for flat vs. broken layout, optionally keyed to a named group. |
 | Deferred content | `LineSuffix` | Trailing comments that lay out after the code on their line. |

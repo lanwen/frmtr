@@ -89,6 +89,19 @@ final class DocWidthsTest {
         assertThat(count.overflow()).isEqualTo(INDENT_WIDTH + "continue".length() - 6);
     }
 
+    @Test
+    void measureLineCountReadsTheAnchoredLevelNotTheAmbientIndent() {
+        // The atIndent(1, …) resets the base to an absolute level 1 (column 2), discarding the ambient indent 3 the
+        // walk is entered at (column 6). At line width 10 the 12-wide continuation therefore reaches column 14 and
+        // overflows by 4 — the anchored column, not the ambient one it would reach (column 18, overflow 8).
+        Doc doc = Doc.atIndent(1, Doc.concat(Doc.text("head"), Doc.HARD_LINE, Doc.text("continuation")));
+
+        DocWidths.LineCount count = measurement().measureLineCount(doc, 3, 0, 10);
+
+        assertThat(count.lines()).isEqualTo(1);
+        assertThat(count.overflow()).isEqualTo(INDENT_WIDTH * 1 + "continuation".length() - 10);
+    }
+
     /**
      * The anti-drift guard for #205: the line-count simulation and the real renderer are separate walks, so this pins
      * that they cannot diverge — {@code measureLineCount(doc).lines()} must equal the number of newlines the renderer
@@ -163,6 +176,11 @@ final class DocWidthsTest {
             Doc.text("compactcompactcompact"),
             Doc.concat(Doc.text("wide("), Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("payloadpayload"))), Doc.SOFT_LINE, Doc.text(")"))
         ));
+        // An anchor nested under ambient indents: the walk and the renderer must reset the continuation column to the
+        // absolute level identically, or their newline counts drift once a continuation crosses the width.
+        Doc atIndentDoc = Doc.indent(Doc.indent(
+            Doc.atIndent(0, Doc.concat(Doc.text("head"), Doc.HARD_LINE, Doc.text("anchoredContinuationLine")))
+        ));
 
         List<Doc> docs = List.of(
             argList,
@@ -171,7 +189,8 @@ final class DocWidthsTest {
             ifBreakDoc,
             bestFitting,
             nestedBestFitting,
-            conditional
+            conditional,
+            atIndentDoc
         );
         List<org.junit.jupiter.params.provider.Arguments> cases = new java.util.ArrayList<>();
         // Sweep several line widths (20 is the configured minimum) so both the fitting (flat) and overflowing (broken)

@@ -119,6 +119,7 @@ public final class DocRenderer {
                 // and chose BREAK mode (see DocWidths, where BreakParent yields NO_FIT exactly like HardLine).
             }
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
+            case Doc.AtIndent anchored -> render(anchored.doc(), anchored.level(), mode, widths);
             case Doc.Group group -> {
                 Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
                 if (group.groupId() != null) {
@@ -294,6 +295,7 @@ public final class DocRenderer {
             case Doc.BestFitting bestFitting ->
                 bestFitting.alternatives().stream().anyMatch(DocRenderer::containsHardLine);
             case Doc.Indent indented -> containsHardLine(indented.doc());
+            case Doc.AtIndent anchored -> containsHardLine(anchored.doc());
             case Doc.Group group -> containsHardLine(group.doc());
             case Doc.Label label -> containsHardLine(label.doc());
             case Doc.IfBreak conditional ->

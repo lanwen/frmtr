@@ -97,6 +97,12 @@ final class ChainSegmentPaddingLayout {
                 PaddedDoc padded = linePadded(indented.doc(), padding, lineStart);
                 yield new PaddedDoc(Doc.indent(padded.doc()), padded.lineStart());
             }
+            // An absolute-indent anchor threads padding through its inner doc like a plain indent; only the level base
+            // differs, which is a renderer concern, so the line-start flag passes through unchanged.
+            case Doc.AtIndent anchored -> {
+                PaddedDoc padded = linePadded(anchored.doc(), padding, lineStart);
+                yield new PaddedDoc(Doc.atIndent(anchored.level(), padded.doc()), padded.lineStart());
+            }
             case Doc.Group group -> {
                 PaddedDoc padded = linePadded(group.doc(), padding, lineStart);
                 // Preserve any group identity through re-padding so a dependent IfBreak still resolves this group.

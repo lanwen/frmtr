@@ -65,6 +65,10 @@ public final class DocDebugRenderer {
                 appendLine(out, depth, "Indent");
                 render(indented.doc(), out, depth + 1);
             }
+            case Doc.AtIndent anchored -> {
+                appendLine(out, depth, "AtIndent(" + anchored.level() + ")");
+                render(anchored.doc(), out, depth + 1);
+            }
             case Doc.Group group -> {
                 appendLine(out, depth, "Group" + groupIdSuffix(group.groupId()));
                 render(group.doc(), out, depth + 1);

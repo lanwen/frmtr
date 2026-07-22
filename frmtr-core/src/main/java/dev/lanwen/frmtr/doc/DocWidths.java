@@ -227,6 +227,8 @@ final class DocWidths {
                 case Doc.HardLine ignored -> NO_FIT;
                 case Doc.BreakParent ignored -> NO_FIT;
                 case Doc.Indent indented -> measure(indented.doc(), remaining);
+                // Flat width is indent-independent, so an absolute-indent anchor is a pure passthrough here.
+                case Doc.AtIndent anchored -> measure(anchored.doc(), remaining);
                 case Doc.Group group -> measure(group.doc(), remaining);
                 case Doc.IfBreak conditional -> measure(conditional.flatDoc(), remaining);
                 case Doc.Label label -> measure(label.doc(), remaining);
@@ -324,6 +326,8 @@ final class DocWidths {
                         // Emits nothing and advances no column, exactly like DocRenderer.
                     }
                     case Doc.Indent indented -> walk(indented.doc(), indent + 1, mode);
+                    // Reset to the absolute level so the ranked column matches the column the renderer will emit.
+                    case Doc.AtIndent anchored -> walk(anchored.doc(), anchored.level(), mode);
                     case Doc.Group group -> {
                         LineMode next = fits(group.doc(), lineWidth - column) ? LineMode.FLAT : LineMode.BREAK;
                         if (group.groupId() != null) {

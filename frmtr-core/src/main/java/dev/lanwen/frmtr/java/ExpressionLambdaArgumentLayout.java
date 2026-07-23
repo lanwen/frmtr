@@ -157,6 +157,15 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     /**
+     * Builds the source-neutral arrow-hug fan for an expression-lambda method-call-chain body ({@code row -> row.window()}⏎
+     * {@code .equals(w)}) hugging {@code firstLine} and dedenting the close — the {@link #huggableExpressionLambdaBody}
+     * shape exposed directly so a fanned chain selector can offer it as its always-broken fallback. Empty when not fannable.
+     */
+    Optional<Doc> huggedLambdaBodyChainFan(String firstLine, MethodCallExpr chainBody) {
+        return chainFan.huggedLambdaBodyChain(firstLine, chainBody);
+    }
+
+    /**
      * Column-carrying overload of {@link #methodCallBodyWithOpener(String, MethodCallExpr)}.
      *
      * <p>{@code columnWidth} carries the true segment column the chain-segment call-site threads. The opener-fit
@@ -1479,5 +1488,15 @@ final class ExpressionLambdaArgumentLayout {
     @FunctionalInterface
     interface ExpressionLambdaLogicalBinaryBodyOpenerHug {
         Optional<Doc> render(String prefix, MethodCallExpr expression, ToIntFunction<String> columnWidth);
+    }
+
+    /**
+     * Cross-printer boundary for the lambda-body chain fan: builds the source-neutral arrow-hug fan of a selector's
+     * method-call-CHAIN body ({@code row -> row.window()}⏎{@code .equals(w)}). The chain printer offers it as the
+     * always-broken {@code conditionalGroup} fallback; the caller owns the flat arm and the flat-vs-fan ranking.
+     */
+    @FunctionalInterface
+    interface ExpressionLambdaMethodCallChainBodyFan {
+        Optional<Doc> render(String firstLine, MethodCallExpr chainBody);
     }
 }

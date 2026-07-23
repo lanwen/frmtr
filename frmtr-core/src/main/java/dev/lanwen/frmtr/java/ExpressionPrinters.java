@@ -253,6 +253,7 @@ final class ExpressionPrinters {
             lambdas::expressionLambdaMethodCallBodyOpener,
             lambdas::expressionLambdaObjectCreationBodyOpener,
             lambdas::expressionLambdaLogicalBinaryBodyOpenerHug,
+            lambdas::expressionLambdaMethodCallChainBodyFan,
             textBlocks::renderUnformattedTextBlock,
             this::brokenArgument
         );

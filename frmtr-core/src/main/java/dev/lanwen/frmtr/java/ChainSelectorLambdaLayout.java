@@ -74,6 +74,8 @@ final class ChainSelectorLambdaLayout {
 
     private final BrokenMethodCallSegment brokenMethodCallSegment;
 
+    private final ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallChainBodyFan expressionLambdaMethodCallChainBodyFan;
+
     ChainSelectorLambdaLayout(
             CommentTracker comments,
             SourceShapePolicy sourceShapePolicy,
@@ -92,7 +94,8 @@ final class ChainSelectorLambdaLayout {
             Predicate<MethodCallExpr> compactMethodCallChainSegmentCanStayFlat,
             BiFunction<Doc, MethodCallChainTail, Doc> appendFinalSegmentSuffix,
             BiFunction<MethodCallExpr, ToIntFunction<String>, ToIntFunction<String>> fannedSelectorColumnWidth,
-            BrokenMethodCallSegment brokenMethodCallSegment
+            BrokenMethodCallSegment brokenMethodCallSegment,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallChainBodyFan expressionLambdaMethodCallChainBodyFan
     ) {
         this.comments = comments;
         this.sourceShapePolicy = sourceShapePolicy;
@@ -112,6 +115,7 @@ final class ChainSelectorLambdaLayout {
         this.appendFinalSegmentSuffix = appendFinalSegmentSuffix;
         this.fannedSelectorColumnWidth = fannedSelectorColumnWidth;
         this.brokenMethodCallSegment = brokenMethodCallSegment;
+        this.expressionLambdaMethodCallChainBodyFan = expressionLambdaMethodCallChainBodyFan;
     }
 
     /**
@@ -489,22 +493,19 @@ final class ChainSelectorLambdaLayout {
             // onto its own line and then oscillates flat⇄broken across passes). Instead build the source-neutral opener-hug
             // arm DIRECTLY through {@link #singleCallBodyOpenerHugOrBrokenSegment} and let the enclosing {@code conditionalGroup}
             // decide flat-vs-broken at the true live column: {@code flatBody} wins when the flat selector fits, the always-broken
-            // opener hug is the fallback when it overflows. Scoped to a single-call-safe, fanned selector so it never reaches a
-            // nested-lambda / chain body the direct opener hug cannot render (those still yield). This is the SAME direct opener
-            // the standalone lambda-body path routes through, so both agree on the width verdict at the same column.
+            // opener hug is the fallback when it overflows, and both passes agree on the width verdict at the same column.
+            // A withheld single-call-safe body builds that opener hug; a withheld name/field-rooted CHAIN body builds the
+            // arrow-hug fan through {@link #withheldChainBodyFan}. Any body neither claims (or a non-fanned selector) yields.
             if (hug.isEmpty()) {
-                if (
-                    !segmentOnOwnLine
-                    || !bodyIsSingleCallSafeForBrokenSegment(bodyChain)
-                    || !bodyOpenerHugArgumentsRenderFlatSafely(bodyChain)
-                ) {
+                Optional<Doc> directBrokenBody =
+                    segmentOnOwnLine && bodyIsSingleCallSafeForBrokenSegment(bodyChain)
+                            && bodyOpenerHugArgumentsRenderFlatSafely(bodyChain)
+                        ? singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyChain, finalSegmentSuffix, compactSegmentWidth)
+                        : withheldChainBodyFan(prefix, lambdaExpr, bodyChain, finalSegmentSuffix, segmentOnOwnLine);
+                if (directBrokenBody.isEmpty()) {
                     return Optional.empty();
                 }
-                Optional<Doc> directOpener = singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyChain, finalSegmentSuffix, compactSegmentWidth);
-                if (directOpener.isEmpty()) {
-                    return Optional.empty();
-                }
-                hugBody = directOpener.orElseThrow();
+                hugBody = directBrokenBody.orElseThrow();
             } else {
                 Doc hugDoc = hug.orElseThrow();
                 hugBody = DocRenderer.containsHardLine(hugDoc) || !bodyIsSingleCallSafeForBrokenSegment(bodyChain)
@@ -747,6 +748,52 @@ final class ChainSelectorLambdaLayout {
                         bodyOpener,
                         Doc.text(")" + finalSegmentSuffix)
                 ));
+    }
+
+    /**
+     * Builds the always-broken arrow-hug fan for a fanned selector whose sole argument is a CHAIN-body expression lambda
+     * the shared renderer withheld ({@code .filter(row -> row.window()}⏎{@code .equals(w)}⏎{@code )}): its flat-fit probe
+     * under-counts the selector's real fanned column and drops the body flat over-width. Offers the fan directly (via
+     * {@link ExpressionLambdaArgumentLayout#huggedLambdaBodyChainFan}) as the {@code conditionalGroup} fallback the
+     * enclosing group renders only when the flat selector overflows — width-safe-last and a fixpoint (pure AST).
+     *
+     * <p>Scoped to a FANNED selector whose body is a name/field/type-rooted chain; yields otherwise.
+     */
+    private Optional<Doc> withheldChainBodyFan(
+            String prefix,
+            LambdaExpr lambdaExpr,
+            MethodCallExpr bodyChain,
+            MethodCallChainTail finalSegmentSuffix,
+            boolean segmentOnOwnLine
+    ) {
+        if (!segmentOnOwnLine || !chainBodyFansUnderArrow(bodyChain)) {
+            return Optional.empty();
+        }
+        String firstLine = prefix + "(" + lambdaParameters.apply(lambdaExpr) + " ->";
+        return expressionLambdaMethodCallChainBodyFan.render(firstLine, bodyChain)
+                .filter(DocRenderer::containsHardLine)
+                .map(fan -> Doc.concat(fan, finalSegmentSuffix.doc()));
+    }
+
+    /**
+     * Reports whether a lambda-body chain hugs the arrow and fans one selector per line: its scope is a call (a selector
+     * sits below the root), its innermost receiver is scoped (a name/field/type-rooted chain), and it is CLEAN (no nested
+     * lambda argument or contained comment). The clean gate is a hazard: a chain carrying a block/expression-lambda
+     * selector forces its own multi-line layout through the generic path, so force-fanning it here would only re-indent it.
+     */
+    private boolean chainBodyFansUnderArrow(MethodCallExpr bodyChain) {
+        if (
+            bodyChain.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()
+            || !bodyChain.findAll(LambdaExpr.class).isEmpty()
+            || sourceShapePolicy.hasContainedComments(bodyChain)
+        ) {
+            return false;
+        }
+        MethodCallExpr innermost = bodyChain;
+        while (innermost.getScope().filter(MethodCallExpr.class::isInstance).isPresent()) {
+            innermost = (MethodCallExpr) innermost.getScope().orElseThrow();
+        }
+        return innermost.getScope().isPresent();
     }
 
     /**

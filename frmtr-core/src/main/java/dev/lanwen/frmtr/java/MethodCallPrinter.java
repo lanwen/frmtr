@@ -110,6 +110,7 @@ final class MethodCallPrinter {
             ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener,
             ExpressionLambdaArgumentLayout.ExpressionLambdaObjectCreationBodyOpener expressionLambdaObjectCreationBodyOpener,
             ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallChainBodyFan expressionLambdaMethodCallChainBodyFan,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer
     ) {
@@ -141,7 +142,8 @@ final class MethodCallPrinter {
             lambdaParameters,
             expressionLambdaMethodCallBodyOpener,
             expressionLambdaObjectCreationBodyOpener,
-            expressionLambdaLogicalBinaryBodyOpenerHug
+            expressionLambdaLogicalBinaryBodyOpenerHug,
+            expressionLambdaMethodCallChainBodyFan
         );
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;

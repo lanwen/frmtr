@@ -4,8 +4,8 @@ final class LambdaBodyChainDottedFan {
 
     void fansOverWidthBareRootChainByDots(RouteVerifier verifier) {
         verifier.assertEachRoute(handler -> assertThat(handler)
-                .extracting(HandlerConfig::identifier)
-                .containsOnly("primaryValue")
+            .extracting(HandlerConfig::identifier)
+            .containsOnly("primaryValue")
         );
     }
 
@@ -15,8 +15,8 @@ final class LambdaBodyChainDottedFan {
 
     void fansScopedRootChainInCanonicalFan(RouteVerifier verifier) {
         verifier.assertEachRoute(handler -> journalWriter.atInfo()
-                .addValue("handler", handler.identifier())
-                .log("checked handler")
+            .addValue("handler", handler.identifier())
+            .log("checked handler")
         );
     }
 
@@ -24,8 +24,8 @@ final class LambdaBodyChainDottedFan {
         return listeners.entrySet()
                 .stream()
                 .map(listener -> new VotersEndpoint()
-                        .setName(listener.getKey().value())
-                        .setHost(listener.getValue().getHostString())
+                    .setName(listener.getKey().value())
+                    .setHost(listener.getValue().getHostString())
                 )
                 .collect(Collectors.toList());
     }
@@ -35,8 +35,8 @@ final class LambdaBodyChainDottedFan {
                 .entrySet()
                 .stream()
                 .filter(entry -> entry.getKey()
-                        .description()
-                        .contains("The number of active connections for this listener")
+                    .description()
+                    .contains("The number of active connections for this listener")
                 )
                 .map(Map.Entry::getValue)
                 .collect(Collectors.toList());

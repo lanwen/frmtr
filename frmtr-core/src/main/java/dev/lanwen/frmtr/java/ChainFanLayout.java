@@ -95,6 +95,10 @@ final class ChainFanLayout {
 
     private final BiFunction<Expression, List<Doc>, Doc> rootChainContinuation;
 
+    private final Function<Doc, Doc> lambdaBodyChainContinuation;
+
+    private final BiFunction<Expression, List<Doc>, Doc> lambdaBodyRootChainContinuation;
+
     private final BiFunction<List<MethodCallExpr>, MethodCallChainTail, List<Doc>> methodCallChainSegments;
 
     private final RootLineWidth rootLineWidth;
@@ -143,6 +147,8 @@ final class ChainFanLayout {
             MethodCallArgumentList methodCallArgumentList,
             Function<Doc, Doc> chainContinuation,
             BiFunction<Expression, List<Doc>, Doc> rootChainContinuation,
+            Function<Doc, Doc> lambdaBodyChainContinuation,
+            BiFunction<Expression, List<Doc>, Doc> lambdaBodyRootChainContinuation,
             BiFunction<List<MethodCallExpr>, MethodCallChainTail, List<Doc>> methodCallChainSegments,
             RootLineWidth rootLineWidth,
             Function<Expression, Optional<String>> compactSingleLineRoot
@@ -168,6 +174,8 @@ final class ChainFanLayout {
         this.methodCallArgumentList = methodCallArgumentList;
         this.chainContinuation = chainContinuation;
         this.rootChainContinuation = rootChainContinuation;
+        this.lambdaBodyChainContinuation = lambdaBodyChainContinuation;
+        this.lambdaBodyRootChainContinuation = lambdaBodyRootChainContinuation;
         this.methodCallChainSegments = methodCallChainSegments;
         this.rootLineWidth = rootLineWidth;
         this.compactSingleLineRoot = compactSingleLineRoot;
@@ -534,6 +542,21 @@ final class ChainFanLayout {
         LayoutContext layout
     ) {}
 
+    // A hugged lambda body threads its {@code param -> } header as the chain's leftEdgePrefix, so an arrow-terminated
+    // prefix marks a fan sitting in lambda-body position. Such a fan uses the single-indent continuation (biome-style
+    // +1 per nested hop) so a deep reactive pipeline stays within width; every other fan keeps the ordinary +2.
+    private boolean fanHugsLambdaBody(ChainFanCandidate candidate) {
+        return candidate.layout().leftEdgePrefix().stripTrailing().endsWith("->");
+    }
+
+    private Doc chainContinuationFor(ChainFanCandidate candidate, Doc doc) {
+        return (fanHugsLambdaBody(candidate) ? lambdaBodyChainContinuation : chainContinuation).apply(doc);
+    }
+
+    private Doc rootChainContinuationFor(ChainFanCandidate candidate, Expression root, List<Doc> segments) {
+        return (fanHugsLambdaBody(candidate) ? lambdaBodyRootChainContinuation : rootChainContinuation).apply(root, segments);
+    }
+
     // Factory / type-like root seam: a {@code promotesFirstCall} root (an uppercase {@code NameExpr} or
     // {@code FieldAccessExpr} type qualifier, e.g. {@code ClusterConfig}) with two or more calls folds its FIRST call —
     // the factory invocation ({@code .defaultBuilder()}) — onto the root line and fans only the remaining selectors,
@@ -579,7 +602,7 @@ final class ChainFanLayout {
         List<MethodCallExpr> selectors = new ArrayList<>(calls.subList(1, calls.size()));
         return Doc.concat(
             promotedFactoryRootDoc(factoryCall),
-            rootChainContinuation.apply(factoryCall, methodCallChainSegments.apply(selectors, candidate.tail()))
+            rootChainContinuationFor(candidate, factoryCall, methodCallChainSegments.apply(selectors, candidate.tail()))
         );
     }
 
@@ -614,7 +637,8 @@ final class ChainFanLayout {
     private Doc fanSingleSelectorLayout(ChainFanCandidate candidate) {
         return Doc.concat(
             fanRootDoc(candidate.root()),
-            chainContinuation.apply(
+            chainContinuationFor(
+                candidate,
                 methodCallChainSegments.apply(candidate.calls(), candidate.tail()).getFirst()
             )
         );
@@ -699,7 +723,8 @@ final class ChainFanLayout {
         Doc attached = Doc.concat(
             fanRootDoc(candidate.root()),
             attachedFirstSelectorDoc(calls.getFirst()),
-            chainContinuation.apply(
+            chainContinuationFor(
+                candidate,
                 Doc.join(Doc.HARD_LINE, methodCallChainSegments.apply(fannedSelectors, candidate.tail()))
             )
         );
@@ -730,7 +755,7 @@ final class ChainFanLayout {
     private Doc fanSelectorsLayout(ChainFanCandidate candidate) {
         return Doc.concat(
             fanRootDoc(candidate.root()),
-            rootChainContinuation.apply(candidate.root(), methodCallChainSegments.apply(candidate.calls(), candidate.tail()))
+            rootChainContinuationFor(candidate, candidate.root(), methodCallChainSegments.apply(candidate.calls(), candidate.tail()))
         );
     }
 

@@ -285,6 +285,8 @@ final class MethodCallChainPrinter {
             calls::methodCallArgumentList,
             this::chainContinuation,
             this::chainContinuation,
+            this::lambdaBodyChainContinuation,
+            this::lambdaBodyChainContinuation,
             this::methodCallChainSegments,
             this::rootLineWidth,
             this::compactSingleLineRoot
@@ -1870,7 +1872,25 @@ final class MethodCallChainPrinter {
         return Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, doc)));
     }
 
+    // A lambda-body fan costs ONE indent level per nested hop, not two, so a deeply-nested reactive pipeline
+    // ({@code .flatMap(x -> receiver.chain().flatMap(y -> …))}) does not accumulate +8 per level and run its
+    // innermost selectors off the right edge. Ordinary (non-lambda-body) chains keep {@link #chainContinuation}'s +2.
+    private Doc lambdaBodyChainContinuation(Doc doc) {
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, doc));
+    }
+
     private Doc chainContinuation(Expression root, List<Doc> segments) {
+        return rootChainContinuation(root, segments, this::chainContinuation);
+    }
+
+    private Doc lambdaBodyChainContinuation(Expression root, List<Doc> segments) {
+        return rootChainContinuation(root, segments, this::lambdaBodyChainContinuation);
+    }
+
+    // Root-anchored continuation shared by both indent variants: a short root (shorter than one indent unit) pads its
+    // selectors to align under it, which is already a single indent; a normal root defers to {@code continuation}, the
+    // only place the lambda-body +1 and the ordinary +2 differ.
+    private Doc rootChainContinuation(Expression root, List<Doc> segments, Function<Doc, Doc> continuation) {
         Optional<String> compactRoot = compactSingleLineRoot(root);
         if (compactRoot.filter(rootText -> rootText.length() < options.indentUnit().length()).isPresent()) {
             String padding = " ".repeat(Math.max(0, compactRoot.orElseThrow().length() - 1));
@@ -1884,7 +1904,7 @@ final class MethodCallChainPrinter {
                 )
             );
         }
-        return chainContinuation(Doc.join(Doc.HARD_LINE, segments));
+        return continuation.apply(Doc.join(Doc.HARD_LINE, segments));
     }
 
     private Optional<String> compactSingleLineRoot(Expression root) {

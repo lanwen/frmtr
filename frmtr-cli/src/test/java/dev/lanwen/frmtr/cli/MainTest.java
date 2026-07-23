@@ -698,25 +698,22 @@ final class MainTest {
     void renderIndentationMarksChainContinuationLinesWithVerticalEllipsis() {
         String source =
             "class Verify{void run(RouteVerifier verifier){"
-                + "verifier.assertEachRoute(handler->assertThat(handler)"
-                + ".extracting(HandlerConfig::identifier).containsOnly(\"primaryValue\"));}}";
+                + "verifier.assertActiveRoutes().extractingIdentifiers().containsOnlyPrimaryValue();}}";
         Result withoutFlag = run(Path.of("."), source, "--stdin");
         Result withFlag = run(Path.of("."), source, "--stdin", "--render-indentation");
 
         assertThat(withFlag.exitCode()).isZero();
         // The broken method-chain selectors are continuations aligned with the statement at column 8: each renders as
         // the statement's 8 blank columns, then the vertical ellipsis, then dots for the rest of the 8-column offset —
-        // on every continuation line, even the consecutive one. The block indents above stay delta dots, and the
-        // closing ");" dedent is plain spaces.
+        // on every continuation line, even the consecutive one. The block indents above stay delta dots.
         assertThat(withFlag.out()).isEqualTo(
             """
                 class Verify {
 
                 ····void run(RouteVerifier verifier) {
-                    ····verifier.assertEachRoute(handler -> assertThat(handler)
-                        ⋮·······.extracting(HandlerConfig::identifier)
-                        ⋮·······.containsOnly("primaryValue")
-                        );
+                    ····verifier.assertActiveRoutes()
+                        ⋮·······.extractingIdentifiers()
+                        ⋮·······.containsOnlyPrimaryValue();
                     }
                 }
                 """

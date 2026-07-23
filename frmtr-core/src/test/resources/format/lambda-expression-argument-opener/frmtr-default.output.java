@@ -299,20 +299,20 @@ final class LambdaExpressionArgumentOpener {
         return projectionRepository.fetchRows(tenantId)
                 .collectList()
                 .map(projectedRows -> accountingWindows.stream()
-                        .map(accountingWindow -> {
-                            return projectedRows.stream()
-                                    .filter(
-                                        projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
-                                    )
-                                    .findFirst()
-                                    .orElseGet(() -> ProjectedWindowUsageSnapshot.builder()
-                                            .tenantId(tenantId)
-                                            .accountingWindow(accountingWindow)
-                                            .usage(UsageCount.EMPTY)
-                                            .build()
-                                    );
-                        })
-                        .collect(Collectors.toList())
+                    .map(accountingWindow -> {
+                        return projectedRows.stream()
+                                .filter(
+                                    projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
+                                )
+                                .findFirst()
+                                .orElseGet(() -> ProjectedWindowUsageSnapshot.builder()
+                                        .tenantId(tenantId)
+                                        .accountingWindow(accountingWindow)
+                                        .usage(UsageCount.EMPTY)
+                                        .build()
+                                );
+                    })
+                    .collect(Collectors.toList())
                 );
     }
 

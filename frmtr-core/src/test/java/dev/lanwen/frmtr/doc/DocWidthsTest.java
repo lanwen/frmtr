@@ -59,6 +59,98 @@ final class DocWidthsTest {
         assertThat(widths.fits(shared, "prefix-suffix".length())).isTrue();
     }
 
+    /**
+     * The ranking cache must not change any answer: a repeated ranking of the same node in the same context returns the
+     * cached index, and a cold {@link DocWidths.Measurement} computing it from scratch returns the identical index at
+     * every nesting depth. Pins that memoization is a pure speedup — removing the old depth cap only lets the exact
+     * ranking reach deeper, never a different verdict.
+     */
+    @Test
+    void chooseBestFittingIsIdenticalCachedRepeatedAndComputedFreshAtEveryDepth() {
+        // Inner node: a fanning-argument flat arm vs a fixed two-line broken arm — the broken arm wins on line count.
+        Doc innerFlat = Doc.group(
+            Doc.concat(
+                Doc.text("wrap("),
+                Doc.indent(Doc.concat(
+                    Doc.SOFT_LINE,
+                    Doc.text("firstArgument"),
+                    Doc.text(","),
+                    Doc.LINE,
+                    Doc.text("secondArgument")
+                )),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc innerBroken = Doc.concat(Doc.text("chosen"), Doc.HARD_LINE, Doc.text(".tail"));
+
+        // Nest the same inner node inside many singleton best-fitting wrappers so it is reached at an identical column
+        // whatever the depth, then rank it directly and confirm the verdict is stable across depth, repeat, and cold runs.
+        int reference = -1;
+        for (int wrappers : new int[] {0, 1, 4, 16}) {
+            Doc.BestFitting inner = new Doc.BestFitting(List.of(innerFlat, innerBroken), new int[0]);
+            Doc nested = inner;
+            for (int i = 0; i < wrappers; i++) {
+                nested = new Doc.BestFitting(List.of(nested), new int[0]);
+            }
+
+            DocWidths.Measurement warm = measurement();
+            // Rank the whole nested tree once so the cache is populated for the inner node at its true column.
+            warm.measureLineCount(nested, 0, 0, 20);
+            int cachedFirst = warm.chooseBestFitting(inner, 0, 0, 20);
+            int cachedRepeat = warm.chooseBestFitting(inner, 0, 0, 20);
+            int cold = measurement().chooseBestFitting(inner, 0, 0, 20);
+
+            assertThat(cachedFirst).as("cached==repeat at %d wrappers", wrappers).isEqualTo(cachedRepeat);
+            assertThat(cold).as("cold==cached at %d wrappers", wrappers).isEqualTo(cachedFirst);
+            // The broken arm (index 1) is the exact winner and does not drift with nesting depth.
+            assertThat(cold).as("winner is depth-invariant").isEqualTo(1);
+            if (reference < 0) {
+                reference = cold;
+            }
+            assertThat(cold).isEqualTo(reference);
+        }
+    }
+
+    /**
+     * The cache is keyed per (node, indent, start column), not per node: the SAME best-fitting node ranked at two
+     * different start columns within one {@link DocWidths.Measurement} must yield each context's own correct winner,
+     * and each cached answer must match a cold recompute for that context. A single-line flat arm that fits near column
+     * 0 but overflows deep into the line flips the winner from the flat arm to the always-fitting broken arm.
+     */
+    @Test
+    void chooseBestFittingKeysPerContextNotPerNode() {
+        Doc flatArm = Doc.text("resolveHandle().annotateSource().dedupe()"); // 41 wide
+        Doc brokenArm = Doc.concat(Doc.text("resolveHandle()"), Doc.HARD_LINE, Doc.text(".annotateSource()"));
+        Doc.BestFitting node = new Doc.BestFitting(List.of(flatArm, brokenArm), new int[0]);
+        int lineWidth = 60;
+
+        // Independently: near column 0 the 41-wide flat arm fits (0 lines, 0 overflow) and beats the 1-line broken arm;
+        // starting at column 40 it reaches column 81 and overflows, so the fitting broken arm wins instead.
+        assertThat(flatFitsAt(node, 0, lineWidth)).as("flat arm fits near column 0").isTrue();
+        assertThat(flatFitsAt(node, 40, lineWidth)).as("flat arm overflows deep in the line").isFalse();
+
+        DocWidths.Measurement shared = measurement();
+        int nearStart = shared.chooseBestFitting(node, 0, 0, lineWidth);
+        int deepStart = shared.chooseBestFitting(node, 0, 40, lineWidth);
+
+        assertThat(nearStart).as("flat arm wins near column 0").isEqualTo(0);
+        assertThat(deepStart).as("broken arm wins deep in the line").isEqualTo(1);
+
+        // Each context's cached answer (second call, same Measurement) equals a cold recompute for that same context.
+        assertThat(shared.chooseBestFitting(node, 0, 0, lineWidth)).isEqualTo(nearStart);
+        assertThat(shared.chooseBestFitting(node, 0, 40, lineWidth)).isEqualTo(deepStart);
+        assertThat(measurement().chooseBestFitting(node, 0, 0, lineWidth)).isEqualTo(nearStart);
+        assertThat(measurement().chooseBestFitting(node, 0, 40, lineWidth)).isEqualTo(deepStart);
+    }
+
+    /** Whether the node's first (flat) alternative fits without overflow when ranked at {@code startColumn}. */
+    private static boolean flatFitsAt(Doc.BestFitting node, int startColumn, int lineWidth) {
+        return measurement()
+            .measureLineCount(node.alternatives().getFirst(), 0, startColumn, lineWidth)
+            .fits();
+    }
+
     @Test
     void measureLineCountCountsNewlinesAndOverflowAtEachBreakAndAtEnd() {
         // Two hard breaks make three lines; the middle line "0123456789ABCDE" is 15 wide and the last "tail" is 4 wide.

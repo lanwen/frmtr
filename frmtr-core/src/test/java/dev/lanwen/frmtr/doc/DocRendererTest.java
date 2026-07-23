@@ -562,9 +562,9 @@ final class DocRendererTest {
     }
 
     /**
-     * Wraps a two-alternative best-fitting node in {@code wrappers} singleton best-fitting nodes. Each singleton still
-     * advances the best-fitting depth by one when its (only) winner is rendered, so the inner node is evaluated at depth
-     * equal to {@code wrappers} — a precise, deterministic way to place it just inside or just past the depth bound.
+     * Wraps a two-alternative best-fitting node in {@code wrappers} singleton best-fitting nodes, nesting the inner node
+     * that many best-fitting levels deep. A singleton reaches its only child at the same column, so the inner node is
+     * ranked at an identical context whatever the wrapper count — a deterministic way to probe ranking at any depth.
      */
     private static Doc bestFittingAtDepth(int wrappers, Doc innerFlatAlt, Doc innerBrokenAlt) {
         Doc node = Doc.bestFitting(java.util.List.of(innerFlatAlt, innerBrokenAlt));
@@ -575,12 +575,11 @@ final class DocRendererTest {
     }
 
     @Test
-    void bestFittingWithinDepthBoundRanksTheInnerNodeButBeyondItCollapsesToTheFirstAlternative() {
+    void nestedBestFittingIsRankedAtEveryDepthWithNoCollapseBound() {
         // The inner node's flattest alternative is a breakable argument group: it fans out to four lines when it does
-        // not fit the 10-column width. Its broken alternative is a fixed two-line layout. When the inner node is ranked,
-        // the two-line broken shape wins on line count over the four-line fan-out. When the node is past the depth bound
-        // it is not ranked and collapses to its first alternative, which then renders in its (multi-line) fanned-out
-        // form — a visibly different layout containing the "wrap(" header.
+        // not fit the 20-column width. Its broken alternative is a fixed two-line layout. Because ranking has no depth
+        // bound, the inner node is ranked at its true column however deep it nests, and the two-line broken shape wins on
+        // line count over the four-line fan-out at every depth — nothing ever collapses to the fanned-out "wrap(" header.
         Doc flatAlt = Doc.group(
             Doc.concat(
                 Doc.text("wrap("),
@@ -600,19 +599,15 @@ final class DocRendererTest {
         );
         Doc brokenAlt = Doc.concat(Doc.text("chosen"), Doc.HARD_LINE, Doc.text(".tail"));
 
-        // MAX_BEST_FITTING_DEPTH is 4. With 3 singleton wrappers the inner node sits at depth 3 (< 4) and is ranked, so
-        // the two-line broken alternative wins over the multi-line fan-out.
-        assertThat(renderer(20).render(bestFittingAtDepth(3, flatAlt, brokenAlt))).isEqualTo(
-            """
-                chosen
-                .tail"""
-        );
-
-        // With 4 singleton wrappers the inner node sits at depth 4 (>= 4): ranking stops, it collapses to the flat first
-        // alternative, and that group renders fanned out — the "wrap(" header proves the flat alternative was taken.
-        String collapsed = renderer(20).render(bestFittingAtDepth(4, flatAlt, brokenAlt));
-        assertThat(collapsed).startsWith("wrap(");
-        assertThat(collapsed).doesNotContain("chosen");
+        for (int depth : new int[] {3, 4, 8, 16}) {
+            assertThat(renderer(20).render(bestFittingAtDepth(depth, flatAlt, brokenAlt)))
+                .as("nesting depth %d", depth)
+                .isEqualTo(
+                    """
+                        chosen
+                        .tail"""
+                );
+        }
     }
 
     @Test

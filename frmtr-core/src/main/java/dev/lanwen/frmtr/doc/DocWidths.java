@@ -1,7 +1,9 @@
 package dev.lanwen.frmtr.doc;
 
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Single width authority for document layout: measures the flat-mode width of a {@link Doc} and answers whether it fits
@@ -26,15 +28,6 @@ final class DocWidths {
      */
     static final int MAX_BEST_FITTING_ALTERNATIVES = 8;
 
-    /**
-     * Maximum nesting depth at which a {@link Doc.BestFitting} is ranked (rule D16). A best-fitting node reached while
-     * ranking or rendering an outer one is at the next depth; once depth reaches this bound the inner node stops being
-     * ranked and collapses to its first (flattest) alternative, bounding total exploration to keep the walk linear.
-     * The renderer and the line-count simulation apply the identical bound through the shared {@link #chooseBestFitting}
-     * decision so the alternative rendered for real is always the alternative the ranking measured.
-     */
-    static final int MAX_BEST_FITTING_DEPTH = 4;
-
     /** Internal sentinel for bounded measurements that stopped after overflow before finding a complete width. */
     private static final int OVERFLOW = Integer.MIN_VALUE + 1;
 
@@ -56,6 +49,15 @@ final class DocWidths {
     static final class Measurement {
 
         private final IdentityHashMap<Doc, Integer> flatWidths = new IdentityHashMap<>();
+
+        /**
+         * Memoizes each {@link Doc.BestFitting} ranking by node identity and the (indent, start column) it is ranked at,
+         * so the same node in the same context is ranked once even when many enclosing alternatives reach it. Identity
+         * keying avoids a deep value-equality traversal of the node's Doc subtree and is exact because the ranking is a
+         * pure function of node identity plus measurement context within one render; created fresh per {@link
+         * Measurement} (one per render) so choices never leak across renders.
+         */
+        private final IdentityHashMap<Doc.BestFitting, Map<Long, Integer>> bestFittingChoices = new IdentityHashMap<>();
 
         /**
          * Width of one indentation unit in columns, used only by the {@link #measureLineCount} simulation to reset the
@@ -109,34 +111,44 @@ final class DocWidths {
          * simulation both consult, so the alternative rendered for real is always the one the ranking measured — one
          * function, not two copies of the tie-break, so they cannot drift.
          *
-         * <p>Only the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} alternatives are measured, and beyond
-         * {@link #MAX_BEST_FITTING_DEPTH} nested levels the node collapses to its first (flattest) alternative, keeping
-         * exploration linear. The layered D16 tie-break: fit (no line over width) beats any overflow regardless of line
-         * count; among fitting candidates a strictly higher {@code priority} wins; then strictly fewer lines, then
-         * strictly less overflow. Equal on all keys keeps the earlier (flatter) alternative, which makes the choice
-         * deterministic and the reformat a fixpoint. See {@link #betterThan(LineCount, int, LineCount, int)}.
+         * <p>Only the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} alternatives are measured. Nested
+         * best-fitting nodes are ranked exactly, at their own column, however deep they nest; the ranking of a given node
+         * at a given (indent, start column) is memoized in {@link #bestFittingChoices} so this stays affordable — the
+         * same context is ranked once, not re-explored once per enclosing alternative. The layered D16 tie-break: fit (no
+         * line over width) beats any overflow regardless of line count; among fitting candidates a strictly higher
+         * {@code priority} wins; then strictly fewer lines, then strictly less overflow. Equal on all keys keeps the
+         * earlier (flatter) alternative, which makes the choice deterministic and the reformat a fixpoint. See
+         * {@link #betterThan(LineCount, int, LineCount, int)}.
          *
-         * @param priorities the per-alternative priorities (same order as {@code alternatives}); higher wins among
-         *     fitting candidates. All-equal (e.g. all-zero) reduces the ranking to the fewest-lines {@link LineCount}
-         *     metric.
-         * @param depth the best-fitting nesting depth of this node (0 for a top-level node), used to apply the bound
+         * <p>The ambient render mode is not part of the key: a best-fitting node is always ranked and rendered in break
+         * mode (each candidate is measured, and the winner rendered, in break mode), and {@code lineWidth} is constant
+         * across a render, so identity plus (indent, start column) fully determines the choice.
          */
-        int chooseBestFitting(List<Doc> alternatives, int[] priorities, int indent, int startColumn, int lineWidth, int depth) {
-            if (depth >= MAX_BEST_FITTING_DEPTH || alternatives.size() == 1) {
+        int chooseBestFitting(Doc.BestFitting bestFitting, int indent, int startColumn, int lineWidth) {
+            List<Doc> alternatives = bestFitting.alternatives();
+            if (alternatives.size() == 1) {
                 return 0;
             }
+            Map<Long, Integer> byContext = bestFittingChoices.computeIfAbsent(bestFitting, ignored -> new HashMap<>());
+            long contextKey = (((long) indent & 0xFFFFFFFFL) << 32) | (startColumn & 0xFFFFFFFFL);
+            Integer cached = byContext.get(contextKey);
+            if (cached != null) {
+                return cached;
+            }
+            int[] priorities = bestFitting.priorities();
             int limit = Math.min(alternatives.size(), MAX_BEST_FITTING_ALTERNATIVES);
             int bestIndex = 0;
             LineCount best = null;
             for (int i = 0; i < limit; i++) {
-                // Rank each candidate as it would render at this column, resolving any nested best-fitting nodes at the
-                // next depth so the metric matches what the winner will actually emit.
-                LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth, depth + 1);
+                // Rank each candidate as it would render at this column, resolving any nested best-fitting nodes at their
+                // own column so the metric matches what the winner will actually emit.
+                LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth);
                 if (best == null || betterThan(candidate, priorities[i], best, priorities[bestIndex])) {
                     best = candidate;
                     bestIndex = i;
                 }
             }
+            byContext.put(contextKey, bestIndex);
             return bestIndex;
         }
 
@@ -183,17 +195,7 @@ final class DocWidths {
          *     at end of the document
          */
         LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth) {
-            return measureLineCount(doc, indent, startColumn, lineWidth, 0);
-        }
-
-        /**
-         * The depth-parameterized {@link #measureLineCount}, exposed to {@link DocExplainRenderer} so the {@code
-         * --explain} trace can record the exact per-alternative line counts the ranking weighed at a nested
-         * best-fitting node's depth — the same numbers {@link #chooseBestFitting} used, so the explanation never reports
-         * a metric that differs from the one that picked the winner.
-         */
-        LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth, int bestFittingDepth) {
-            LineCountWalk walk = new LineCountWalk(lineWidth, bestFittingDepth);
+            LineCountWalk walk = new LineCountWalk(lineWidth);
             walk.column = startColumn;
             walk.walk(doc, indent, LineMode.BREAK);
             walk.flushLineSuffixes();
@@ -286,9 +288,7 @@ final class DocWidths {
 
             private final int lineWidth;
 
-            private final int bestFittingDepth;
-
-            private final java.util.Map<String, LineMode> groupModes = new java.util.HashMap<>();
+            private final Map<String, LineMode> groupModes = new HashMap<>();
 
             private final List<BufferedSuffix> lineSuffixes = new java.util.ArrayList<>();
 
@@ -298,9 +298,8 @@ final class DocWidths {
 
             private int overflow;
 
-            private LineCountWalk(int lineWidth, int bestFittingDepth) {
+            private LineCountWalk(int lineWidth) {
                 this.lineWidth = lineWidth;
-                this.bestFittingDepth = bestFittingDepth;
             }
 
             private void walk(Doc doc, int indent, LineMode mode) {
@@ -334,16 +333,8 @@ final class DocWidths {
                     case Doc.Fill fill -> walkFill(fill.parts(), indent);
                     case Doc.ConditionalGroup conditionalGroup -> walkConditionalGroup(conditionalGroup.alternatives(), indent);
                     case Doc.BestFitting bestFitting -> {
-                        List<Doc> alternatives = bestFitting.alternatives();
-                        int chosen = chooseBestFitting(
-                            alternatives,
-                            bestFitting.priorities(),
-                            indent,
-                            column,
-                            lineWidth,
-                            bestFittingDepth
-                        );
-                        walk(alternatives.get(chosen), indent, LineMode.BREAK);
+                        int chosen = chooseBestFitting(bestFitting, indent, column, lineWidth);
+                        walk(bestFitting.alternatives().get(chosen), indent, LineMode.BREAK);
                     }
                     case Doc.IfBreak conditional -> {
                         LineMode effective = conditional.groupId() == null

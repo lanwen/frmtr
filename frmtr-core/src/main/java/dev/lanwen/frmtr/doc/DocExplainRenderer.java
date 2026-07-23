@@ -84,13 +84,6 @@ public final class DocExplainRenderer {
 
         private final DocWidths.Measurement widths = createWidths();
 
-        /**
-         * Current {@link Doc.BestFitting} nesting depth, mirroring {@link DocRenderer}'s so the trace ranks a nested
-         * best-fitting node at the same depth the renderer does — and therefore records, and descends into, the same
-         * winner. Incremented while walking a chosen alternative.
-         */
-        private int bestFittingDepth;
-
         private final List<BufferedSuffix> lineSuffixes = new ArrayList<>();
 
         /**
@@ -202,26 +195,22 @@ public final class DocExplainRenderer {
                 }
                 case Doc.BestFitting bestFitting -> {
                     // Mirror DocRenderer.renderBestFitting so the replayed cursor advances identically: rank via the same
-                    // shared chooseBestFitting at the same depth, then walk only the winner in break mode. Record the
-                    // decision with each measured alternative's line count and overflow — the exact numbers the ranking
-                    // weighed — so --explain can show why the flatter alternatives lost.
+                    // shared chooseBestFitting, then walk only the winner in break mode. Record the decision with each
+                    // measured alternative's line count and overflow — the exact numbers the ranking weighed — so
+                    // --explain can show why the flatter alternatives lost.
                     Builder structural = Builder.structural();
                     List<Doc> alternatives = bestFitting.alternatives();
                     int[] priorities = bestFitting.priorities();
                     int available = lineWidth - column;
                     int startColumn = column;
-                    int depth = bestFittingDepth;
-                    int chosen = widths.chooseBestFitting(alternatives, priorities, indent, startColumn, lineWidth, depth);
-                    // Only the alternatives the ranking measured (the first MAX_BEST_FITTING_ALTERNATIVES, and none at
-                    // all past the depth bound where the node collapses to its first) are recorded, matching the winner
-                    // selection exactly.
-                    int measured = depth >= DocWidths.MAX_BEST_FITTING_DEPTH
-                        ? 1
-                        : Math.min(alternatives.size(), DocWidths.MAX_BEST_FITTING_ALTERNATIVES);
+                    int chosen = widths.chooseBestFitting(bestFitting, indent, startColumn, lineWidth);
+                    // Only the alternatives the ranking measured (the first MAX_BEST_FITTING_ALTERNATIVES) are recorded,
+                    // matching the winner selection exactly.
+                    int measured = Math.min(alternatives.size(), DocWidths.MAX_BEST_FITTING_ALTERNATIVES);
                     List<BestFittingDecision.Alternative> ranked = new ArrayList<>();
                     for (int i = 0; i < measured; i++) {
                         DocWidths.LineCount count =
-                            widths.measureLineCount(alternatives.get(i), indent, startColumn, lineWidth, depth + 1);
+                            widths.measureLineCount(alternatives.get(i), indent, startColumn, lineWidth);
                         // Record the priority alongside the measured line count so --explain can show why a higher-line
                         // alternative won: a fitting higher-priority arm outranks a fitting fewer-lines one.
                         ranked.add(new BestFittingDecision.Alternative(
@@ -239,9 +228,7 @@ public final class DocExplainRenderer {
                         startColumn,
                         ranked
                     ));
-                    bestFittingDepth = depth + 1;
                     structural.add(render(alternatives.get(chosen), indent, Mode.BREAK, enclosingLabel));
-                    bestFittingDepth = depth;
                     return structural;
                 }
                 case Doc.Line ignored -> {

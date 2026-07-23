@@ -42,15 +42,6 @@ public final class DocRenderer {
 
     private int column;
 
-    /**
-     * Current {@link Doc.BestFitting} nesting depth, so the linear-time depth bound (rule D16) is applied identically
-     * here and in the line-count simulation. Reset per render; incremented while rendering a chosen alternative so a
-     * nested best-fitting node inside it is ranked at the next depth (matching the depth at which the ranking probe
-     * measured that winner), and beyond {@link DocWidths#MAX_BEST_FITTING_DEPTH} the inner node collapses to its first
-     * alternative instead of being ranked.
-     */
-    private int bestFittingDepth;
-
     public DocRenderer(FormatterOptions options) {
         this.options = options;
     }
@@ -78,7 +69,6 @@ public final class DocRenderer {
     private RenderedSource renderInternal(Doc doc, boolean tracking) {
         out.setLength(0);
         column = 0;
-        bestFittingDepth = 0;
         lineSuffixes.clear();
         groupModes.clear();
         lineIndents.clear();
@@ -199,19 +189,12 @@ public final class DocRenderer {
      * decision the line-count simulation uses, so the alternative rendered here cannot drift from the one the ranking
      * measured. The probes are side-effect-free (they never touch {@code out}, {@code column}, {@code groupModes}, or
      * {@code lineSuffixes}), so the winner is rendered <em>once</em>, in break mode, letting its own inner groups decide
-     * flat-vs-broken from the column they reach. A nested best-fitting node inside the winner is ranked at the next
-     * depth, under the shared bound.
+     * flat-vs-broken from the column they reach. A nested best-fitting node inside the winner is ranked at its own
+     * column through the same shared, memoized decision.
      */
     private void renderBestFitting(Doc.BestFitting bestFitting, int indent, DocWidths.Measurement widths) {
-        List<Doc> alternatives = bestFitting.alternatives();
-        int depth = bestFittingDepth;
-        int chosen =
-            widths.chooseBestFitting(alternatives, bestFitting.priorities(), indent, column, options.lineWidth(), depth);
-        // Render the winner at the next depth: chooseBestFitting scored it in a probe one level deeper, so a nested
-        // best-fitting node inside it must be ranked at that same deeper level for the emitted layout to match the probe.
-        bestFittingDepth = depth + 1;
-        render(alternatives.get(chosen), indent, Mode.BREAK, widths);
-        bestFittingDepth = depth;
+        int chosen = widths.chooseBestFitting(bestFitting, indent, column, options.lineWidth());
+        render(bestFitting.alternatives().get(chosen), indent, Mode.BREAK, widths);
     }
 
     private void append(String value) {

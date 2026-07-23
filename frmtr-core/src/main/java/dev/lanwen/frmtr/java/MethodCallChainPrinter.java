@@ -769,14 +769,10 @@ final class MethodCallChainPrinter {
             }
             Doc flat = appendFinalSegmentSuffix(Doc.text(compactSource.compact(expression)), finalSegmentSuffix);
             // The flat-vs-fan choice is a {@link Doc#conditionalGroup}, NOT {@link Doc#bestFitting}, for
-            // every chain WHOSE FLAT FORM CAN ACTUALLY FIT. bestFitting ranks by rendered line count under a depth
-            // bound and by a fewest-lines tie-break; a chain nested deeper than {@link DocWidths#MAX_BEST_FITTING_DEPTH}
-            // best-fitting levels (a two-selector {@code forEach}/{@code map} chain whose lambda body is itself an
-            // object-creation-rooted chain, e.g. {@code data.topics().forEach(t -> results.add(new X()...))}) collapses to
-            // arm 0 (the flat compact) — and even at a shallow depth, when BOTH arms overflow, the fewest-lines tie-break
-            // picks the single flat line, jamming the whole body onto one 300+ column line. A conditionalGroup chooses the
-            // flat compact ONLY when it genuinely fits flat at the real column and otherwise renders the fan in break mode,
-            // regardless of nesting depth. For the shallow single-level case where the flat arm fits, both combinators
+            // every chain WHOSE FLAT FORM CAN ACTUALLY FIT. bestFitting ranks by rendered line count with a fewest-lines
+            // tie-break, so when BOTH arms overflow it picks the single flat line, jamming the whole body onto one 300+
+            // column line. A conditionalGroup chooses the flat compact ONLY when it genuinely fits flat at the real
+            // column and otherwise renders the fan in break mode. For the case where the flat arm fits, both combinators
             // agree, and the conditionalGroup is strictly better when the flat arm overflows.
             //
             // A nested-lambda body ({@link #lambdaArgumentForcesMultilineBody}) normally keeps the {@link Doc#bestFitting}

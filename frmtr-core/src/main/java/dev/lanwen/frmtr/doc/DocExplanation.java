@@ -187,10 +187,9 @@ public record DocExplanation(
      * other. {@code chosenIndex} is the selected alternative; each measured {@link Alternative} carries the line count
      * and overflow the ranking computed for it, so the explanation can show why the flatter alternatives lost.
      * {@code available} is the columns left and {@code startColumn} where the node began. Only the first
-     * {@link DocWidths#MAX_BEST_FITTING_ALTERNATIVES} alternatives are measured (and none are measured past
-     * {@link DocWidths#MAX_BEST_FITTING_DEPTH} nesting, where the node collapses to its first alternative), so the
-     * measured list may be shorter than the node's full alternative list. {@code label} is the nearest enclosing rule
-     * provenance, absent for an unlabeled structural best-fitting node.
+     * {@link DocWidths#MAX_BEST_FITTING_ALTERNATIVES} alternatives are measured, so the measured list may be shorter
+     * than the node's full alternative list. {@code label} is the nearest enclosing rule provenance, absent for an
+     * unlabeled structural best-fitting node.
      */
     public record BestFittingDecision(
         Optional<String> label,

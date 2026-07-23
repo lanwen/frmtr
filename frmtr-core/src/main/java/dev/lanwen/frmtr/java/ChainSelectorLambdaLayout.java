@@ -549,14 +549,13 @@ final class ChainSelectorLambdaLayout {
             );
         }
         // A conditional group (NOT bestFitting) chooses flat-vs-hug purely by whether the flat selector fits at the live
-        // column. This is deliberate: the fan-carrying selector nests inside the enclosing chain fan (itself a bestFitting on
-        // the return/initializer seams), and a per-selector {@code bestFitting} would sit past the {@code MAX_BEST_FITTING_DEPTH}
-        // linear-time bound — beyond which {@code chooseBestFitting} silently keeps the FIRST (flat) arm, flattening an
-        // over-wide chain body onto one line. A conditional group is not depth-bounded: it flat-fit-probes {@code flatBody} and
-        // renders the {@code hugBody} (which carries forced breaks and so never "fits flat") as the unconditional fallback when
-        // {@code flatBody} overflows. The verdict is a pure function of the AST (compact flat width vs. the live column), so the
-        // selector's shape is a fixpoint. {@code segmentPrefix} (any leading comments) is prepended ONCE outside the group so
-        // the two arms do not share a sub-{@code Doc} instance whose bounded flat-fit probe could perturb the other arm.
+        // column. This is deliberate: a per-selector {@code bestFitting} ranks by rendered line count, so when both arms
+        // overflow its fewest-lines tie-break would keep the FIRST (flat) arm, flattening an over-wide chain body onto one
+        // line. A conditional group flat-fit-probes {@code flatBody} and renders the {@code hugBody} (which carries forced
+        // breaks and so never "fits flat") as the unconditional fallback when {@code flatBody} overflows. The verdict is a
+        // pure function of the AST (compact flat width vs. the live column), so the selector's shape is a fixpoint.
+        // {@code segmentPrefix} (any leading comments) is prepended ONCE outside the group so the two arms do not share a
+        // sub-{@code Doc} instance whose bounded flat-fit probe could perturb the other arm.
         return Optional.of(Doc.concat(segmentPrefix, Doc.conditionalGroup(List.of(flatBody, hugBody))));
     }
 

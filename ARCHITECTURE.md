@@ -178,8 +178,9 @@ The four **width-deciding** primitives are the heart of the model:
   last (which may be broken). It ranks by flat fit only, so it cannot compare two broken shapes.
 - **`BestFitting`** holds ordered, flattest-first alternatives and picks the one that *fits, then minimizes rendered
   line count* at the live column, with a deterministic, priority-aware tie-break. Unlike a conditional group it *can*
-  rank two broken shapes against each other, which is what method-call chains need. Ranking is bounded (a small cap on
-  alternatives and nesting depth) for linear-time, native-image-safe rendering.
+  rank two broken shapes against each other, which is what method-call chains need. Ranking measures at most a small cap
+  of alternatives per node and memoizes each node's ranking by (identity, indent, start column), so nested ranking stays
+  affordable at any depth without a nesting cap — native-image-safe and near-linear on real code.
 
 ```
    ┌─ Group ──────────► flat if it fits, else break

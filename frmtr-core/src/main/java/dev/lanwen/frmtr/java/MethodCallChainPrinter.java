@@ -89,6 +89,8 @@ final class MethodCallChainPrinter {
 
     private final ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug;
 
+    private final ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallChainBodyFan expressionLambdaMethodCallChainBodyFan;
+
     private final ChainSelectorLambdaLayout chainSelectorLambda;
 
     private final ChainSegmentWidthLayout segmentWidth;
@@ -123,7 +125,8 @@ final class MethodCallChainPrinter {
             Function<LambdaExpr, String> lambdaParameters,
             ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener,
             ExpressionLambdaArgumentLayout.ExpressionLambdaObjectCreationBodyOpener expressionLambdaObjectCreationBodyOpener,
-            ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug
+            ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallChainBodyFan expressionLambdaMethodCallChainBodyFan
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
@@ -150,6 +153,7 @@ final class MethodCallChainPrinter {
         this.expressionLambdaMethodCallBodyOpener = expressionLambdaMethodCallBodyOpener;
         this.expressionLambdaObjectCreationBodyOpener = expressionLambdaObjectCreationBodyOpener;
         this.expressionLambdaLogicalBinaryBodyOpenerHug = expressionLambdaLogicalBinaryBodyOpenerHug;
+        this.expressionLambdaMethodCallChainBodyFan = expressionLambdaMethodCallChainBodyFan;
         this.chainWidthBreakExplain = new ChainWidthBreakExplain(
             context.compactSource,
             context.layoutWidth,
@@ -205,7 +209,8 @@ final class MethodCallChainPrinter {
             this::compactMethodCallChainSegmentCanStayFlat,
             this::appendFinalSegmentSuffix,
             this::fannedSelectorColumnWidth,
-            this::brokenMethodCallSegment
+            this::brokenMethodCallSegment,
+            expressionLambdaMethodCallChainBodyFan
         );
         this.segmentWidth = new ChainSegmentWidthLayout(
             options,

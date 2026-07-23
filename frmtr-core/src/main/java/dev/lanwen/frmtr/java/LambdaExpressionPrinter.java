@@ -1227,6 +1227,17 @@ final class LambdaExpressionPrinter {
     }
 
     /**
+     * Exposes {@link ExpressionLambdaArgumentLayout#huggedLambdaBodyChainFan} — the forced source-neutral lambda-body
+     * chain fan ({@code row -> row.window()}⏎{@code .equals(w)}) — so a fanned chain selector whose sole argument is a
+     * name/field-rooted chain-body expression lambda can offer the fan directly ({@code ChainSelectorLambdaLayout}) as the
+     * always-broken fallback when the shared {@code huggableMethodCallArguments} renderer withheld it under-counting the
+     * real fanned column.
+     */
+    Optional<Doc> expressionLambdaMethodCallChainBodyFan(String firstLine, MethodCallExpr chainBody) {
+        return expressionLambdaArguments.huggedLambdaBodyChainFan(firstLine, chainBody);
+    }
+
+    /**
      * Exposes {@link ExpressionLambdaArgumentLayout#logicalBinaryLambdaBodyOpenerHug} — the source-neutral logical-binary
      * opener hug ({@code param -> <first operand>}⏎ each following {@code &&}/{@code ||} operand ⏎{@code )}) — so a fanned
      * chain selector whose sole argument is a logical-binary-body expression lambda can hug its opener with a dedented close

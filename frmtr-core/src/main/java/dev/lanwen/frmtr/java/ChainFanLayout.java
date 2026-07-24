@@ -745,6 +745,17 @@ final class ChainFanLayout {
             attachedFirstSelectorDoc(calls.getFirst()),
             continuation.apply(tail)
         ));
+        if (postAttachTailIsLoneArgumentFreeCall(fannedSelectors)) {
+            Doc huggedTail = methodCallChainSegments.apply(fannedSelectors, candidate.tail()).getFirst();
+            Doc hugged = Doc.concat(
+                fanRootDoc(candidate.root()),
+                attachedFirstSelectorDoc(calls.getFirst()),
+                huggedTail
+            );
+            // The lone argument-free tail beats the fanned-onto-its-own-line shape whenever it fits — fewer lines wins
+            // the fit-gated bestFitting — and falls back to the ordinary fanned {@code attached} tail on overflow.
+            attached = Doc.bestFitting(List.of(hugged, attached));
+        }
         // {@code bestFitting} ranks the attach-safe leaf first selector against the fan-from-first shape so an overflowing
         // opener breaks after the receiver instead of stranding it over width. A lambda-carrying first selector
         // ({@link #bareNameReceiverFirstSelectorHugsLambda}) is NOT ranked — it would flip the fan even where the hug fits.
@@ -752,6 +763,24 @@ final class ChainFanLayout {
             return Doc.bestFitting(List.of(attached, fanSelectorsLayout(candidate)));
         }
         return attached;
+    }
+
+    /**
+     * Reports whether the post-attach tail ({@link #fanTrivialReceiverAttachLayout}'s {@code fannedSelectors}) is a
+     * single, comment-free, argument-free call — the lone trailing selector that hugs onto the attached opener's
+     * closing line ({@code )).expectSubscription();}) instead of fanning onto its own line. Comment-bearing calls are
+     * excluded: {@code methodCallChainSegments} would still emit their comment prefix as its own hard line, so hugging
+     * would not actually collapse to one line.
+     */
+    private boolean postAttachTailIsLoneArgumentFreeCall(List<MethodCallExpr> fannedSelectors) {
+        if (fannedSelectors.size() != 1) {
+            return false;
+        }
+        MethodCallExpr tailCall = fannedSelectors.getFirst();
+        return tailCall.getArguments().isEmpty()
+            && !methodCallSegmentHasComment.test(tailCall)
+            && !sourceShapePolicy.hasContainedComments(tailCall)
+            && finalTrailingLineComments.apply(tailCall).isEmpty();
     }
 
     // Renders the attached first selector for {@link #fanTrivialReceiverAttachLayout}. An attach-SAFE leaf selector renders

@@ -9,8 +9,7 @@ class AssignmentMethodChainSample {
 
     void enrich(LogSink sink, Report report) {
         if (report.enabled()) {
-            sink = sink
-                    .withValue("sample.name", report.name())
+            sink = sink.withValue("sample.name", report.name())
                     .withValue(
                         "sample.duration",
                         DurationBridge.from(report.veryLongMeasuredDurationForSelectedEntry()).serialize()

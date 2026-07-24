@@ -688,12 +688,16 @@ final class ChainFanLayout {
     //
     // Additionally gated on the first selector being ATTACH-SAFE ({@link #firstSelectorAttachesSafely}): no arguments or
     // only simple leaf arguments ({@code .getRange()}, {@code .get(0)}, {@code .entrySet()}, {@code .validateOrder()}),
-    // so it renders as one atomic {@code .selector(...)} token that NEVER opens its own broken argument list. A first
-    // selector with a lambda, nested call, or multi-argument list ({@code target.computeIfAbsent(topicId, __ -> new X()
-    // …)}) can break INTERNALLY, and that inner break's indentation is measured relative to the segment's live column —
-    // which shifts once the previous pass glued the selector to the root — so the attached block reindents across passes
-    // (the kafka {@code ConsumerGroupMember} oscillation). Such a chain keeps the fan-from-first shape below ({@code
-    // target}⏎{@code .computeIfAbsent(…)}⏎…), where the selector's argument list breaks at a stable continuation column.
+    // so it renders as one atomic {@code .selector(...)} token that NEVER opens its own broken argument list. A NON-LEAF
+    // first selector ({@code builder.stream("input", Consumed.as("source"))}) still attaches when
+    // {@link #firstSelectorAttachesFlat} finds its flat compact form fits at the deterministic attached column (root
+    // column + root length) — atomic flat text never breaks internally, so it cannot reindent across passes either. A
+    // first selector with a lambda, nested call, or multi-argument list that does NOT fit flat ({@code
+    // target.computeIfAbsent(topicId, __ -> new X() …)}) can break INTERNALLY, and that inner break's indentation is
+    // measured relative to the segment's live column — which shifts once the previous pass glued the selector to the
+    // root — so the attached block reindents across passes (the kafka {@code ConsumerGroupMember} oscillation). Such a
+    // chain keeps the fan-from-first shape below ({@code target}⏎{@code .computeIfAbsent(…)}⏎…), where the selector's
+    // argument list breaks at a stable continuation column.
     //
     // A SHORT receiver ({@code env}, {@code p}, {@code res}) attaches too: {@link #fanTrivialReceiverAttachLayout} renders
     // the fanned tail at the plain continuation indent, never {@code chainContinuation}'s short-root PADDING branch, so the
@@ -704,6 +708,7 @@ final class ChainFanLayout {
         return calls.size() >= 2
             && chainRootIsTrivialReceiver(candidate.root())
             && (firstSelectorAttachesSafely(calls.getFirst())
+                || firstSelectorAttachesFlat(calls.getFirst(), candidate.layout())
                 || bareNameReceiverFirstSelectorHugsLambda(candidate.root(), calls.getFirst()));
     }
 
@@ -742,26 +747,27 @@ final class ChainFanLayout {
         Doc tail = Doc.join(Doc.HARD_LINE, methodCallChainSegments.apply(fannedSelectors, candidate.tail()));
         Doc attached = widthRankedFan(candidate, continuation -> Doc.concat(
             fanRootDoc(candidate.root()),
-            attachedFirstSelectorDoc(calls.getFirst()),
+            attachedFirstSelectorDoc(calls.getFirst(), candidate.layout()),
             continuation.apply(tail)
         ));
-        // {@code bestFitting} ranks the attach-safe leaf first selector against the fan-from-first shape so an overflowing
-        // opener breaks after the receiver instead of stranding it over width. A lambda-carrying first selector
+        // {@code bestFitting} ranks the attach-safe leaf/flat-fitting first selector against the fan-from-first shape so an
+        // overflowing opener breaks after the receiver instead of stranding it over width. A lambda-carrying first selector
         // ({@link #bareNameReceiverFirstSelectorHugsLambda}) is NOT ranked — it would flip the fan even where the hug fits.
-        if (firstSelectorAttachesSafely(calls.getFirst())) {
+        if (firstSelectorAttachesSafely(calls.getFirst()) || firstSelectorAttachesFlat(calls.getFirst(), candidate.layout())) {
             return Doc.bestFitting(List.of(attached, fanSelectorsLayout(candidate)));
         }
         return attached;
     }
 
-    // Renders the attached first selector for {@link #fanTrivialReceiverAttachLayout}. An attach-SAFE leaf selector renders
-    // as a single {@code .selector(...)} token that never breaks at a selector boundary
-    // ({@link #attachedFirstSelectorSegment}); a bare-name-receiver
-    // lambda-carrying first selector renders through the ordinary source-neutral segment renderer so its lambda body can
-    // break by width at the attached column ({@link #bareNameReceiverFirstSelectorHugsLambda}). The lambda selector is the
-    // sole element of the segment list, so the renderer measures it as a standalone segment with no trailing suffix.
-    private Doc attachedFirstSelectorDoc(MethodCallExpr firstSelector) {
-        if (firstSelectorAttachesSafely(firstSelector)) {
+    // Renders the attached first selector for {@link #fanTrivialReceiverAttachLayout}. An attach-SAFE leaf selector or a
+    // non-leaf selector whose flat form fits at the attached column ({@link #firstSelectorAttachesFlat}) renders as a
+    // single {@code .selector(...)} token that never breaks at a selector boundary ({@link #attachedFirstSelectorSegment});
+    // a bare-name-receiver lambda-carrying first selector renders through the ordinary source-neutral segment renderer so
+    // its lambda body can break by width at the attached column ({@link #bareNameReceiverFirstSelectorHugsLambda}). The
+    // lambda selector is the sole element of the segment list, so the renderer measures it as a standalone segment with no
+    // trailing suffix.
+    private Doc attachedFirstSelectorDoc(MethodCallExpr firstSelector, LayoutContext layout) {
+        if (firstSelectorAttachesSafely(firstSelector) || firstSelectorAttachesFlat(firstSelector, layout)) {
             return attachedFirstSelectorSegment(firstSelector);
         }
         return methodCallChainSegments.apply(List.of(firstSelector), MethodCallChainTail.of("")).getFirst();
@@ -830,24 +836,52 @@ final class ChainFanLayout {
      * they sit on selectors {@code chainFanOut} still routes through the shared segment renderer.
      */
     private boolean firstSelectorAttachesSafely(MethodCallExpr firstSelector) {
+        return firstSelectorAttachPreconditionsMet(firstSelector)
+            && firstSelector.getArguments().stream().allMatch(this::isSimpleLeafArgument);
+    }
+
+    /**
+     * Extends {@link #firstSelectorAttachesSafely} to a NON-LEAF first selector ({@code .stream("input",
+     * Consumed.as("source"))}) whose flat, unbroken compact form still fits at the deterministic attached column (the
+     * root's rendered column plus the flat text length) — {@link RootLineWidth#measure} on {@code firstSelector} reads
+     * that column directly because a chain's first selector shares its root's range start. Both inputs are AST-derived
+     * and column-derived, never source-shape, so the fit verdict is identical on every pass.
+     *
+     * <p>Still requires the leaf-selector preconditions ({@link #firstSelectorAttachPreconditionsMet} — no type
+     * arguments, no comment) and additionally excludes any lambda argument, which has its own dedicated attach
+     * ({@link #bareNameReceiverFirstSelectorHugsLambda}) and cannot render as atomic flat text without collapsing its
+     * body's line breaks. A selector that does not fit flat here falls through to the fan-from-first shape unchanged —
+     * this never introduces a new over-width line, it only widens which selectors attach.
+     */
+    private boolean firstSelectorAttachesFlat(MethodCallExpr firstSelector, LayoutContext layout) {
+        if (!firstSelectorAttachPreconditionsMet(firstSelector)) {
+            return false;
+        }
+        if (firstSelector.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)) {
+            return false;
+        }
+        String flatText = compactSource.compactFlat(firstSelector);
+        return rootLineWidth.measure(firstSelector, flatText, layout) <= options.lineWidth();
+    }
+
+    // Shared leaf/flat-attach preconditions: no type arguments, no comment anywhere on the selector (own, contained, or a
+    // trailing line comment), so an attach can always render the selector as bare atomic text without dropping a comment.
+    private boolean firstSelectorAttachPreconditionsMet(MethodCallExpr firstSelector) {
         if (firstSelector.getTypeArguments().isPresent()) {
             return false;
         }
         if (methodCallSegmentHasComment.test(firstSelector) || sourceShapePolicy.hasContainedComments(firstSelector)) {
             return false;
         }
-        if (!finalTrailingLineComments.apply(firstSelector).isEmpty()) {
-            return false;
-        }
-        return firstSelector.getArguments().stream().allMatch(this::isSimpleLeafArgument);
+        return finalTrailingLineComments.apply(firstSelector).isEmpty();
     }
 
     /**
-     * Renders a trivial-receiver chain's attach-safe first selector ({@link #firstSelectorAttachesSafely}) as a single,
-     * SOURCE-NEUTRAL {@code .selector(arg, …)} token that never breaks at a selector boundary, glued to the root's opening
-     * line in {@link #chainFanOut}. The selector
-     * has only simple leaf arguments and no comment (both guaranteed by the attach-safe gate), so the compact join is its
-     * complete rendering and it can never open its own broken argument list.
+     * Renders a trivial-receiver chain's attach-safe first selector — leaf-argument ({@link #firstSelectorAttachesSafely})
+     * or flat-fitting non-leaf ({@link #firstSelectorAttachesFlat}) — as a single, SOURCE-NEUTRAL {@code .selector(arg, …)}
+     * token that never breaks at a selector boundary, glued to the root's opening line in {@link #chainFanOut}. Either gate
+     * guarantees a comment-free selector, so the compact join is its complete rendering and it can never open its own
+     * broken argument list.
      *
      * <p>This deliberately does NOT go through {@code methodCallChainSegment}: that shared renderer would take its
      * {@code sourceMultilineMethodCallSegmentArguments} branch and break the selector's argument list whenever the author

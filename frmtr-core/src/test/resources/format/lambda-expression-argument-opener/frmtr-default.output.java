@@ -9,8 +9,7 @@ final class LambdaExpressionArgumentOpener {
     private final JournalWriter journalWriter;
 
     FlowResult run(Packet packet, Frame frame, List<String> requestedMarks) {
-        return meshCatalog
-                .find(packet.accountKey())
+        return meshCatalog.find(packet.accountKey())
                 .map(MeshEntry::from)
                 .flatMap(entry -> meshCatalog.prepareTransitTicketEnvelope(
                         entry,
@@ -94,8 +93,7 @@ final class LambdaExpressionArgumentOpener {
     }
 
     RouteSpec keepsFluentLambdaBodyWithinLimit(RouteSpec route, LocalServices services, Set<String> hosts) {
-        return route
-                .header(HeaderNames.HOST, hostPattern(hosts))
+        return route.header(HeaderNames.HOST, hostPattern(hosts))
                 .and()
                 .path(ServicePaths.ACCOUNTS)
                 .filters(spec -> spec
@@ -118,8 +116,7 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StubFlow recoversDuplicateMember(MemberRepository memberRepository, Member member, User user, Org org) {
-        return memberRepository
-                .save(new Member(org.getId(), user.getId(), Member.Role.ADMIN))
+        return memberRepository.save(new Member(org.getId(), user.getId(), Member.Role.ADMIN))
                 .onErrorResume(
                     DuplicateKeyException.class,
                     ex -> memberRepository.findByUserIdAndOrganizationIdWithSnapshot(user.getId(), org.getId())
@@ -198,8 +195,7 @@ final class LambdaExpressionArgumentOpener {
     }
 
     ChainResult keepsLogicalLambdaBodiesBroken(ChainProbe probe, Ledger ledger, DayBoundary boundary) {
-        return probe
-                .rows(ledger.rows())
+        return probe.rows(ledger.rows())
                 .allMatch(row -> ((row.count() == 0 && row.day().isBefore(boundary.last()))
                         || (row.count() == 1 && row.day().isAfter(boundary.last()))
                         || (row.count() == 1 && row.day().isEqual(boundary.last())))

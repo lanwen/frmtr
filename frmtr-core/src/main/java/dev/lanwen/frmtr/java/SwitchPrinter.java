@@ -174,9 +174,7 @@ final class SwitchPrinter {
             context.comments,
             context.commentPlacementPolicy,
             context.sourceText,
-            context.options,
             modifiers,
-            currentIndentedWidth,
             this::arrowLeadingCommentBuckets
         );
     }

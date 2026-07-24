@@ -111,9 +111,10 @@ modifiers, and width calculations with its callers and collaborators.
 
 The `case`-label wrap is renderer-decided at the true column: `SwitchCaseLabelLayout` hands a comma-separated label list
 and a single record pattern back as flat/wrapped alternatives that `Doc.bestFitting` ranks where the label actually
-nests, so a label sized just under the limit at the block indent still wraps once its real column overflows. The
-remaining build-time width probes are the nested record-pattern component wrap (`switchLabelBreaks`) and the guard wrap
-(`switchGuardBreaks`), each still measured at a fixed indentation baseline.
+nests, so a label sized just under the limit at the block indent still wraps once its real column overflows. A nested
+record-pattern component is ranked the same way — its flat spelling and one-component-per-line shape are both `Doc`s the
+renderer picks between at the component's real column. The remaining build-time width probe is the guard wrap
+(`switchGuardBreaks`), still measured at a fixed indentation baseline.
 
 `ControlConditionPrinter` renders expressions after statement grammar or statement-switch rendering has selected a
 parenthesized control-condition context. It owns compact selector, if, and loop condition text, width-triggered broken

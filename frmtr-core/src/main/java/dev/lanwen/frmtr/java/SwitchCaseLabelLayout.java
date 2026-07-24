@@ -6,12 +6,10 @@ import com.github.javaparser.ast.expr.RecordPatternExpr;
 import com.github.javaparser.ast.expr.TypePatternExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.SwitchEntry;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Owns how a {@code switch} entry's {@code case} / {@code default} label renders for {@link SwitchPrinter} — the label's
@@ -45,11 +43,7 @@ final class SwitchCaseLabelLayout {
 
     private final SourceText sourceText;
 
-    private final FormatterOptions options;
-
     private final Function<NodeWithModifiers<?>, String> modifiers;
-
-    private final ToIntFunction<String> currentIndentedWidth;
 
     private final Function<SwitchEntry, List<Node>> arrowLeadingCommentBuckets;
 
@@ -59,9 +53,7 @@ final class SwitchCaseLabelLayout {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacementPolicy,
             SourceText sourceText,
-            FormatterOptions options,
             Function<NodeWithModifiers<?>, String> modifiers,
-            ToIntFunction<String> currentIndentedWidth,
             Function<SwitchEntry, List<Node>> arrowLeadingCommentBuckets
     ) {
         this.rawSource = rawSource;
@@ -69,9 +61,7 @@ final class SwitchCaseLabelLayout {
         this.comments = comments;
         this.commentPlacementPolicy = commentPlacementPolicy;
         this.sourceText = sourceText;
-        this.options = options;
         this.modifiers = modifiers;
-        this.currentIndentedWidth = currentIndentedWidth;
         this.arrowLeadingCommentBuckets = arrowLeadingCommentBuckets;
     }
 
@@ -215,15 +205,6 @@ final class SwitchCaseLabelLayout {
                 .map(range -> sourceText.region(range).beginOffset());
     }
 
-    /**
-     * Reports whether a nested record-pattern component needs its own wrapped rendering; measured at a fixed baseline,
-     * so the nested-component wrap is still a build-time probe (the top-level single label is renderer-ranked instead).
-     */
-    private boolean switchLabelBreaks(Expression label) {
-        return label instanceof RecordPatternExpr
-            && currentIndentedWidth.applyAsInt("case " + switchLabelText(label) + " -> {}") > options.lineWidth();
-    }
-
     String switchLabelText(Expression label) {
         if (label instanceof TypePatternExpr) {
             return rawSource.normalizeWhitespace(label.toString());
@@ -283,9 +264,17 @@ final class SwitchCaseLabelLayout {
         );
     }
 
+    /**
+     * A nested record-pattern component's flat spelling and its one-component-per-line shape, ranked by the renderer at
+     * the component's true column; non-pattern components stay flat. Keeping both arms out of the IR lets the renderer
+     * wrap a nested component only when it overflows at real depth.
+     */
     private Doc recordPatternComponent(Expression pattern) {
-        if (pattern instanceof RecordPatternExpr recordPattern && switchLabelBreaks(pattern)) {
-            return recordPattern(recordPattern);
+        if (pattern instanceof RecordPatternExpr recordPattern) {
+            return Doc.bestFitting(List.of(
+                Doc.text(switchLabelText(recordPattern)),
+                recordPattern(recordPattern)
+            ));
         }
         return Doc.text(switchLabelText(pattern));
     }

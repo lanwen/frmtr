@@ -241,8 +241,7 @@ final class LambdaExpressionArgumentOpener {
             directoryClient
         )
             .findSessions(principal.groupId(), Source.REMOTE, principal, null)
-        )
-                .expectSubscription();
+        ).expectSubscription();
     }
 
     StepProbe keepsMethodCallLambdaBodyPacked(StepProbe probe, SessionReader sessionReader, Principal principal) {
@@ -251,8 +250,7 @@ final class LambdaExpressionArgumentOpener {
             Source.LOCAL,
             principal,
             null
-        ))
-                .expectSubscription();
+        )).expectSubscription();
     }
 
     WindowRange keepsExceptionSupplierConstructorOpener(List<LedgerEntry> ledgerEntries) {

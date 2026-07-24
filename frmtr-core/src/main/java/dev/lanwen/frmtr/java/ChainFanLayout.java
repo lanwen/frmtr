@@ -750,6 +750,19 @@ final class ChainFanLayout {
             attachedFirstSelectorDoc(calls.getFirst(), candidate.layout()),
             continuation.apply(tail)
         ));
+        if (postAttachTailIsLoneCall(fannedSelectors)) {
+            Doc hugged = Doc.concat(
+                fanRootDoc(candidate.root()),
+                attachedFirstSelectorDoc(calls.getFirst(), candidate.layout()),
+                flatTailCallDoc(fannedSelectors.getFirst(), candidate.tail())
+            );
+            // Ranked by FIRST-LINE fit, not plain line count: the hugged arm is one (possibly long) line, while the
+            // fanned {@code attached} arm's own opening line is always short (just the attached opener). Plain
+            // fewest-lines ranking would let an overflowing one-line hug beat a fanned shape whose LATER continuation
+            // line still overflows less (or not at all) once its own argument list explodes further — first-line-fit
+            // gates that out, so the hug only wins when it is actually narrow enough to sit on the closer's line.
+            attached = Doc.bestFittingFirstLine(List.of(hugged, attached));
+        }
         // {@code bestFitting} ranks the attach-safe leaf/flat-fitting first selector against the fan-from-first shape so an
         // overflowing opener breaks after the receiver instead of stranding it over width. A lambda-carrying first selector
         // ({@link #bareNameReceiverFirstSelectorHugsLambda}) is NOT ranked — it would flip the fan even where the hug fits.
@@ -757,6 +770,41 @@ final class ChainFanLayout {
             return Doc.bestFitting(List.of(attached, fanSelectorsLayout(candidate)));
         }
         return attached;
+    }
+
+    /**
+     * Reports whether the post-attach tail ({@link #fanTrivialReceiverAttachLayout}'s {@code fannedSelectors}) is a
+     * single, comment-free call eligible to hug onto the attached opener's closing line ({@code
+     * )).expectSubscription();}, {@code )).expectNextCount(4);}) instead of fanning onto its own line — the actual
+     * hug is still gated on the flat text fitting ({@link #flatTailCallDoc} ranked by {@code bestFitting} in
+     * {@link #fanTrivialReceiverAttachLayout}). Comment-bearing calls are excluded: {@code methodCallChainSegments}
+     * would still emit their comment prefix as its own hard line, so hugging would not actually collapse to one line.
+     * A lambda-argument or type-argument call is excluded too: {@link #flatTailCallDoc} reconstructs the call as
+     * plain compact text, and a lambda body collapsed onto one line reads worse than the fanned shape it would
+     * replace, so those tails keep the fan-from-first shape.
+     */
+    private boolean postAttachTailIsLoneCall(List<MethodCallExpr> fannedSelectors) {
+        if (fannedSelectors.size() != 1) {
+            return false;
+        }
+        MethodCallExpr tailCall = fannedSelectors.getFirst();
+        return tailCall.getTypeArguments().isEmpty()
+            && !methodCallSegmentHasBlockLambdaArgument.test(tailCall)
+            && !methodCallSegmentHasExpressionLambdaArgument.test(tailCall)
+            && !methodCallSegmentHasComment.test(tailCall)
+            && !sourceShapePolicy.hasContainedComments(tailCall)
+            && finalTrailingLineComments.apply(tailCall).isEmpty();
+    }
+
+    /**
+     * Builds the lone trailing call's FLAT compact text ({@code .expectNextCount(4);}) for the hug arm in
+     * {@link #fanTrivialReceiverAttachLayout} — plain {@link Doc#text}, so a fit-gated {@code bestFitting} can only
+     * pick it whole or fall back to the fanned shape, never partially break the call's own argument list.
+     */
+    private Doc flatTailCallDoc(MethodCallExpr tailCall, MethodCallChainTail tail) {
+        return tail.appendTo(Doc.text(
+            "." + tailCall.getNameAsString() + "(" + compactSource.compactJoin(tailCall.getArguments()) + ")"
+        ));
     }
 
     // Renders the attached first selector for {@link #fanTrivialReceiverAttachLayout}. An attach-SAFE leaf selector or a

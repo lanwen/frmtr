@@ -575,59 +575,135 @@ final class SwitchPrinter {
                 return Doc.concat(leadingComment, raw.orElseThrow());
             }
         }
-        Doc label = caseLabelLayout.switchEntryLabel(entry);
+        SwitchCaseLabelLayout.CaseLabel label = caseLabelLayout.switchEntryLabel(entry);
         Doc guard = switchEntryGuard(entry);
-        Doc entryDoc = switch (switchEntryLayout(entry)) {
-            case STATEMENT_GROUP -> switchStatementGroupEntry(
-                entry,
-                label,
-                guard,
-                entry.getStatements(),
-                caseLabelTrailingComment(entry),
-                caseLabelLeadingBodyComments(entry)
-            );
-            case EMPTY_RULE -> Doc.concat(label, guard, Doc.text(" ->"));
-            case COMMENTED_RULE_BODY -> commentedRuleBody(label, guard, entry.getStatements().get(0));
-            case RECOVERED_COMMENTED_RULE_BODY -> recoveredCommentedRuleBody(label, guard, entry);
-            case INLINE_RULE_BODY -> Doc.concat(
-                label,
-                guard,
-                Doc.text(" -> "),
-                switchEntryBody(entry.getStatements().get(0))
+        EntrySuffix suffix = switchEntrySuffix(entry, guard);
+        Doc entryDoc = switch (label) {
+            case SwitchCaseLabelLayout.CaseLabel.Fixed(Doc doc) ->
+                Doc.concat(doc, suffix.opener(), suffix.body());
+            // Rank the flat one-liner and the wrapped label list at the entry's true column: only the header (labels +
+            // guard + arrow/colon opener) rides both arms, so the flat/wrapped choice turns purely on whether the header
+            // line fits. The body follows the best-fitting node — which measures node-locally — so an over-width body line
+            // can never sway the header toward staying flat and over-width.
+            case SwitchCaseLabelLayout.CaseLabel.Ranked(Doc flat, Doc wrapped) -> Doc.concat(
+                Doc.bestFitting(
+                    List.of(Doc.concat(flat, suffix.opener()), Doc.concat(wrapped, suffix.opener()))
+                ),
+                suffix.body()
             );
         };
         entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
         return Doc.concat(leadingComment, entryDoc);
     }
 
-    private Doc commentedRuleBody(Doc label, Doc guard, Statement statement) {
-        return Doc.concat(
-            label,
-            guard,
-            Doc.text(" ->"),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement, LayoutContext.root())))
+    /**
+     * The header-line content the label-wrap decision measures ({@code opener}: guard + the {@code ->}/{@code :} marker,
+     * a block arm's opening brace, or an inline expression that shares the case line) and the content rendered below it
+     * ({@code body}: a block's interior and closing brace, colon-group statements, or a next-line rule body).
+     *
+     * <p>The split lets {@link #switchEntry} rank the case-label wrap on the header alone — {@code body} is emitted after
+     * the ranked best-fitting node, which measures node-locally, so an over-width line in a below-the-header body cannot
+     * push the labels toward staying flat and over-width. A body that genuinely lands on the case line (a rule
+     * expression) stays in {@code opener} so the wrap still accounts for it.
+     */
+    private record EntrySuffix(Doc opener, Doc body) {}
+
+    /**
+     * Splits an entry after its label into the header opener (guard + arrow/colon marker + any block opening brace) and
+     * the trailing body, so the label-wrap decision measures the header only. The body's comments are built here exactly
+     * once — {@link #switchEntry} shares this one body across both ranked label arms rather than rebuilding it.
+     */
+    private EntrySuffix switchEntrySuffix(SwitchEntry entry, Doc guard) {
+        return switch (switchEntryLayout(entry)) {
+            case STATEMENT_GROUP -> statementGroupSuffix(entry, guard);
+            case EMPTY_RULE -> new EntrySuffix(Doc.concat(guard, Doc.text(" ->")), Doc.EMPTY);
+            case COMMENTED_RULE_BODY -> new EntrySuffix(
+                Doc.concat(guard, Doc.text(" ->")),
+                Doc.indent(Doc.concat(
+                    Doc.HARD_LINE,
+                    statementRenderer.format(entry.getStatements().get(0), LayoutContext.root())
+                ))
+            );
+            case RECOVERED_COMMENTED_RULE_BODY -> recoveredCommentedRuleBodySuffix(guard, entry);
+            case INLINE_RULE_BODY -> inlineRuleBodySuffix(guard, entry.getStatements().get(0));
+        };
+    }
+
+    private EntrySuffix statementGroupSuffix(SwitchEntry entry, Doc guard) {
+        NodeList<Statement> statements = entry.getStatements();
+        Doc labelTrailingComment = caseLabelTrailingComment(entry);
+        List<Doc> labelLeadingBodyComments = caseLabelLeadingBodyComments(entry);
+        Doc trailing = labelTrailingComment == Doc.EMPTY
+            ? Doc.EMPTY
+            : Doc.lineSuffix(Doc.concat(Doc.text(" "), labelTrailingComment));
+        if (statements.size() == 1 && statements.get(0).isBlockStmt() && labelLeadingBodyComments.isEmpty()) {
+            return new EntrySuffix(
+                Doc.concat(guard, Doc.text(": {")),
+                Doc.concat(trailing, blockAfterOpeningBrace(switchStatementGroupBlock(statements.get(0).asBlockStmt())))
+            );
+        }
+        return new EntrySuffix(
+            Doc.concat(guard, Doc.text(":")),
+            Doc.concat(trailing, switchEntryStatements(entry, statements, labelLeadingBodyComments))
+        );
+    }
+
+    private EntrySuffix inlineRuleBodySuffix(Doc guard, Statement statement) {
+        if (statement.isBlockStmt()) {
+            Doc block = switchRuleBlock(statement.asBlockStmt());
+            // An empty block collapses to {} on the case line, so — like an inline expression — the whole opener stays
+            // on the measured header; only a non-empty block drops its interior and closing brace below the header.
+            if (block instanceof Doc.Text(String value) && value.equals("{}")) {
+                return new EntrySuffix(Doc.concat(guard, Doc.text(" -> {}")), Doc.EMPTY);
+            }
+            return new EntrySuffix(Doc.concat(guard, Doc.text(" -> {")), blockAfterOpeningBrace(block));
+        }
+        // A non-block body renders on the header line right after {@code -> }, so it belongs to the measured header, not
+        // the outside-body slot: the label wrap must account for the expression that shares the case line with it.
+        return new EntrySuffix(
+            Doc.concat(guard, Doc.text(" -> "), switchEntryBody(statement)),
+            Doc.EMPTY
         );
     }
 
     /**
      * Renders a {@code case x -> // note body} rule arm whose arrow-leading line comment a whitespace perturbation moved
-     * off the body statement (where {@link #commentedRuleBody} renders it) and onto the case label or entry orphan bucket.
-     * The recovered comment renders on its own indented line after {@code ->} like the body-owned comment, so the arm
-     * matches the {@code @default} shape byte for byte while the body renders inline.
+     * off the body statement (where the {@code COMMENTED_RULE_BODY} suffix renders it) and onto the case label or entry
+     * orphan bucket. The recovered comment renders on its own indented line after {@code ->} like the body-owned comment,
+     * so the arm matches the {@code @default} shape byte for byte while the body renders inline.
      */
-    private Doc recoveredCommentedRuleBody(Doc label, Doc guard, SwitchEntry entry) {
+    private EntrySuffix recoveredCommentedRuleBodySuffix(Doc guard, SwitchEntry entry) {
         Statement statement = entry.getStatements().get(0);
         List<Doc> commentLines = new ArrayList<>();
         for (Doc comment : ruleArrowLeadingComments(entry, statement)) {
             commentLines.add(comment);
             commentLines.add(Doc.HARD_LINE);
         }
-        return Doc.concat(
-            label,
-            guard,
-            Doc.text(" ->"),
+        return new EntrySuffix(
+            Doc.concat(guard, Doc.text(" ->")),
             Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(commentLines), switchEntryBody(statement)))
         );
+    }
+
+    /**
+     * Re-slices an already-built rule/statement-group block into its interior plus closing brace, dropping the leading
+     * opening brace so {@link #switchEntrySuffix} can carry {@code {} on the measured header line and keep the body
+     * outside the header's width decision. The block renderer always emits the opening brace first, so this only trims a
+     * finished Doc — the body's statements and comments are untouched and still render exactly once.
+     */
+    private static Doc blockAfterOpeningBrace(Doc block) {
+        if (block instanceof Doc.Text(String value) && value.startsWith("{")) {
+            return Doc.text(value.substring(1));
+        }
+        if (
+            block instanceof Doc.Concat(List<Doc> docs)
+            && !docs.isEmpty()
+            && docs.get(0) instanceof Doc.Text(String value)
+            && value.equals("{")
+        ) {
+            return Doc.concat(docs.subList(1, docs.size()));
+        }
+        throw new IllegalStateException("switch entry block did not start with an opening brace");
     }
 
     /**
@@ -848,35 +924,6 @@ final class SwitchPrinter {
 
     private int switchEntryWidth(String text) {
         return (options.indentUnit().length() * 3) + text.length();
-    }
-
-    private Doc switchStatementGroupEntry(
-            SwitchEntry entry,
-            Doc label,
-            Doc guard,
-            NodeList<Statement> statements,
-            Doc labelTrailingComment,
-            List<Doc> labelLeadingBodyComments
-    ) {
-        Doc trailing = labelTrailingComment == Doc.EMPTY
-            ? Doc.EMPTY
-            : Doc.lineSuffix(Doc.concat(Doc.text(" "), labelTrailingComment));
-        if (statements.size() == 1 && statements.get(0).isBlockStmt() && labelLeadingBodyComments.isEmpty()) {
-            return Doc.concat(
-                label,
-                guard,
-                Doc.text(": "),
-                trailing,
-                switchStatementGroupBlock(statements.get(0).asBlockStmt())
-            );
-        }
-        return Doc.concat(
-            label,
-            guard,
-            Doc.text(":"),
-            trailing,
-            switchEntryStatements(entry, statements, labelLeadingBodyComments)
-        );
     }
 
     /**

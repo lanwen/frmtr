@@ -588,21 +588,21 @@ final class SwitchPrinter {
             case SwitchCaseLabelLayout.CaseLabel.Fixed(Doc doc) -> switch (guard) {
                 case GuardLayout.None() -> Doc.concat(doc, opener);
                 case GuardLayout.Fixed(Doc broken) -> Doc.concat(doc, broken, opener);
-                case GuardLayout.Ranked(Doc flat, Doc broken) -> Doc.bestFitting(
+                case GuardLayout.Ranked(Doc flat, Doc broken) -> Doc.bestFittingFirstLine(
                     List.of(Doc.concat(doc, flat, opener), Doc.concat(doc, broken, opener))
                 );
             };
             case SwitchCaseLabelLayout.CaseLabel.Ranked(Doc labelFlat, Doc labelWrapped) -> switch (guard) {
-                case GuardLayout.None() -> Doc.bestFitting(
+                case GuardLayout.None() -> Doc.bestFittingFirstLine(
                     List.of(Doc.concat(labelFlat, opener), Doc.concat(labelWrapped, opener))
                 );
-                case GuardLayout.Fixed(Doc broken) -> Doc.bestFitting(
+                case GuardLayout.Fixed(Doc broken) -> Doc.bestFittingFirstLine(
                     List.of(Doc.concat(labelFlat, broken, opener), Doc.concat(labelWrapped, broken, opener))
                 );
-                // Four-arm cross product for a single record-pattern label plus a wrappable guard. Priorities pick the
-                // fully-flat header first, then break the guard before wrapping the label, so a fitting label-flat +
-                // guard-broken shape beats a label-wrapped + guard-flat one that also fits.
-                case GuardLayout.Ranked(Doc guardFlat, Doc guardBroken) -> Doc.bestFitting(
+                // Four-arm cross product for a single record-pattern label plus a wrappable guard, ranked by header
+                // first-line fit so an over-width body cannot flatten the header. Priorities pick the fully-flat header
+                // first, then break the guard before wrapping the label, among the arms whose first line fits.
+                case GuardLayout.Ranked(Doc guardFlat, Doc guardBroken) -> Doc.bestFittingFirstLine(
                     List.of(
                         Doc.concat(labelFlat, guardFlat, opener),
                         Doc.concat(labelFlat, guardBroken, opener),

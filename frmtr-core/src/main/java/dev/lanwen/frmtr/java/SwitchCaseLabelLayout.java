@@ -271,7 +271,7 @@ final class SwitchCaseLabelLayout {
      */
     private Doc recordPatternComponent(Expression pattern) {
         if (pattern instanceof RecordPatternExpr recordPattern) {
-            return Doc.bestFitting(List.of(
+            return Doc.bestFittingFirstLine(List.of(
                 Doc.text(switchLabelText(recordPattern)),
                 recordPattern(recordPattern)
             ));

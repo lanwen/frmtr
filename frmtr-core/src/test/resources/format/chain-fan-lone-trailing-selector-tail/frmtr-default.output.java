@@ -8,7 +8,20 @@ final class ChainFanLoneTrailingSelectorTail {
                 .commit();
     }
 
-    StepProbe keepsFanWhenTrailingSelectorHasArguments(
+    StepProbe hugsTrailingSelectorWithArgumentsWhenFlatFits(
+            StepProbe probe,
+            SessionReader sessionReader,
+            Principal principal
+    ) {
+        return probe.withVirtualTime(() -> sessionReader.findSessions(
+            principal.groupId(),
+            Source.LOCAL,
+            principal,
+            null
+        )).expectNextCount(4);
+    }
+
+    StepProbe keepsFanWhenTrailingSelectorArgumentOverflows(
             StepProbe probe,
             SessionReader sessionReader,
             Principal principal
@@ -19,6 +32,8 @@ final class ChainFanLoneTrailingSelectorTail {
             principal,
             null
         ))
-                .expectNextCount(4);
+                .expectNextMatchesFulfillmentSequenceAcrossEveryDownstreamConsumerInTheOrderPipeline(
+                    EXPECTED_FULFILLMENT_SEQUENCE
+                );
     }
 }

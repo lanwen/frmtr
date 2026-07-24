@@ -279,10 +279,14 @@ function of the AST (built once, shared across candidates) and is *ranked agains
 re-formatting) instead of a source-shape-sensitive per-printer decision. The same fan seam is replicated at every host
 position a chain can appear (initializers, assignment RHS, `return`, call/constructor arguments, binary operands,
 statement expressions, lambda bodies). Array initializers follow an analogous structural fan-at-three rule. When a
-trivial-receiver chain attaches its first selector and only a single argument-free selector remains, that lone tail
-hugs onto the attached selector's closing line (`)).expectSubscription();`) instead of fanning onto its own line,
-ranked by `Doc.bestFitting` against the ordinary fanned tail so a chain with argument-bearing or multiple remaining
-selectors keeps the one-per-line fan.
+trivial-receiver chain attaches its first selector and only a single, comment-free, lambda-free selector remains, that
+lone tail hugs onto the attached selector's closing line (`)).expectSubscription();`, `)).expectNextCount(4);`) instead
+of fanning onto its own line — its own arguments included, rendered as flat compact text so an overflow can never
+partially break them. Ranked by `Doc.bestFittingFirstLine` (not plain fewest-lines) against the ordinary fanned tail:
+first-line fit leads because the hug is one line of unbounded width while the fanned tail's opening line is always
+short, so a plain line-count ranking would let an overflowing hug beat a fanned tail whose own argument list still
+explodes further to fit. A chain with multiple remaining selectors, or a lone tail carrying a lambda or type argument,
+keeps the one-per-line fan.
 
 The chain family is the largest cluster in the `java` package: `MethodCallChainPrinter` and `MethodCallPrinter` are the
 entry points; `ChainFanLayout` holds the break-rule registries and fan builders; `ChainSegmentRenderer` renders the

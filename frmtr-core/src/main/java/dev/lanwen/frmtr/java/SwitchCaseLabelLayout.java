@@ -115,18 +115,25 @@ final class SwitchCaseLabelLayout {
         return switch (switchLabelLayout(entry, flat)) {
             case FLAT -> Doc.text(flat);
             case SINGLE_WRAPPED_LABEL -> Doc.concat(Doc.text("case "), switchLabel(entry.getLabels().get(0)));
-            case WRAPPED_LABEL_LIST -> Doc.concat(
-                Doc.text("case"),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            entry.getLabels().stream().map(label -> Doc.text(switchLabelText(label))).toList()
+            case WRAPPED_LABEL_LIST -> {
+                // Keep case + first label on the header and wrap the rest at +2 so a block arm's body sits one level
+                // shallower; labels and body never share a column.
+                List<Expression> labels = entry.getLabels();
+                yield Doc.concat(
+                    Doc.text("case " + switchLabelText(labels.get(0)) + ","),
+                    Doc.indent(
+                        Doc.indent(
+                            Doc.concat(
+                                Doc.HARD_LINE,
+                                Doc.join(
+                                    Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                                    labels.stream().skip(1).map(label -> Doc.text(switchLabelText(label))).toList()
+                                )
+                            )
                         )
                     )
-                )
-            );
+                );
+            }
         };
     }
 

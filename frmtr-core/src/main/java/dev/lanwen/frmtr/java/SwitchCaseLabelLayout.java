@@ -18,14 +18,14 @@ import java.util.function.ToIntFunction;
  * flat-versus-wrapped width shape and its inline-comment-preserving raw fallback.
  *
  * <p>This helper hosts the label family behind the single {@link #switchEntryLabel} entry point (plus the
- * {@link #switchLabelText} spelling the guard renderer reuses). It classifies the label layout
- * ({@link SwitchLabelLayout}: keep the whole {@code case ...} list flat, wrap one over-wide record-pattern label after
- * {@code case}, or put each comma-separated label on its own line), renders a single label or a record pattern wrapped one
- * component per line, spells the {@code default} label and each label's text from raw or compacted source, and rebuilds a
- * spread label list from its commented token text so inline block comments ({@code case REMOTE /* remote *}{@code /,
- * HYBRID}) survive ({@link #commentPreservingCaseLabel}). The boundary exists so the switch printer's per-entry pipeline
- * can consult one place for the label region instead of carrying the record-pattern wrapping, the label-list width test,
- * and the raw comment-preservation scan inline.
+ * {@link #switchLabelText} spelling the guard renderer reuses). It returns a {@link CaseLabel}: a single fixed layout for
+ * a {@code default}, a comment-carrying list, or a single label (kept flat or wrapped as one over-wide record pattern), or
+ * the flat-and-{@code #438}-wrapped alternatives of a comma-separated list for the renderer to rank at the entry's true
+ * column. It renders a single label or a record pattern wrapped one component per line, spells the {@code default} label
+ * and each label's text from raw or compacted source, and rebuilds a spread label list from its commented token text so
+ * inline block comments ({@code case REMOTE /* remote *}{@code /, HYBRID}) survive ({@link #commentPreservingCaseLabel}).
+ * The boundary exists so the switch printer's per-entry pipeline can consult one place for the label region instead of
+ * carrying the record-pattern wrapping, the label-list alternatives, and the raw comment-preservation scan inline.
  *
  * <p>The helper claims only the label region: it does not decide whether an entry is raw-preserved end to end, whether the
  * guard wraps, or how the entry body renders — those stay with {@link SwitchPrinter}. It reads the same arrow-leading
@@ -76,65 +76,74 @@ final class SwitchCaseLabelLayout {
     }
 
     /**
-     * Names the switch-label layouts after the caller has already selected structured switch-entry printing.
+     * A switch entry's rendered {@code case}/{@code default} label: a single fixed layout, or — for a comma-separated
+     * {@code case} label list — the flat and {@code #438}-wrapped alternatives the renderer ranks at the entry's true
+     * column.
      *
-     * <p>The enum owns only the local label shape. It does not decide whether an entry is raw-preserved, whether guards
-     * wrap, or how the entry body renders; those choices stay with the surrounding switch-entry pipeline.
+     * <p>Splitting the list case into two alternatives lets {@link SwitchPrinter} attach the guard and arrow/colon opener
+     * to each and defer the flat-versus-wrapped choice to the renderer, which alone sees the label list's real nesting
+     * column; a build-time width probe cannot, because the switch entry-list indent is a renderer-applied {@code indent}.
      */
-    private enum SwitchLabelLayout {
-        /** Keep the complete {@code case ...} label on one line because it fits or a single label does not need wrapping. */
-        FLAT,
+    sealed interface CaseLabel {
 
-        /** Wrap one record-pattern label after {@code case} because the pattern itself exceeds the available width. */
-        SINGLE_WRAPPED_LABEL,
+        /** A label with one settled layout: {@code default}, a comment-carrying list, or a single (flat or wrapped) label. */
+        record Fixed(Doc doc) implements CaseLabel {}
 
-        /** Put each label on its own line because a comma-separated label list exceeds the available width. */
-        WRAPPED_LABEL_LIST,
+        /** A comma-separated list offered as its flat one-liner and its {@code #438}-wrapped shape for the renderer to rank. */
+        record Ranked(Doc flat, Doc wrapped) implements CaseLabel {}
     }
 
     /**
-     * Prints the {@code case} or {@code default} label before a switch entry's guard and arrow/colon.
+     * Builds the {@code case} or {@code default} label before a switch entry's guard and arrow/colon.
      *
-     * <p>Default labels may include source-only text such as comments before {@code default}; case labels can stay flat,
-     * wrap as one record pattern, or wrap as one label per line when the comma-separated label list is too wide.
+     * <p>Default labels may include source-only text such as comments before {@code default}; a single case label stays
+     * flat or wraps as one record pattern; a comma-separated list is handed back as {@link CaseLabel.Ranked} so the
+     * renderer keeps it flat when it fits at the real column and wraps one label per line only when it overflows.
      */
-    Doc switchEntryLabel(SwitchEntry entry) {
+    CaseLabel switchEntryLabel(SwitchEntry entry) {
         if (entry.isDefault()) {
-            return Doc.text(defaultSwitchEntryLabel(entry));
+            return new CaseLabel.Fixed(Doc.text(defaultSwitchEntryLabel(entry)));
         }
         Optional<Doc> commented = commentPreservingCaseLabel(entry);
         if (commented.isPresent()) {
-            return commented.orElseThrow();
+            return new CaseLabel.Fixed(commented.orElseThrow());
         }
-        String flatLabels = entry.getLabels()
-                .stream()
+        List<Expression> labels = entry.getLabels();
+        String flat = "case " + labels.stream()
                 .map(this::switchLabelText)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
-        String flat = "case " + flatLabels;
-        return switch (switchLabelLayout(entry, flat)) {
-            case FLAT -> Doc.text(flat);
-            case SINGLE_WRAPPED_LABEL -> Doc.concat(Doc.text("case "), switchLabel(entry.getLabels().get(0)));
-            case WRAPPED_LABEL_LIST -> {
-                // Keep case + first label on the header and wrap the rest at +2 so a block arm's body sits one level
-                // shallower; labels and body never share a column.
-                List<Expression> labels = entry.getLabels();
-                yield Doc.concat(
-                    Doc.text("case " + switchLabelText(labels.get(0)) + ","),
-                    Doc.indent(
-                        Doc.indent(
-                            Doc.concat(
-                                Doc.HARD_LINE,
-                                Doc.join(
-                                    Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                    labels.stream().skip(1).map(label -> Doc.text(switchLabelText(label))).toList()
-                                )
-                            )
+        if (labels.size() == 1) {
+            Expression only = labels.get(0);
+            Doc doc = switchLabelBreaks(only)
+                ? Doc.concat(Doc.text("case "), switchLabel(only))
+                : Doc.text(flat);
+            return new CaseLabel.Fixed(doc);
+        }
+        return new CaseLabel.Ranked(Doc.text(flat), wrappedLabelList(labels));
+    }
+
+    /**
+     * The {@code #438} wrapped shape for a comma-separated label list: {@code case} plus the first label stay on the
+     * header line and the rest wrap at {@code +2}, so a block arm's body sits one level shallower and labels and body
+     * never share a column. Emitted as the break arm of {@link CaseLabel.Ranked}; the renderer chooses it only when the
+     * flat one-liner overflows.
+     */
+    private Doc wrappedLabelList(List<Expression> labels) {
+        return Doc.concat(
+            Doc.text("case " + switchLabelText(labels.get(0)) + ","),
+            Doc.indent(
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(
+                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                            labels.stream().skip(1).map(label -> Doc.text(switchLabelText(label))).toList()
                         )
                     )
-                );
-            }
-        };
+                )
+            )
+        );
     }
 
     /**
@@ -198,19 +207,6 @@ final class SwitchCaseLabelLayout {
         return comment.comment()
                 .getRange()
                 .map(range -> sourceText.region(range).beginOffset());
-    }
-
-    private SwitchLabelLayout switchLabelLayout(SwitchEntry entry, String flat) {
-        if (entry.getLabels().size() == 1 && !switchLabelBreaks(entry.getLabels().get(0))) {
-            return SwitchLabelLayout.FLAT;
-        }
-        if (currentIndentedWidth.applyAsInt(flat + " -> {}") <= options.lineWidth()) {
-            return SwitchLabelLayout.FLAT;
-        }
-        if (entry.getLabels().size() == 1) {
-            return SwitchLabelLayout.SINGLE_WRAPPED_LABEL;
-        }
-        return SwitchLabelLayout.WRAPPED_LABEL_LIST;
     }
 
     /**

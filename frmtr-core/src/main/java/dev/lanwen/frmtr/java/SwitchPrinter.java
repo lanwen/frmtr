@@ -14,7 +14,6 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import dev.lanwen.frmtr.FormatterException;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,8 +51,6 @@ final class SwitchPrinter {
     private final SourceShapePolicy sourceShapePolicy;
 
     private final RawPreservedSource rawPreservedSource;
-
-    private final FormatterOptions options;
 
     private final SourceText sourceText;
 
@@ -150,7 +147,6 @@ final class SwitchPrinter {
         this.rawSource = context.rawSource;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.rawPreservedSource = context.rawPreservedSource;
-        this.options = context.options;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, SwitchPrinter::switchEntryListRecoveryFailure);
@@ -574,60 +570,86 @@ final class SwitchPrinter {
             }
         }
         SwitchCaseLabelLayout.CaseLabel label = caseLabelLayout.switchEntryLabel(entry);
-        Doc guard = switchEntryGuard(entry);
-        EntrySuffix suffix = switchEntrySuffix(entry, guard);
-        Doc entryDoc = switch (label) {
-            case SwitchCaseLabelLayout.CaseLabel.Fixed(Doc doc) ->
-                Doc.concat(doc, suffix.opener(), suffix.body());
-            // Rank the flat one-liner and the wrapped label list at the entry's true column: only the header (labels +
-            // guard + arrow/colon opener) rides both arms, so the flat/wrapped choice turns purely on whether the header
-            // line fits. The body follows the best-fitting node — which measures node-locally — so an over-width body line
-            // can never sway the header toward staying flat and over-width.
-            case SwitchCaseLabelLayout.CaseLabel.Ranked(Doc flat, Doc wrapped) -> Doc.concat(
-                Doc.bestFitting(
-                    List.of(Doc.concat(flat, suffix.opener()), Doc.concat(wrapped, suffix.opener()))
-                ),
-                suffix.body()
-            );
-        };
+        GuardLayout guard = switchEntryGuard(entry);
+        EntrySuffix suffix = switchEntrySuffix(entry);
+        Doc entryDoc = Doc.concat(switchEntryHeader(label, guard, suffix.opener()), suffix.body());
         entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
         return Doc.concat(leadingComment, entryDoc);
     }
 
     /**
-     * The header-line content the label-wrap decision measures ({@code opener}: guard + the {@code ->}/{@code :} marker,
+     * Ranks the entry header — the label × guard matrix plus the arrow/colon opener — at the true render column, with the
+     * body kept outside so an over-width below-header line cannot sway the header flat. A guard that fits stays flat;
+     * only when the flat header overflows does the guard break onto its own parenthesized line, and a record-pattern
+     * label wraps only when even the guard-broken header still overflows (priorities pin that guard-first preference).
+     */
+    private Doc switchEntryHeader(SwitchCaseLabelLayout.CaseLabel label, GuardLayout guard, Doc opener) {
+        return switch (label) {
+            case SwitchCaseLabelLayout.CaseLabel.Fixed(Doc doc) -> switch (guard) {
+                case GuardLayout.None() -> Doc.concat(doc, opener);
+                case GuardLayout.Fixed(Doc broken) -> Doc.concat(doc, broken, opener);
+                case GuardLayout.Ranked(Doc flat, Doc broken) -> Doc.bestFittingFirstLine(
+                    List.of(Doc.concat(doc, flat, opener), Doc.concat(doc, broken, opener))
+                );
+            };
+            case SwitchCaseLabelLayout.CaseLabel.Ranked(Doc labelFlat, Doc labelWrapped) -> switch (guard) {
+                case GuardLayout.None() -> Doc.bestFittingFirstLine(
+                    List.of(Doc.concat(labelFlat, opener), Doc.concat(labelWrapped, opener))
+                );
+                case GuardLayout.Fixed(Doc broken) -> Doc.bestFittingFirstLine(
+                    List.of(Doc.concat(labelFlat, broken, opener), Doc.concat(labelWrapped, broken, opener))
+                );
+                // Four-arm cross product for a single record-pattern label plus a wrappable guard, ranked by header
+                // first-line fit so an over-width body cannot flatten the header. Priorities pick the fully-flat header
+                // first, then break the guard before wrapping the label, among the arms whose first line fits.
+                case GuardLayout.Ranked(Doc guardFlat, Doc guardBroken) -> Doc.bestFittingFirstLine(
+                    List.of(
+                        Doc.concat(labelFlat, guardFlat, opener),
+                        Doc.concat(labelFlat, guardBroken, opener),
+                        Doc.concat(labelWrapped, guardFlat, opener),
+                        Doc.concat(labelWrapped, guardBroken, opener)
+                    ),
+                    new int[] {3, 2, 1, 0}
+                );
+            };
+        };
+    }
+
+    /**
+     * The header-line content the label × guard wrap decision measures ({@code opener}: the {@code ->}/{@code :} marker,
      * a block arm's opening brace, or an inline expression that shares the case line) and the content rendered below it
      * ({@code body}: a block's interior and closing brace, colon-group statements, or a next-line rule body).
      *
-     * <p>The split lets {@link #switchEntry} rank the case-label wrap on the header alone — {@code body} is emitted after
-     * the ranked best-fitting node, which measures node-locally, so an over-width line in a below-the-header body cannot
-     * push the labels toward staying flat and over-width. A body that genuinely lands on the case line (a rule
+     * <p>The split lets {@link #switchEntryHeader} rank the label × guard matrix on the header alone — {@code body} is
+     * emitted after the ranked best-fitting node, which measures node-locally, so an over-width line in a below-the-header
+     * body cannot push the header toward staying flat and over-width. A body that genuinely lands on the case line (a rule
      * expression) stays in {@code opener} so the wrap still accounts for it.
      */
     private record EntrySuffix(Doc opener, Doc body) {}
 
     /**
-     * Splits an entry after its label into the header opener (guard + arrow/colon marker + any block opening brace) and
-     * the trailing body, so the label-wrap decision measures the header only. The body's comments are built here exactly
-     * once — {@link #switchEntry} shares this one body across both ranked label arms rather than rebuilding it.
+     * Splits an entry after its label and guard into the header opener (arrow/colon marker + any block opening brace) and
+     * the trailing body, so the label × guard wrap decision measures the header only. The label and guard are interposed
+     * before this opener by {@link #switchEntryHeader}; the body's comments are built here exactly once and shared across
+     * every ranked header arm rather than rebuilt.
      */
-    private EntrySuffix switchEntrySuffix(SwitchEntry entry, Doc guard) {
+    private EntrySuffix switchEntrySuffix(SwitchEntry entry) {
         return switch (switchEntryLayout(entry)) {
-            case STATEMENT_GROUP -> statementGroupSuffix(entry, guard);
-            case EMPTY_RULE -> new EntrySuffix(Doc.concat(guard, Doc.text(" ->")), Doc.EMPTY);
+            case STATEMENT_GROUP -> statementGroupSuffix(entry);
+            case EMPTY_RULE -> new EntrySuffix(Doc.text(" ->"), Doc.EMPTY);
             case COMMENTED_RULE_BODY -> new EntrySuffix(
-                Doc.concat(guard, Doc.text(" ->")),
+                Doc.text(" ->"),
                 Doc.indent(Doc.concat(
                     Doc.HARD_LINE,
                     statementRenderer.format(entry.getStatements().get(0), LayoutContext.root())
                 ))
             );
-            case RECOVERED_COMMENTED_RULE_BODY -> recoveredCommentedRuleBodySuffix(guard, entry);
-            case INLINE_RULE_BODY -> inlineRuleBodySuffix(guard, entry.getStatements().get(0));
+            case RECOVERED_COMMENTED_RULE_BODY -> recoveredCommentedRuleBodySuffix(entry);
+            case INLINE_RULE_BODY -> inlineRuleBodySuffix(entry.getStatements().get(0));
         };
     }
 
-    private EntrySuffix statementGroupSuffix(SwitchEntry entry, Doc guard) {
+    private EntrySuffix statementGroupSuffix(SwitchEntry entry) {
         NodeList<Statement> statements = entry.getStatements();
         Doc labelTrailingComment = caseLabelTrailingComment(entry);
         List<Doc> labelLeadingBodyComments = caseLabelLeadingBodyComments(entry);
@@ -636,30 +658,30 @@ final class SwitchPrinter {
             : Doc.lineSuffix(Doc.concat(Doc.text(" "), labelTrailingComment));
         if (statements.size() == 1 && statements.get(0).isBlockStmt() && labelLeadingBodyComments.isEmpty()) {
             return new EntrySuffix(
-                Doc.concat(guard, Doc.text(": {")),
+                Doc.text(": {"),
                 Doc.concat(trailing, blockAfterOpeningBrace(switchStatementGroupBlock(statements.get(0).asBlockStmt())))
             );
         }
         return new EntrySuffix(
-            Doc.concat(guard, Doc.text(":")),
+            Doc.text(":"),
             Doc.concat(trailing, switchEntryStatements(entry, statements, labelLeadingBodyComments))
         );
     }
 
-    private EntrySuffix inlineRuleBodySuffix(Doc guard, Statement statement) {
+    private EntrySuffix inlineRuleBodySuffix(Statement statement) {
         if (statement.isBlockStmt()) {
             Doc block = switchRuleBlock(statement.asBlockStmt());
             // An empty block collapses to {} on the case line, so — like an inline expression — the whole opener stays
             // on the measured header; only a non-empty block drops its interior and closing brace below the header.
             if (block instanceof Doc.Text(String value) && value.equals("{}")) {
-                return new EntrySuffix(Doc.concat(guard, Doc.text(" -> {}")), Doc.EMPTY);
+                return new EntrySuffix(Doc.text(" -> {}"), Doc.EMPTY);
             }
-            return new EntrySuffix(Doc.concat(guard, Doc.text(" -> {")), blockAfterOpeningBrace(block));
+            return new EntrySuffix(Doc.text(" -> {"), blockAfterOpeningBrace(block));
         }
         // A non-block body renders on the header line right after {@code -> }, so it belongs to the measured header, not
         // the outside-body slot: the label wrap must account for the expression that shares the case line with it.
         return new EntrySuffix(
-            Doc.concat(guard, Doc.text(" -> "), switchEntryBody(statement)),
+            Doc.concat(Doc.text(" -> "), switchEntryBody(statement)),
             Doc.EMPTY
         );
     }
@@ -670,7 +692,7 @@ final class SwitchPrinter {
      * orphan bucket. The recovered comment renders on its own indented line after {@code ->} like the body-owned comment,
      * so the arm matches the {@code @default} shape byte for byte while the body renders inline.
      */
-    private EntrySuffix recoveredCommentedRuleBodySuffix(Doc guard, SwitchEntry entry) {
+    private EntrySuffix recoveredCommentedRuleBodySuffix(SwitchEntry entry) {
         Statement statement = entry.getStatements().get(0);
         List<Doc> commentLines = new ArrayList<>();
         for (Doc comment : ruleArrowLeadingComments(entry, statement)) {
@@ -678,7 +700,7 @@ final class SwitchPrinter {
             commentLines.add(Doc.HARD_LINE);
         }
         return new EntrySuffix(
-            Doc.concat(guard, Doc.text(" ->")),
+            Doc.text(" ->"),
             Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(commentLines), switchEntryBody(statement)))
         );
     }
@@ -883,45 +905,42 @@ final class SwitchPrinter {
     }
 
     /**
-     * Prints a {@code when} guard, wrapping enclosed or too-wide guards as a parenthesized binary-expression block.
-     *
-     * <p>The raw single-line fallback stays flat for source-only entries, so those entries are excluded from guard
-     * wrapping. Ordinary long guards delegate their internal expression layout back to the binary-expression renderer.
+     * A {@code when} guard's layout for {@link #switchEntryHeader} to compose with the label, mirroring
+     * {@link SwitchCaseLabelLayout.CaseLabel}: no width is measured here, the renderer ranks the flat-vs-broken choice.
      */
-    private Doc switchEntryGuard(SwitchEntry entry) {
+    sealed interface GuardLayout {
+
+        /** No guard on this entry. */
+        record None() implements GuardLayout {}
+
+        /** A parenthesized guard that always renders broken across its own indented lines (structural, source-enclosed). */
+        record Fixed(Doc doc) implements GuardLayout {}
+
+        /** A flat {@code when …} and its broken parenthesized shape for the renderer to rank at the entry's true column. */
+        record Ranked(Doc flat, Doc broken) implements GuardLayout {}
+    }
+
+    /**
+     * Builds the {@code when} guard layout: absent, an always-broken parenthesized block for a source-enclosed guard, or
+     * a flat/broken pair the renderer ranks. The broken shape delegates its internal layout to the binary-expression
+     * renderer; the flat shape is the compact single-line spelling.
+     */
+    private GuardLayout switchEntryGuard(SwitchEntry entry) {
         if (entry.getGuard().isEmpty()) {
-            return Doc.EMPTY;
+            return new GuardLayout.None();
         }
         Expression guard = entry.getGuard().orElseThrow();
-        String flat = " when " + compactSource.compact(guard);
-        if (!switchGuardBreaks(entry, guard, flat)) {
-            return Doc.text(flat);
-        }
         Expression guardedExpression = guard instanceof EnclosedExpr enclosedExpr ? enclosedExpr.getInner() : guard;
-        return Doc.concat(
+        Doc broken = Doc.concat(
             Doc.text(" when ("),
             Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesRenderer.apply(guardedExpression))),
             Doc.HARD_LINE,
             Doc.text(")")
         );
-    }
-
-    private boolean switchGuardBreaks(SwitchEntry entry, Expression guard, String flat) {
-        String label = "case "
-            + entry.getLabels()
-                    .stream()
-                    .map(caseLabelLayout::switchLabelText)
-                    .reduce((left, right) -> left + ", " + right)
-                    .orElse("");
-        return (
-            guard instanceof EnclosedExpr
-            || (switchEntryWidth(label + flat + " -> {}") >= options.lineWidth()
-                && !rawSingleLineSwitchEntry(entry).isPresent())
-        );
-    }
-
-    private int switchEntryWidth(String text) {
-        return (options.indentUnit().length() * 3) + text.length();
+        if (guard instanceof EnclosedExpr) {
+            return new GuardLayout.Fixed(broken);
+        }
+        return new GuardLayout.Ranked(Doc.text(" when " + compactSource.compact(guard)), broken);
     }
 
     /**

@@ -257,6 +257,18 @@ public sealed interface Doc
     }
 
     /**
+     * Combines first-line-fit ranking with per-alternative {@code priorities}: the first line's fit leads, then overall
+     * fit, then among fitting arms the higher priority. Lets a caller rank by header fit yet still pin which shape wins
+     * when several fit. See {@link #bestFittingFirstLine(List)} and {@link #bestFitting(List, int[])} for each half.
+     *
+     * @throws IllegalArgumentException if {@code alternatives} is empty, or if {@code priorities} is non-empty and its
+     *     length does not equal the number of alternatives
+     */
+    static Doc bestFittingFirstLine(List<Doc> alternatives, int[] priorities) {
+        return new BestFitting(alternatives, priorities, true);
+    }
+
+    /**
      * Builds a ranked-broken-layout node whose alternatives carry per-alternative <em>priorities</em>, giving a caller a
      * way to say "prefer this shape over that one even though it uses more lines". The
      * priority is a secondary ranking key placed <strong>after the fit gate and before line count</strong>: among the

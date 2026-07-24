@@ -28,6 +28,8 @@ final class SingleCallArgumentOpenerHugLayout {
     /** A wrapping call is "short" when its selector name is under this many symbols (brackets and dots excluded). */
     static final int SHORT_CALL_NAME_LIMIT = 8;
 
+    private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
+
     private final FormatterOptions options;
 
     private final SourceShapePolicy sourceShapePolicy;
@@ -119,19 +121,20 @@ final class SingleCallArgumentOpenerHugLayout {
      * decision is structural and indent-independent — the single argument ({@code inner(…)} or {@code new Type<>(…)}) is
      * "the single entity" a wrapping call keeps on its opener line — but only a <em>short</em> wrapping call
      * ({@code List.of}, {@code when}, {@code verify}: selector name under {@link #SHORT_CALL_NAME_LIMIT} symbols) reads
-     * well as a {@code short(inner(} opener; a longer wrapper keeps the exploded list. The remaining {@code nodeIndentWidth}
-     * read is purely the break-versus-flat gate: while the flat whole-call may fit, defer to the generic group, which alone
-     * measures the caller-appended terminator ({@code ;}) / chain suffix that a {@link Doc#bestFitting} flat arm cannot see,
-     * so the hug only fires once flat overflows even at that lower-bound column. A pure function of the AST (no source-shape
-     * read), so the verdict is a fixpoint across passes.
+     * well as a {@code short(inner(} opener when the inner argument is itself a method call; a longer wrapper keeps the
+     * exploded list there. A nested <em>constructor</em> argument ({@code spawnStubPool(new Worker(…))}) reads as one
+     * entity regardless of the wrapper's name length, so the short-name gate is withheld for {@link ObjectCreationExpr}
+     * inner arguments — hugging a single nested {@code new Type(} is never worse than exploding both openers. Such a
+     * nested constructor also hugs when {@link ArgumentHeaviness} would force ITS OWN argument list onto separate lines on
+     * structural density alone, even though the flat text still fits under the width
+     * ({@code spawnStubPool(new Worker(a.formatted(b), c(d)))} is dense enough to force {@code new Worker(}'s own break well
+     * under 120 columns) — the constructor breaks either way, so hugging its opener costs nothing. A constructor whose own
+     * list stays flat (not heavy) is left to the generic path, which already keeps it on one un-hugged continuation line
+     * when it fits. A pure function of the AST (no source-shape read), so the verdict is a fixpoint across passes.
      */
     private boolean applies(Request request) {
         MethodCallExpr expression = request.expression();
-        if (
-            expression.getArguments().size() != 1
-            || sourceShapePolicy.hasContainedComments(expression)
-            || expression.getNameAsString().length() >= SHORT_CALL_NAME_LIMIT
-        ) {
+        if (expression.getArguments().size() != 1 || sourceShapePolicy.hasContainedComments(expression)) {
             return false;
         }
         Optional<InnerCall> inner = innerCall(expression.getArgument(0));
@@ -142,10 +145,21 @@ final class SingleCallArgumentOpenerHugLayout {
         ) {
             return false;
         }
+        Expression innerNode = inner.orElseThrow().node();
+        boolean innerIsConstructor = innerNode instanceof ObjectCreationExpr;
+        if (!innerIsConstructor && expression.getNameAsString().length() >= SHORT_CALL_NAME_LIMIT) {
+            return false;
+        }
+        if (
+            innerIsConstructor
+            && argumentHeaviness.isHeavy(((ObjectCreationExpr) innerNode).getArguments(), true)
+        ) {
+            return true;
+        }
         // Measure the inner call source-neutrally: compact() normalizes the token range, so an array argument keeps the
         // author's interior spacing and trailing comma ({@code new int[] {a, b,}}), which shifts this width across a
         // re-format and flips the hug verdict. commentFree() rebuilds the call from the AST, so the width is invariant.
-        String flatCall = request.prefix() + "(" + compactSource.commentFree(inner.orElseThrow().node()) + ")";
+        String flatCall = request.prefix() + "(" + compactSource.commentFree(innerNode) + ")";
         return layoutWidth.nodeIndentWidth(expression) + flatCall.length() > options.lineWidth();
     }
 

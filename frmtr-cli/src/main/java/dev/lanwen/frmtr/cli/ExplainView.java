@@ -358,6 +358,11 @@ final class ExplainView {
             if (alternative.overflow() > 0) {
                 out.append(styler.style(Role.FADE, " (" + alternative.overflow() + " over)"));
             }
+            // First-line overflow explains a win that contradicts pure line count: a first-line-fit node keeps the arm
+            // whose header fits over a fewer-lines arm whose opener spills, which would otherwise look arbitrary.
+            if (alternative.firstLineOverflow() > 0) {
+                out.append(styler.style(Role.FADE, " [first line " + alternative.firstLineOverflow() + " over]"));
+            }
             if (alternative.priority() != 0) {
                 out.append(styler.style(Role.FADE, " [priority " + alternative.priority() + "]"));
             }

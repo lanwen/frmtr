@@ -217,15 +217,16 @@ public record DocExplanation(
          * One measured alternative in a {@link Doc.BestFitting}.
          *
          * <p>{@code index} is its position in the alternative list, {@code lines} the number of newlines it would render
-         * into at the node's start column, {@code overflow} the total columns past the line width it would incur, and
-         * {@code priority} the per-alternative preference weight (higher wins among fitting candidates). The ranking keeps
-         * a fitting alternative (zero overflow) over any overflowing one first; then, among fitting candidates, a strictly
-         * higher {@code priority}; then within equal fit-and-priority the fewest lines, then the least overflow, then the
-         * earliest index. Recording {@code priority} lets {@code --explain} show why a higher-line alternative won when a
-         * caller set a preference (without it the report would show a line count that disagrees with the choice).
+         * into at the node's start column, {@code overflow} the total columns past the line width it would incur,
+         * {@code firstLineOverflow} the part of that on line 0 alone, and {@code priority} the per-alternative preference
+         * weight (higher wins among fitting candidates). The ranking keeps a fitting alternative (zero overflow) over any
+         * overflowing one first; then, among fitting candidates, a strictly higher {@code priority}; then within equal
+         * fit-and-priority the fewest lines, then the least overflow, then the earliest index. Recording {@code priority}
+         * and {@code firstLineOverflow} lets {@code --explain} show why a higher-line alternative won: a caller preference,
+         * or a first-line-fit node keeping the arm whose header fits over the fewest-lines arm whose opener spills.
          * {@code chosen} marks the winner.
          */
-        public record Alternative(int index, int lines, int overflow, int priority, boolean chosen) {}
+        public record Alternative(int index, int lines, int overflow, int firstLineOverflow, int priority, boolean chosen) {}
     }
 
     /**

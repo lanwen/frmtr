@@ -118,7 +118,7 @@ final class DocWidths {
          * line over width) beats any overflow regardless of line count; among fitting candidates a strictly higher
          * {@code priority} wins; then strictly fewer lines, then strictly less overflow. Equal on all keys keeps the
          * earlier (flatter) alternative, which makes the choice deterministic and the reformat a fixpoint. See
-         * {@link #betterThan(LineCount, int, LineCount, int)}.
+         * {@link #betterThan(LineCount, int, LineCount, int, boolean)}.
          *
          * <p>The ambient render mode is not part of the key: a best-fitting node is always ranked and rendered in break
          * mode (each candidate is measured, and the winner rendered, in break mode), and {@code lineWidth} is constant
@@ -136,6 +136,7 @@ final class DocWidths {
                 return cached;
             }
             int[] priorities = bestFitting.priorities();
+            boolean rankFirstLineFirst = bestFitting.rankFirstLineFirst();
             int limit = Math.min(alternatives.size(), MAX_BEST_FITTING_ALTERNATIVES);
             int bestIndex = 0;
             LineCount best = null;
@@ -143,7 +144,7 @@ final class DocWidths {
                 // Rank each candidate as it would render at this column, resolving any nested best-fitting nodes at their
                 // own column so the metric matches what the winner will actually emit.
                 LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth);
-                if (best == null || betterThan(candidate, priorities[i], best, priorities[bestIndex])) {
+                if (best == null || betterThan(candidate, priorities[i], best, priorities[bestIndex], rankFirstLineFirst)) {
                     best = candidate;
                     bestIndex = i;
                 }
@@ -163,9 +164,35 @@ final class DocWidths {
          * alternative) and <em>before</em> line count (so a higher-priority fitting shape wins over a fewer-lines one).
          * With equal priorities — the default all-zero case, and the neither-fits case — this reduces exactly to
          * {@link LineCount#betterThan}, the byte-identity guarantee for callers that set no priority.
+         *
+         * <p>When {@code rankFirstLineFirst} is set on the node the order changes to <strong>first-line fit → fit →
+         * priority → less overflow → fewer lines</strong>. The first-line gate leads: an arm whose first line fits beats
+         * one whose first line overruns, so a hug whose opener spills loses to a broken shape whose header fits. When the
+         * first lines tie — the root broke internally, so both arms open with the same short line and the collision lands
+         * on a later seam line — overflow moves ahead of line count: the arms share one over-width body, so the arm that
+         * overflows less (the broken shape that splits the seam) must win over the hug that saves a line by colliding the
+         * root's continuation with the selector opener. Default off keeps the fit → priority → line-count order.
          */
-        private boolean betterThan(LineCount aCount, int aPriority, LineCount bCount, int bPriority) {
-            // Fit gate first: fitting dominates both priority and line count, so priority is only a tie-break among
+        private boolean betterThan(LineCount aCount, int aPriority, LineCount bCount, int bPriority, boolean rankFirstLineFirst) {
+            if (rankFirstLineFirst) {
+                // First-line gate leads: a hug whose first line overruns can never win over a broken arm whose header fits.
+                if (aCount.firstLineFits() != bCount.firstLineFits()) {
+                    return aCount.firstLineFits();
+                }
+                if (aCount.fits() != bCount.fits()) {
+                    return aCount.fits();
+                }
+                if (aCount.fits() && aPriority != bPriority) {
+                    return aPriority > bPriority;
+                }
+                // Overflow before line count: the arms share one over-width body, so the shape that overflows less on its
+                // seam lines wins over the one that merely saves a line by hugging the selector onto the broken root.
+                if (aCount.overflow() != bCount.overflow()) {
+                    return aCount.overflow() < bCount.overflow();
+                }
+                return aCount.lines() < bCount.lines();
+            }
+            // Fit gate: fitting dominates both priority and line count, so priority is only a tie-break among
             // candidates that already fit and can never make an overflowing alternative win.
             if (aCount.fits() != bCount.fits()) {
                 return aCount.fits();
@@ -200,7 +227,7 @@ final class DocWidths {
             walk.walk(doc, indent, LineMode.BREAK);
             walk.flushLineSuffixes();
             walk.accountOverflowAtEnd();
-            return new LineCount(walk.lines, walk.overflow);
+            return new LineCount(walk.lines, walk.overflow, walk.firstLineOverflow);
         }
 
         private int measure(Doc doc, int remaining) {
@@ -297,6 +324,9 @@ final class DocWidths {
             private int lines;
 
             private int overflow;
+
+            /** Overflow contributed by line 0 only, captured the first time a line closes; the whole-doc overflow when it never breaks. */
+            private int firstLineOverflow;
 
             private LineCountWalk(int lineWidth) {
                 this.lineWidth = lineWidth;
@@ -412,8 +442,12 @@ final class DocWidths {
             }
 
             private void accountOverflow() {
-                if (column > lineWidth) {
-                    overflow += column - lineWidth;
+                int lineOverflow = Math.max(0, column - lineWidth);
+                overflow += lineOverflow;
+                // Every line close routes through here before its lines++, so lines == 0 is exactly the first line's
+                // close (or end-of-doc when the doc never broke); capture its overflow once for first-line-fit ranking.
+                if (lines == 0) {
+                    firstLineOverflow = lineOverflow;
                 }
             }
 
@@ -431,10 +465,10 @@ final class DocWidths {
      * fits (zero overflow) always beats one that overflows; among layouts of equal fit status the winner is the one with
      * strictly fewer lines, then strictly less overflow, then the earliest (flattest) on a tie. This is the
      * <em>measured-width</em> half of the ranking only; the per-alternative priority key sits between the fit gate
-     * and line count and is applied by {@link Measurement#betterThan(LineCount, int, LineCount, int)}, which keeps
+     * and line count and is applied by {@link Measurement#betterThan(LineCount, int, LineCount, int, boolean)}, which keeps
      * {@code LineCount} a pure width fact.
      */
-    record LineCount(int lines, int overflow) {
+    record LineCount(int lines, int overflow, int firstLineOverflow) {
 
         /**
          * Whether the document fits — no rendered line exceeded the width, i.e. the summed per-line overflow is zero.
@@ -443,6 +477,15 @@ final class DocWidths {
          */
         boolean fits() {
             return overflow == 0;
+        }
+
+        /**
+         * Whether the <em>first</em> rendered line stays within the width. The first-line-fit ranking key used when a
+         * best-fitting node opts into {@code rankFirstLineFirst}: it separates a hug whose opener overruns from a broken
+         * shape whose header fits even when both carry the same over-width hard-break body, so neither {@code fits}.
+         */
+        boolean firstLineFits() {
+            return firstLineOverflow == 0;
         }
 
         /**

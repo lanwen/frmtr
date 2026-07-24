@@ -88,10 +88,10 @@ final class DocWidthsTest {
         // whatever the depth, then rank it directly and confirm the verdict is stable across depth, repeat, and cold runs.
         int reference = -1;
         for (int wrappers : new int[] {0, 1, 4, 16}) {
-            Doc.BestFitting inner = new Doc.BestFitting(List.of(innerFlat, innerBroken), new int[0]);
+            Doc.BestFitting inner = new Doc.BestFitting(List.of(innerFlat, innerBroken), new int[0], false);
             Doc nested = inner;
             for (int i = 0; i < wrappers; i++) {
-                nested = new Doc.BestFitting(List.of(nested), new int[0]);
+                nested = new Doc.BestFitting(List.of(nested), new int[0], false);
             }
 
             DocWidths.Measurement warm = measurement();
@@ -122,7 +122,7 @@ final class DocWidthsTest {
     void chooseBestFittingKeysPerContextNotPerNode() {
         Doc flatArm = Doc.text("resolveHandle().annotateSource().dedupe()"); // 41 wide
         Doc brokenArm = Doc.concat(Doc.text("resolveHandle()"), Doc.HARD_LINE, Doc.text(".annotateSource()"));
-        Doc.BestFitting node = new Doc.BestFitting(List.of(flatArm, brokenArm), new int[0]);
+        Doc.BestFitting node = new Doc.BestFitting(List.of(flatArm, brokenArm), new int[0], false);
         int lineWidth = 60;
 
         // Independently: near column 0 the 41-wide flat arm fits (0 lines, 0 overflow) and beats the 1-line broken arm;
@@ -149,6 +149,60 @@ final class DocWidthsTest {
         return measurement()
             .measureLineCount(node.alternatives().getFirst(), 0, startColumn, lineWidth)
             .fits();
+    }
+
+    /**
+     * The first-line-fit ranking primitive: with two arms that both carry an over-width body (so neither fits), plain
+     * {@code bestFitting} keeps the fewest-lines arm even though its opener overruns, while {@code bestFittingFirstLine}
+     * gates on the first line and keeps the arm whose header fits — the block-lambda-hug fix in one node.
+     */
+    @Test
+    void bestFittingFirstLinePrefersFittingHeaderOverFewerLines() {
+        int lineWidth = 20;
+        Doc overWideBody = Doc.text("alsoAVeryLongBodyLineHere"); // 25 wide — overflows either arm
+        // Hug arm: opener overruns on line 0, then the body — fewer lines but a spilling header.
+        List<Doc> arms = List.of(
+            Doc.concat(Doc.text("openerTooLongToFitOnLine"), Doc.HARD_LINE, overWideBody),
+            // Broken arm: short header on line 0, selector dropped, then the same body — one more line, header fits.
+            Doc.concat(Doc.text("shortHead"), Doc.HARD_LINE, Doc.text("dropped"), Doc.HARD_LINE, overWideBody)
+        );
+
+        assertThat(measurement().measureLineCount(arms.get(0), 0, 0, lineWidth).firstLineFits())
+            .as("hug arm's opener overflows").isFalse();
+        assertThat(measurement().measureLineCount(arms.get(1), 0, 0, lineWidth).firstLineFits())
+            .as("broken arm's header fits").isTrue();
+
+        assertThat(measurement().chooseBestFitting((Doc.BestFitting) Doc.bestFitting(arms), 0, 0, lineWidth))
+            .as("plain bestFitting keeps the fewest-lines hug arm").isEqualTo(0);
+        assertThat(measurement().chooseBestFitting((Doc.BestFitting) Doc.bestFittingFirstLine(arms), 0, 0, lineWidth))
+            .as("bestFittingFirstLine keeps the fitting-header broken arm").isEqualTo(1);
+    }
+
+    /**
+     * When the first lines tie — the root broke internally, so both arms open with the same short line and the collision
+     * lands on a later seam line — {@code bestFittingFirstLine} moves overflow ahead of line count: the arm that splits
+     * the seam (less overflow, one more line) wins over the hug that saves a line by colliding the root with the selector,
+     * while plain {@code bestFitting} still keeps the fewest-lines hug.
+     */
+    @Test
+    void bestFittingFirstLinePrefersLessOverflowOverFewerLinesWhenFirstLinesTie() {
+        int lineWidth = 20;
+        Doc sharedBody = Doc.text("aSharedBodyLineThatOverflows"); // 28 wide — overflows both arms equally
+        List<Doc> arms = List.of(
+            // Hug: short header, then a colliding over-width seam line, then the body — fewer lines, more overflow.
+            Doc.concat(Doc.text("head"), Doc.HARD_LINE, Doc.text("thisSeamLineOverflowsBadly"), Doc.HARD_LINE, sharedBody),
+            // Broken: same header, seam split into two fitting lines, then the body — one more line, less overflow.
+            Doc.concat(Doc.text("head"), Doc.HARD_LINE, Doc.text("shortSeam"), Doc.HARD_LINE, Doc.text("continues"), Doc.HARD_LINE, sharedBody)
+        );
+
+        assertThat(measurement().measureLineCount(arms.get(0), 0, 0, lineWidth).firstLineFits())
+            .as("both arms open with the same fitting header").isTrue();
+        assertThat(measurement().measureLineCount(arms.get(1), 0, 0, lineWidth).firstLineFits()).isTrue();
+
+        assertThat(measurement().chooseBestFitting((Doc.BestFitting) Doc.bestFitting(arms), 0, 0, lineWidth))
+            .as("plain bestFitting keeps the fewest-lines colliding hug").isEqualTo(0);
+        assertThat(measurement().chooseBestFitting((Doc.BestFitting) Doc.bestFittingFirstLine(arms), 0, 0, lineWidth))
+            .as("bestFittingFirstLine keeps the less-overflow split-seam arm").isEqualTo(1);
     }
 
     @Test

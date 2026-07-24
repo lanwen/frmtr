@@ -236,7 +236,24 @@ public sealed interface Doc
      * @throws IllegalArgumentException if {@code alternatives} is empty
      */
     static Doc bestFitting(List<Doc> alternatives) {
-        return new BestFitting(alternatives, new int[0]);
+        return new BestFitting(alternatives, new int[0], false);
+    }
+
+    /**
+     * Builds a best-fitting node whose alternatives all carry the same over-width hard-break body, so none {@code fits}
+     * and fewest-lines would otherwise keep the arm whose opener spills. It ranks first-line fit first — an arm whose
+     * first rendered line stays within the width beats one whose first line overruns — then, when the first lines tie
+     * (the root broke internally so the collision lands on a later seam line), less total overflow before fewer lines,
+     * so the shape that splits the seam wins over the hug that saves a line by colliding the root with the selector.
+     *
+     * <p>{@code rankFirstLineFirst} is a static per-node ranking-mode fact, the same category as {@code priorities} — not
+     * a measured width; the ranking stays a pure function of the AST plus the rendered column. All other {@code bestFitting}
+     * semantics are unchanged; see {@link #bestFitting(List)} for the full contract.
+     *
+     * @throws IllegalArgumentException if {@code alternatives} is empty
+     */
+    static Doc bestFittingFirstLine(List<Doc> alternatives) {
+        return new BestFitting(alternatives, new int[0], true);
     }
 
     /**
@@ -262,7 +279,7 @@ public sealed interface Doc
      *     length does not equal the number of alternatives
      */
     static Doc bestFitting(List<Doc> alternatives, int[] priorities) {
-        return new BestFitting(alternatives, priorities);
+        return new BestFitting(alternatives, priorities, false);
     }
 
     /**
@@ -322,8 +339,13 @@ public sealed interface Doc
      * <p>{@code priorities} is a parallel vector — one entry per alternative, same order, higher preferred — read as a
      * secondary ranking key between the fit gate and line count. It is a static per-alternative fact on the node, not a
      * measured width, so the ranking stays a pure function of the AST plus the rendered column.
+     *
+     * <p>{@code rankFirstLineFirst} switches the order to first-line fit → fit → priority → less overflow → fewer lines
+     * (see {@link #bestFittingFirstLine(List)}): a candidate whose first line fits beats one whose first line overruns.
+     * Like {@code priorities} it is a static per-node ranking-mode fact, not a width; default {@code false} leaves the
+     * ranking exactly as it was for callers that do not opt in.
      */
-    record BestFitting(List<Doc> alternatives, int[] priorities) implements Doc {
+    record BestFitting(List<Doc> alternatives, int[] priorities, boolean rankFirstLineFirst) implements Doc {
         /**
          * Rejects an empty alternative list, defensively copies the alternatives, and normalizes {@code priorities} so
          * the "at least one alternative" and "one priority per alternative" invariants hold for every {@code BestFitting}

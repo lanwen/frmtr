@@ -180,7 +180,10 @@ The four **width-deciding** primitives are the heart of the model:
   line count* at the live column, with a deterministic, priority-aware tie-break. Unlike a conditional group it *can*
   rank two broken shapes against each other, which is what method-call chains need. Ranking measures at most a small cap
   of alternatives per node and memoizes each node's ranking by (identity, indent, start column), so nested ranking stays
-  affordable at any depth without a nesting cap — native-image-safe and near-linear on real code.
+  affordable at any depth without a nesting cap — native-image-safe and near-linear on real code. `bestFittingFirstLine`
+  opts a node into a first-line-fit ranking mode (a static per-node fact, not a width): when every alternative carries
+  the same over-width body so none fits, it ranks first-line fit first, then less overflow before fewer lines — the arm
+  whose header fits wins over the fewest-lines arm whose opener spills.
 
 ```
    ┌─ Group ──────────► flat if it fits, else break
@@ -191,6 +194,7 @@ The four **width-deciding** primitives are the heart of the model:
    │
    └─ BestFitting ────► rank alternatives (incl. broken ones):
                           fit gate ▸ priority ▸ fewer lines ▸ less overflow ▸ flattest
+                          (bestFittingFirstLine: first-line fit ▸ fit ▸ priority ▸ less overflow ▸ fewer lines)
 ```
 
 ### Renderer and width authority
@@ -282,10 +286,12 @@ individual `.selector(args)` links (flat, width-broken, force-broken, comment/la
 their prefixes; `ChainRootPromotionLayout` renders the chain root in each promotion shape (inline, grouped, broken,
 expression-rendered): the grouped-promoted multi-argument root ranks its grouped and fully-broken shapes with
 `Doc.bestFitting` at the true rendered column (the single-segment method-root break uses the same form but its caller
-offers no broken alternative, so that ranking is inert), while a `LayoutWidth.nodeLine` indentation estimate still gates
-the block-lambda multi-argument pre-emption and both block-lambda root hugs — the grouped-promoted hug and the
-single-segment promoted-root hug — whose hard-break lambda bodies defeat fewest-lines ranking;
-`CompactRootBrokenSegmentLayout` builds the
+offers no broken alternative, so that ranking is inert), and both block-lambda root hugs — the grouped-promoted hug and
+the single-segment promoted-root hug — rank hug-versus-selector-drop with `Doc.bestFittingFirstLine`, so the renderer
+decides at the true column even though the hard-break lambda body defeats plain fewest-lines ranking. A `LayoutWidth.nodeLine`
+indentation estimate still gates the block-lambda multi-argument pre-emption (which selects a distinct fully-exploded
+argument shape); the remaining `nodeLine` chain-path consumers are that pre-emption, the expression-rendered multi-arg
+root break, and the compact-root first-line fit. `CompactRootBrokenSegmentLayout` builds the
 compact-root-with-broken-final-segment shapes (root and selector on one line, only the final argument list broken) and
 the sibling that breaks the root's arguments and glues a no-arg segment to its close; `MethodCallChainSourcePlanner`,
 `ChainSelectorLambdaLayout`, `LambdaBodyChainFanLayout`, `PackedMethodCallChainLayout`, and `VariableInitializerLayout`

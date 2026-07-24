@@ -211,12 +211,14 @@ public final class DocExplainRenderer {
                     for (int i = 0; i < measured; i++) {
                         DocWidths.LineCount count =
                             widths.measureLineCount(alternatives.get(i), indent, startColumn, lineWidth);
-                        // Record the priority alongside the measured line count so --explain can show why a higher-line
-                        // alternative won: a fitting higher-priority arm outranks a fitting fewer-lines one.
+                        // Record priority and first-line overflow alongside the line count so --explain can show why a
+                        // higher-line alternative won: a higher-priority arm, or a first-line-fit node keeping the arm
+                        // whose header fits over the fewest-lines arm whose opener spills.
                         ranked.add(new BestFittingDecision.Alternative(
                             i,
                             count.lines(),
                             count.overflow(),
+                            count.firstLineOverflow(),
                             priorities[i],
                             i == chosen
                         ));

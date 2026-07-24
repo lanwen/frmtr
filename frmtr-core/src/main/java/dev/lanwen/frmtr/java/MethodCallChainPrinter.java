@@ -251,7 +251,6 @@ final class MethodCallChainPrinter {
             this::chainContinuation,
             this::softChainContinuation,
             this::methodCallSegmentHasBlockLambdaArgument,
-            this::blockLambdaSegmentFirstLine,
             this::rootLineWidth,
             methodRoot -> methodCallChain(methodRoot, MethodCallBreakMode.FORCED, LayoutContext.root())
         );
@@ -1203,7 +1202,7 @@ final class MethodCallChainPrinter {
                     );
                 }
                 return Optional.of(
-                    groupedPromotedRootWithSingleSegment(root, rootDoc, calls.getFirst(), finalSegmentSuffix, layout)
+                    groupedPromotedRootWithSingleSegment(rootDoc, calls.getFirst(), finalSegmentSuffix)
                 );
             }
             // Attach the single trailing segment at the column it actually renders at. A broken expression-renderer root
@@ -1781,13 +1780,11 @@ final class MethodCallChainPrinter {
     }
 
     private Doc groupedPromotedRootWithSingleSegment(
-            Expression root,
             Doc rootDoc,
             MethodCallExpr expression,
-            MethodCallChainTail finalSegmentSuffix,
-            LayoutContext layout
+            MethodCallChainTail finalSegmentSuffix
     ) {
-        return rootPromotion.groupedPromotedRootWithSingleSegment(root, rootDoc, expression, finalSegmentSuffix, layout);
+        return rootPromotion.groupedPromotedRootWithSingleSegment(rootDoc, expression, finalSegmentSuffix);
     }
 
     private Optional<String> blockLambdaSegmentFirstLine(String root, MethodCallExpr expression) {

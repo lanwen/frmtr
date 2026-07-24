@@ -82,7 +82,12 @@ final class ChainSegmentPaddingLayout {
                 for (Doc alternative : bestFitting.alternatives()) {
                     alternatives.add(linePadded(alternative, padding, lineStart).doc());
                 }
-                yield new PaddedDoc(Doc.bestFitting(alternatives), false);
+                // Rebuild through the canonical constructor so the padded copy keeps the node's full ranking shape —
+                // both the priority vector and the first-line-fit mode — rather than collapsing to the default metric.
+                yield new PaddedDoc(
+                    new Doc.BestFitting(alternatives, bestFitting.priorities(), bestFitting.rankFirstLineFirst()),
+                    false
+                );
             }
             case Doc.Line ignored -> new PaddedDoc(
                 Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)),

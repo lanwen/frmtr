@@ -72,8 +72,7 @@ class MethodChainSegmentArgumentsSample {
         return plan.map(plan -> plan.firstLineFits(
                 line -> compactRootLineWidth(root, line, lineBudget),
                 options.lineWidth()
-        ))
-                .orElse(true);
+        )).orElse(true);
     }
 
     Doc fallbackScope(RouteCall expression) {

@@ -112,8 +112,8 @@ final class ExplainViewTest {
             20,
             0,
             List.of(
-                new BestFittingDecision.Alternative(0, 4, 3, 0, false),
-                new BestFittingDecision.Alternative(1, 2, 0, 0, true)
+                new BestFittingDecision.Alternative(0, 4, 3, 0, 0, false),
+                new BestFittingDecision.Alternative(1, 2, 0, 0, 0, true)
             )
         );
 
@@ -137,8 +137,8 @@ final class ExplainViewTest {
             80,
             0,
             List.of(
-                new BestFittingDecision.Alternative(0, 2, 0, 0, false),
-                new BestFittingDecision.Alternative(1, 3, 0, 1, true)
+                new BestFittingDecision.Alternative(0, 2, 0, 0, 0, false),
+                new BestFittingDecision.Alternative(1, 3, 0, 0, 1, true)
             )
         );
 
@@ -151,6 +151,28 @@ final class ExplainViewTest {
     }
 
     @Test
+    void rendersTheFirstLineOverflowWhenAFewerLinesArmLostBecauseItsOpenerSpilled() {
+        // A first-line-fit node: alternative 0 uses fewer lines but its opener overruns by 5 columns, so alternative 1
+        // (one more line, header fits) was chosen. The report prints the first-line overflow so the win reads correctly.
+        BestFittingDecision bestFitting = new BestFittingDecision(
+            Optional.of("java.expression:MethodCallExpr"),
+            1,
+            70,
+            0,
+            List.of(
+                new BestFittingDecision.Alternative(0, 3, 5, 5, 0, false),
+                new BestFittingDecision.Alternative(1, 4, 0, 0, 0, true)
+            )
+        );
+
+        String why = renderWhy(explanationWith(List.of(), List.of(), List.of(bestFitting)));
+
+        assertThat(why)
+                .contains("alternative 0: 3 lines (5 over) [first line 5 over]")
+                .contains("alternative 1: 4 lines <- chosen");
+    }
+
+    @Test
     void aBestFittingLayoutThatChoseAOneLineAlternativeIsNotReportedAsAWrap() {
         // The flattest alternative fit on one line (zero newlines) and was chosen, so the node did not wrap and stays
         // out of "why it wrapped".
@@ -160,8 +182,8 @@ final class ExplainViewTest {
             80,
             0,
             List.of(
-                new BestFittingDecision.Alternative(0, 0, 0, 0, true),
-                new BestFittingDecision.Alternative(1, 2, 0, 0, false)
+                new BestFittingDecision.Alternative(0, 0, 0, 0, 0, true),
+                new BestFittingDecision.Alternative(1, 2, 0, 0, 0, false)
             )
         );
 

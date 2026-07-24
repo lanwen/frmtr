@@ -9,7 +9,6 @@ import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.java.MethodCallChainPrinter.MethodCallChainTail;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
@@ -55,8 +54,6 @@ final class ChainRootPromotionLayout {
 
     private final Predicate<MethodCallExpr> methodCallSegmentHasBlockLambdaArgument;
 
-    private final BiFunction<String, MethodCallExpr, Optional<String>> blockLambdaSegmentFirstLine;
-
     private final ChainFanLayout.RootLineWidth rootLineWidth;
 
     private final Function<MethodCallExpr, Optional<Doc>> forcedRootMethodCallChain;
@@ -76,7 +73,6 @@ final class ChainRootPromotionLayout {
             Function<Doc, Doc> chainContinuation,
             Function<Doc, Doc> softChainContinuation,
             Predicate<MethodCallExpr> methodCallSegmentHasBlockLambdaArgument,
-            BiFunction<String, MethodCallExpr, Optional<String>> blockLambdaSegmentFirstLine,
             ChainFanLayout.RootLineWidth rootLineWidth,
             Function<MethodCallExpr, Optional<Doc>> forcedRootMethodCallChain
     ) {
@@ -94,7 +90,6 @@ final class ChainRootPromotionLayout {
         this.chainContinuation = chainContinuation;
         this.softChainContinuation = softChainContinuation;
         this.methodCallSegmentHasBlockLambdaArgument = methodCallSegmentHasBlockLambdaArgument;
-        this.blockLambdaSegmentFirstLine = blockLambdaSegmentFirstLine;
         this.rootLineWidth = rootLineWidth;
         this.forcedRootMethodCallChain = forcedRootMethodCallChain;
     }
@@ -217,15 +212,14 @@ final class ChainRootPromotionLayout {
             return huggableExpressionLambda.orElseThrow();
         }
         if (methodCallSegmentHasBlockLambdaArgument.test(expression)) {
-            // Gate the hug on the block-lambda first line at its true rendered block/type depth (nodeLine); the
-            // hard-break lambda body defeats fewest-lines ranking, so keep the opener width gate rather than bestFitting.
-            return blockLambdaSegmentFirstLine.apply(compactSource.compact(expression.getScope().orElseThrow()), expression)
-                    .filter(firstLine -> layoutWidth.nodeLine(expression, firstLine) <= options.lineWidth())
-                    .map(ignored -> expressionRenderer.format(expression, LayoutContext.root()))
-                    .orElseGet(() -> Doc.concat(
-                            expressionRenderer.format(expression.getScope().orElseThrow(), LayoutContext.root()),
-                            chainContinuation.apply(segmentRenderer.methodCallChainSegment(expression))
-                    ));
+            // Rank the block-lambda hug against dropping the selector to its own continuation line at the true rendered
+            // column: both arms carry the same hard-break body, so first-line fit — not fewest lines — must decide.
+            Doc hug = expressionRenderer.format(expression, LayoutContext.root());
+            Doc broken = Doc.concat(
+                    expressionRenderer.format(expression.getScope().orElseThrow(), LayoutContext.root()),
+                    chainContinuation.apply(segmentRenderer.methodCallChainSegment(expression))
+            );
+            return Doc.bestFittingFirstLine(List.of(hug, broken));
         }
         return groupedPromotedSelector(expression);
     }
@@ -255,22 +249,17 @@ final class ChainRootPromotionLayout {
     }
 
     Doc groupedPromotedRootWithSingleSegment(
-            Expression root,
             Doc rootDoc,
             MethodCallExpr expression,
-            MethodCallChainTail finalSegmentSuffix,
-            LayoutContext layout
+            MethodCallChainTail finalSegmentSuffix
     ) {
         if (methodCallSegmentHasBlockLambdaArgument.test(expression)) {
-            return blockLambdaSegmentFirstLine.apply(compactSource.compact(root), expression)
-                    // Measure the promoted-root block-lambda first line at the root's true rendered block/type
-                    // depth ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-                    .filter(firstLine -> layoutWidth.nodeLine(root, firstLine) <= options.lineWidth())
-                    .map(ignored -> Doc.concat(rootDoc, segmentRenderer.methodCallChainSegment(expression, finalSegmentSuffix)))
-                    .orElseGet(() -> Doc.concat(
-                            rootDoc,
-                            chainContinuation.apply(segmentRenderer.methodCallChainSegment(expression, finalSegmentSuffix))
-                    ));
+            // Rank the block-lambda hug against dropping the selector to its own continuation line at the true rendered
+            // column: both arms carry the same hard-break body, so first-line fit — not fewest lines — must decide.
+            Doc segment = segmentRenderer.methodCallChainSegment(expression, finalSegmentSuffix);
+            Doc hug = Doc.concat(rootDoc, segment);
+            Doc broken = Doc.concat(rootDoc, chainContinuation.apply(segment));
+            return Doc.bestFittingFirstLine(List.of(hug, broken));
         }
         return Doc.group(
             Doc.concat(

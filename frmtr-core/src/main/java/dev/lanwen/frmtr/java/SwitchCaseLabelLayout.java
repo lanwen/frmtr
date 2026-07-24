@@ -15,8 +15,8 @@ import java.util.function.Function;
  * Owns how a {@code switch} entry's {@code case} / {@code default} label renders for {@link SwitchPrinter} — the label's
  * flat-versus-wrapped width shape and its inline-comment-preserving raw fallback.
  *
- * <p>This helper hosts the label family behind the single {@link #switchEntryLabel} entry point (plus the
- * {@link #switchLabelText} spelling the guard renderer reuses). It returns a {@link CaseLabel}: a fixed layout for a
+ * <p>This helper hosts the label family behind the single {@link #switchEntryLabel} entry point. It returns a
+ * {@link CaseLabel}: a fixed layout for a
  * {@code default}, a comment-carrying list, or a single non-pattern label, or the flat-and-wrapped alternatives — a
  * comma-separated label list or a single record pattern — for the renderer to rank at the entry's true column. It renders
  * a record pattern wrapped one component per line, spells the {@code default} label

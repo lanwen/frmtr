@@ -158,22 +158,6 @@ final class ChainRootPromotionLayout {
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        boolean multiArg = expression.getArguments().size() > 1;
-        boolean blockLambda = methodCallSegmentHasBlockLambdaArgument.test(expression);
-        if (multiArg && !blockLambda) {
-            // Rank the grouped selector shape against the fully-broken argument list at the true rendered column; the
-            // grouped form wins by fewer lines whenever it fits, so the renderer breaks arguments only when it must. A
-            // block-lambda argument keeps the estimate pre-emption below — its hard-break body defeats fewest-lines ranking.
-            Doc grouped = groupedPromotedSelector(expression);
-            return Doc.bestFitting(List.of(grouped, calls.brokenMethodCall(expression)));
-        }
-        if (
-            multiArg
-            // Measure the promoted block-lambda call at its true rendered block/type depth (nodeLine) instead of CURRENT.
-            && !sourceShapePolicy.fitsOnOneLine(expression, text -> layoutWidth.nodeLine(expression, text))
-        ) {
-            return calls.brokenMethodCall(expression);
-        }
         Optional<Doc> huggableExpressionLambda =
             groupedPromotedExpressionLambda(expression);
         if (huggableExpressionLambda.isPresent()) {

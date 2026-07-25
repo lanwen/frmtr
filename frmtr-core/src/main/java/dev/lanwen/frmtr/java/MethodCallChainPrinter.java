@@ -251,8 +251,7 @@ final class MethodCallChainPrinter {
             this::chainContinuation,
             this::softChainContinuation,
             this::methodCallSegmentHasBlockLambdaArgument,
-            this::rootLineWidth,
-            methodRoot -> methodCallChain(methodRoot, MethodCallBreakMode.FORCED, LayoutContext.root())
+            this::rootLineWidth
         );
         this.compactRootBrokenSegment = new CompactRootBrokenSegmentLayout(
             segmentWidth,

@@ -484,6 +484,15 @@ final class ExpressionLambdaArgumentLayout {
             bodyExpression instanceof MethodCallExpr chainBody
             && chainFan.overflowingHuggedObjectCreationRootChainBody(firstLine, chainBody, columnWidth)
         ) {
+            // A root that cannot stay flat on the hugged arrow line would stack its own close at the enclosing call's
+            // column ({@code ).findSessions(...)}⏎{@code ).expectSubscription()}); a sole lambda argument instead breaks
+            // the argument list and lets the chain re-derive its hug one indent deeper, keeping each close distinct.
+            if (arguments.size() == 1 && !chainFan.huggedObjectCreationRootStaysFlat(firstLine, chainBody, columnWidth)) {
+                Optional<Doc> ownLineChain = chainFan.lambdaArgumentOnOwnLineChain(prefix, argument.parameters(), chainBody);
+                if (ownLineChain.isPresent()) {
+                    return ownLineChain;
+                }
+            }
             Optional<Doc> huggedChain = chainFan.huggedLambdaBodyChain(firstLine, chainBody);
             if (huggedChain.isPresent()) {
                 return huggedChain;

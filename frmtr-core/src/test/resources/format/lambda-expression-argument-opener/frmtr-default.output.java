@@ -231,15 +231,16 @@ final class LambdaExpressionArgumentOpener {
             DirectoryClient directoryClient,
             Principal principal
     ) {
-        return probe.withVirtualTime(() -> new SessionReader(
-            packetRepository,
-            eventJournal,
-            remoteReader,
-            clock,
-            databaseClient,
-            agentLedger,
-            directoryClient
-        ).findSessions(principal.groupId(), Source.REMOTE, principal, null)
+        return probe.withVirtualTime(
+            () -> new SessionReader(
+                packetRepository,
+                eventJournal,
+                remoteReader,
+                clock,
+                databaseClient,
+                agentLedger,
+                directoryClient
+            ).findSessions(principal.groupId(), Source.REMOTE, principal, null)
         ).expectSubscription();
     }
 
@@ -254,20 +255,21 @@ final class LambdaExpressionArgumentOpener {
             DirectoryClient directoryClient,
             Principal principal
     ) {
-        return probe.withVirtualTime(() -> new SessionReader(
-            packetRepository,
-            eventJournal,
-            remoteReader,
-            clock,
-            databaseClient,
-            agentLedger,
-            directoryClient
-        ).findSessionsAcrossEveryRegisteredDownstreamConsumerGroupInTheDeployment(
-            principal.groupId(),
-            Source.REMOTE,
-            principal,
-            null
-        )
+        return probe.withVirtualTime(
+            () -> new SessionReader(
+                packetRepository,
+                eventJournal,
+                remoteReader,
+                clock,
+                databaseClient,
+                agentLedger,
+                directoryClient
+            ).findSessionsAcrossEveryRegisteredDownstreamConsumerGroupInTheDeployment(
+                principal.groupId(),
+                Source.REMOTE,
+                principal,
+                null
+            )
         ).expectSubscription();
     }
 

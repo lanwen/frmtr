@@ -185,6 +185,47 @@ final class LambdaBodyChainFanLayout {
         return scope.filter(ObjectCreationExpr.class::isInstance).isPresent();
     }
 
+    /**
+     * Reports whether the object-creation root still fits flat on the hugged arrow line, so the hug keeps every closer at
+     * a distinct column. A root forced to explode its own arguments would land its close at the enclosing call's column
+     * and stack ambiguous {@code )} lines — that chain belongs on {@link #lambdaArgumentOnOwnLineChain} instead.
+     */
+    boolean huggedObjectCreationRootStaysFlat(
+            String firstLine,
+            MethodCallExpr methodCall,
+            ToIntFunction<String> columnWidth
+    ) {
+        String rootText = compact.apply(chainRoot(methodCall));
+        return Math.max(
+            layoutWidth.nodeIndentWidth(methodCall) + firstLine.length() + 1 + rootText.length(),
+            columnWidth.applyAsInt(firstLine + " " + rootText)
+        ) <= options.lineWidth();
+    }
+
+    /**
+     * Renders the sole lambda argument on its own broken-argument line ({@code call(}⏎{@code () -> new X(}…{@code )})
+     * so the chain re-derives its shape one indent deeper: the root hugs the arrow, explodes its arguments there, and the
+     * enclosing close dedents to the opener's column instead of colliding with the root's own close.
+     */
+    Optional<Doc> lambdaArgumentOnOwnLineChain(String prefix, String parameters, MethodCallExpr chainBody) {
+        String arrowLine = parameters + " ->";
+        return huggedLambdaBodyChainRenderer.apply(arrowLine, chainBody)
+                .map(chain -> Doc.concat(
+                        Doc.text(prefix + "("),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(arrowLine + " "), chain)),
+                        Doc.HARD_LINE,
+                        Doc.text(")")
+                ));
+    }
+
+    private Expression chainRoot(MethodCallExpr methodCall) {
+        Expression scope = methodCall.getScope().orElseThrow();
+        if (scope instanceof MethodCallExpr scopeCall) {
+            return chainRoot(scopeCall);
+        }
+        return scope;
+    }
+
     private boolean chainOverflowsHuggedColumn(
             String firstLine,
             MethodCallExpr methodCall,

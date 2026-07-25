@@ -291,7 +291,11 @@ same way once the constructor root explodes: `MethodCallChainPrinter.objectRootS
 attaches the lone selector to the constructor's close (its own arguments still exploding one per line if the glued
 opener overflows) against the existing fan-onto-its-own-line shape with plain `Doc.bestFitting` — fewer lines wins
 when both fit, so a root that stays flat keeps the fan (attaching there would only force the selector's own
-arguments open) and a root that genuinely breaks recovers the glued shape.
+arguments open) and a root that genuinely breaks recovers the glued shape. When such a chain is the sole
+expression-lambda argument of an enclosing call, the lambda hugs the call opener only while the constructor root stays
+flat on the arrow line (`LambdaBodyChainFanLayout.huggedObjectCreationRootStaysFlat`); a root forced to explode would
+land its close at the enclosing call's column and stack ambiguous `)` lines, so the argument list breaks instead and
+the lambda re-derives the same hug one indent deeper, keeping every close at a distinct column.
 
 The chain family is the largest cluster in the `java` package: `MethodCallChainPrinter` and `MethodCallPrinter` are the
 entry points; `ChainFanLayout` holds the break-rule registries and fan builders; `ChainSegmentRenderer` renders the

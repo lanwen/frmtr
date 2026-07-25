@@ -2289,38 +2289,35 @@ final class MethodCallChainPrinter {
             // continuation column and still breaks the argument only if it genuinely overruns. Multi-argument, lambda, and
             // already-broken selectors are excluded by singleSimpleMethodCallSegmentArgument, so they keep the existing
             // argument-opening fan-out.
-            //
-            // This dot-break applies to every caller. A statement chain
-            // ({@code new ProfileRequest(...).submit(10);}) reaches this branch once
-            // {@link #refuseOpeningSingleSimpleObjectRootChainTail} declines the arg-opening compact shape, and wants the
-            // same {@code new ProfileRequest(...)}⏎{@code .submit(10)} shape, not the arg-opened
-            // {@code .submit(}⏎{@code 10}⏎{@code )}. The choice is a pure function of the AST (single simple argument) and
-            // the width probe above, so it is a fixpoint regardless of the leading prefix.
+            Doc fanned;
             if (segmentWidth.singleSimpleMethodCallSegmentArgument(call)) {
-                return Doc.concat(
+                fanned = Doc.concat(
                     rootDoc,
                     objectRootContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
                 );
+            } else {
+                fanned = Doc.concat(
+                    rootDoc,
+                    objectRootContinuation(methodCallChainSegment(
+                        call,
+                        Optional.empty(),
+                        finalSegmentSuffix,
+                        layoutWidth::continuationStatement,
+                        true
+                    ))
+                );
             }
-            // The tail selector fans onto its own continuation line, so measure it THERE
-            // ({@code segmentOnOwnLine == true}, continuation budget) and let its own argument group open only when
-            // {@code .selector(args)} genuinely overruns that column — instead of force-breaking it one-argument-per-line
-            // via {@code brokenMethodCallChainSegment}. The compact-overflow probe above measures the whole compact chain
-            // (constructor plus attached selector), which overflows whenever the constructor root will itself break onto
-            // its own lines; but once it does, the selector lands at the shallow post-{@code )} column where
-            // {@code .findSessions(principal.groupId(), Source.REMOTE, principal, null)} fits flat. Measuring the fanned
-            // segment at its continuation column keeps that fitting tail on one line, matching the multi-selector fan
-            // ({@link #methodCallChainSegments}) and the assignment-position attached tail.
-            return Doc.concat(
-                rootDoc,
-                objectRootContinuation(methodCallChainSegment(
-                    call,
-                    Optional.empty(),
-                    finalSegmentSuffix,
-                    layoutWidth::continuationStatement,
-                    true
-                ))
-            );
+            // The probe above measures the compact chain as if the root rendered FLAT (constructor plus attached
+            // selector on one line), which under-counts a root that is actually forced to break onto its own lines at
+            // its true, possibly deeply nested column. Once the root breaks, the selector's real landing column is
+            // right after the root's OWN close ({@code ).findSessions(args))}), not the flat-root estimate this probe
+            // assumed. Rank a HUG that glues the lone tail there — its own argument group still explodes one argument
+            // per line on overflow, so it never strands a bare over-width opener — against the fanned-onto-its-own-line
+            // shape above, and let the renderer keep whichever wraps fewer lines at the real column: a root that stays
+            // flat keeps the fan (attaching there would only push the selector's own arguments open for nothing), and a
+            // root that genuinely breaks recovers the glued shape.
+            Doc hugged = Doc.concat(rootDoc, methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix, lineWidth));
+            return Doc.bestFitting(List.of(hugged, fanned));
         }
         Optional<Doc> compactAttachedSegment = compactAttachedObjectRootSingleSegment(
             rootDoc,

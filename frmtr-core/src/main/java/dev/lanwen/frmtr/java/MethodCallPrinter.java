@@ -524,14 +524,11 @@ final class MethodCallPrinter {
     // Canonical-fan seam: a fan-threshold, comment/lambda-free EXPRESSION-STATEMENT chain
     // ({@code foo.a().b().c();}) fans one selector per line, and it must do so through the SAME source-neutral fan on
     // every pass. On a source-multiline-argument pass the FORCED methodCallChain below skips its own canonical-fan routes
-    // (they gate {@code !sourceMultilineArguments}) and lands on the imperative {@code canAttachFirstSegmentToSimpleRoot}
-    // branch, which folds the first selector onto a simple receiver root ({@code active.createTopics(...)}); the
-    // already-fanned re-format then has single-line arguments, the early fan route fires, and the first selector splits
-    // onto its own line ({@code active}⏎{@code .createTopics(...)}). The two passes disagree forever. Routing the chain
-    // through {@code chainFanOut} here, ahead of the source-shape-sensitive branch, makes both passes rebuild the
-    // identical fan (a fixpoint by construction, the same argument the initializer / factory-root / assignment-RHS
-    // seams rely on). Expression-lambda / comment-bearing chains are withheld inside {@code canonicalFanChain}
-    // (deferred lambda-arrow seam) and stay on the imperative branches below.
+    // (they gate {@code !sourceMultilineArguments}) and lands on the imperative ladder, which is source-shaped and could
+    // disagree with an already-fanned re-format. Routing the chain through {@code chainFanOut} here, ahead of that
+    // ladder, makes both passes rebuild the identical fan (a fixpoint by construction, the same argument the
+    // initializer / factory-root / assignment-RHS seams rely on). Expression-lambda / comment-bearing chains are
+    // withheld inside {@code canonicalFanChain} (deferred lambda-arrow seam) and stay on the imperative branches below.
     //
     // Scoped to the STATEMENT position (the statement caller threads {@code EnclosingConstruct.STATEMENT} and the empty
     // {@code leftEdgePrefix} of a statement that owns its own first column). The other tail callers reaching this
@@ -996,11 +993,10 @@ final class MethodCallPrinter {
         ToIntFunction<String> lineWidth = layoutWidth::blockStatement;
         // Canonical-fan seam: a fan-threshold, comment/lambda-free return chain fans one selector per
         // line, and it must do so through the SAME source-neutral fan on every pass — otherwise a source-multiline-argument
-        // pass folds the first selector onto the value (`return data.configResources()...`) via the imperative
-        // {@code canAttachFirstSegmentToSimpleRoot} branch, and the fanned re-format (single-line arguments now) splits it
-        // (`return data`⏎`.configResources()...`), flipping split<->attach forever. {@code chainFanOut} is a pure function of
-        // the AST, so both passes rebuild the identical fan. This precedes the source-multiline branches below, which are
-        // exactly the source-shape-sensitive routes that produce the flip; the fan carries the empty final-segment suffix
+        // pass falls to the source-shaped imperative ladder below, which could disagree with an already-fanned
+        // re-format. {@code chainFanOut} is a pure function of the AST, so both passes rebuild the identical fan. This
+        // precedes the source-multiline branches below, which are exactly the source-shape-sensitive routes that would
+        // produce the flip; the fan carries the empty final-segment suffix
         // (the return terminator `;` is appended by {@link ReturnExpressionPrinter#returnStatement} outside the value) and
         // the `return ` left-edge prefix so a promoted factory root measures its opener at the rendered column.
         // Expression-lambda-bodied return chains are withheld inside {@code canonicalFanChain} (deferred lambda-arrow seam),
@@ -1728,9 +1724,9 @@ final class MethodCallPrinter {
         // selector per line through the SAME source-neutral fan on every pass, ahead of the source-shape-sensitive chain
         // routes below. Both the suffix-carrying FORCED route and the AUTO route further down reach
         // {@code MethodCallChainPrinter.methodCallChain}, whose own canonical-fan routes gate {@code !sourceMultilineArguments}
-        // and so fall to the imperative {@code canAttachFirstSegmentToSimpleRoot} branch on a source-multiline-argument pass
-        // — folding the first selector onto a simple receiver root and flipping split<->attach against the fanned re-format.
-        // Emitting {@code chainFanOut} here removes that dependence (the fan is a pure function of the AST). The ARGUMENT
+        // and so fall to the source-shaped imperative ladder on a source-multiline-argument pass, which could flip against
+        // the fanned re-format. Emitting {@code chainFanOut} here removes that dependence (the fan is a pure function of
+        // the AST). The ARGUMENT
         // {@link LayoutContext} carries an empty {@code leftEdgePrefix} for the same reason the AUTO route below does: an
         // argument's extra offset is pure continuation indentation the enclosing list applies at render time, which
         // {@code chainFanOut}'s relative {@code Doc.indent} continuation reproduces without a textual prefix. The fan fires by
@@ -1996,11 +1992,9 @@ final class MethodCallPrinter {
         // Canonical-fan seam: a fan-threshold, comment/lambda-free assignment-RHS chain fans one
         // selector per line, and it must do so through the SAME source-neutral fan on every pass — otherwise the RHS
         // opener flips split<->attach. On a source-multiline-argument pass the FORCED methodCallChain below skips its own
-        // canonical-fan routes (they gate {@code !sourceMultilineArguments}) and lands on the imperative
-        // {@code canAttachFirstSegmentToSimpleRoot} branch, which folds the first selector onto the target line
-        // ({@code x = parser.accepts(...)}); the already-fanned re-format then has single-line arguments, the fan route
-        // fires, and the selector splits onto its own line ({@code x = parser}⏎{@code .accepts(...)}). Routing the chain
-        // through {@code chainFanOut} here, ahead of the source-shape-sensitive branch, with the {@code target op }
+        // canonical-fan routes (they gate {@code !sourceMultilineArguments}) and lands on the source-shaped imperative
+        // ladder, which could disagree with an already-fanned re-format. Routing the chain
+        // through {@code chainFanOut} here, ahead of that ladder, with the {@code target op }
         // {@link LayoutContext#leftEdgePrefix() leftEdgePrefix} threaded (so a promoted factory root measures its opener at
         // the rendered column), makes both passes rebuild the identical fan. This is the assignment-side analogue of
         // {@code VariableInitializerLayout.variableInitializerCanonicalFan}; expression-lambda RHS chains are withheld

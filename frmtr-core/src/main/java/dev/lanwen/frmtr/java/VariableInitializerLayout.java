@@ -85,8 +85,7 @@ final class VariableInitializerLayout {
      * withheld (comment / block-lambda / expression-lambda chains — the deferred lambda-arrow seam). This is the same
      * delegate the return-value path uses; the initializer's break-after-{@code =} decider ranks the fan it produces
      * against the break-after-{@code =} shape at the true column, so a fan-threshold chain (even one with source-multiline
-     * selector arguments, which the imperative {@code forcedMethodCallChain} would render source-sensitively via
-     * {@code canAttachFirstSegmentToSimpleRoot}) is idempotent.
+     * selector arguments, which the imperative {@code forcedMethodCallChain} would otherwise fall through to) is idempotent.
      */
     @FunctionalInterface
     interface CanonicalFanChain {
@@ -887,8 +886,7 @@ final class VariableInitializerLayout {
      * <ul>
      *   <li><b>Direct fan-threshold method-call chain</b> ({@code = adminClient.listConsumerGroupOffsets(...).…}). Both
      *       arms render the chain through {@link #forcedMethodCallChain} → {@code chainFanOut} (root then one dotted
-     *       selector per line, a pure AST function — never the source-gated {@code canAttachFirstSegmentToSimpleRoot} that
-     *       {@code expression.apply} would reach). The attached arm threads the {@code NAME = } leftEdgePrefix; the broken
+     *       selector per line, a pure AST function). The attached arm threads the {@code NAME = } leftEdgePrefix; the broken
      *       arm renders the chain at its own indented column with an empty prefix. Object-creation roots are excluded here
      *       (their packed/broken-constructor branches own their shape).</li>
      *   <li><b>Object creation whose constructor argument is a fan-threshold chain</b>
@@ -915,8 +913,8 @@ final class VariableInitializerLayout {
         if (initializer instanceof MethodCallExpr methodCall
                 && !methodCallChainRootIsObjectCreation.test(methodCall)) {
             // Direct fan-threshold chain: render the fan through the SOURCE-NEUTRAL canonicalFanChain (chainFanOut) — not
-            // the imperative forcedMethodCallChain, whose canAttachFirstSegmentToSimpleRoot reads the author's
-            // source-multiline shape and flips the first-selector attach across passes. chainFanOut renders the
+            // the imperative forcedMethodCallChain, which falls through to source-shaped rendering on a
+            // source-multiline pass and could flip the first-selector attach across passes. chainFanOut renders the
             // root at LayoutContext.root() and each selector on its own dotted line, a pure AST function; canonicalFanChain
             // emits it regardless of sourceMultilineArguments (the same delegate the return path uses, why return has zero
             // oscillations). Both arms wrap that ONE fan, so the only remaining choice is attach-versus-break-after-`=`,

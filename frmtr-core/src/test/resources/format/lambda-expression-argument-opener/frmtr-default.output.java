@@ -239,8 +239,35 @@ final class LambdaExpressionArgumentOpener {
             databaseClient,
             agentLedger,
             directoryClient
+        ).findSessions(principal.groupId(), Source.REMOTE, principal, null)
+        ).expectSubscription();
+    }
+
+    StepProbe explodesTrailingCallArgumentsWhenGluedLineOverflows(
+            StepProbe probe,
+            PacketRepository packetRepository,
+            EventJournal eventJournal,
+            RemoteReader remoteReader,
+            Clock clock,
+            DatabaseClient databaseClient,
+            AgentLedger agentLedger,
+            DirectoryClient directoryClient,
+            Principal principal
+    ) {
+        return probe.withVirtualTime(() -> new SessionReader(
+            packetRepository,
+            eventJournal,
+            remoteReader,
+            clock,
+            databaseClient,
+            agentLedger,
+            directoryClient
+        ).findSessionsAcrossEveryRegisteredDownstreamConsumerGroupInTheDeployment(
+            principal.groupId(),
+            Source.REMOTE,
+            principal,
+            null
         )
-            .findSessions(principal.groupId(), Source.REMOTE, principal, null)
         ).expectSubscription();
     }
 

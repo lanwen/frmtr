@@ -286,7 +286,12 @@ partially break them. Ranked by `Doc.bestFittingFirstLine` (not plain fewest-lin
 first-line fit leads because the hug is one line of unbounded width while the fanned tail's opening line is always
 short, so a plain line-count ranking would let an overflowing hug beat a fanned tail whose own argument list still
 explodes further to fit. A chain with multiple remaining selectors, or a lone tail carrying a lambda or type argument,
-keeps the one-per-line fan.
+keeps the one-per-line fan. The object-creation-root sibling (`new SessionReader(...).findSessions(...)`) glues the
+same way once the constructor root explodes: `MethodCallChainPrinter.objectRootSingleSegmentChain` ranks a hug that
+attaches the lone selector to the constructor's close (its own arguments still exploding one per line if the glued
+opener overflows) against the existing fan-onto-its-own-line shape with plain `Doc.bestFitting` — fewer lines wins
+when both fit, so a root that stays flat keeps the fan (attaching there would only force the selector's own
+arguments open) and a root that genuinely breaks recovers the glued shape.
 
 The chain family is the largest cluster in the `java` package: `MethodCallChainPrinter` and `MethodCallPrinter` are the
 entry points; `ChainFanLayout` holds the break-rule registries and fan builders; `ChainSegmentRenderer` renders the

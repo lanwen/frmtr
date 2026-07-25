@@ -263,6 +263,31 @@ final class LambdaExpressionArgumentOpener {
             .expectSubscription();
     }
 
+    StepProbe explodesTrailingCallArgumentsWhenGluedLineOverflows(
+        StepProbe probe,
+        PacketRepository packetRepository,
+        EventJournal eventJournal,
+        RemoteReader remoteReader,
+        Clock clock,
+        DatabaseClient databaseClient,
+        AgentLedger agentLedger,
+        DirectoryClient directoryClient,
+        Principal principal
+    ) {
+        return probe.withVirtualTime(() ->
+            new SessionReader(
+                packetRepository,
+                eventJournal,
+                remoteReader,
+                clock,
+                databaseClient,
+                agentLedger,
+                directoryClient
+            ).findSessionsAcrossEveryRegisteredDownstreamConsumerGroupInTheDeployment(principal.groupId(), Source.REMOTE, principal, null)
+        )
+            .expectSubscription();
+    }
+
     StepProbe keepsMethodCallLambdaBodyPacked(StepProbe probe, SessionReader sessionReader, Principal principal) {
         return probe.withVirtualTime(() ->
             sessionReader.findSessions(principal.groupId(), Source.LOCAL, principal, null)

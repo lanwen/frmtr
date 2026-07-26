@@ -1189,6 +1189,20 @@ final class MethodCallChainPrinter {
                     groupedPromotedRootWithSingleSegment(rootDoc, calls.getFirst(), finalSegmentSuffix)
                 );
             }
+            // The renderer, not a source-width estimate, decides whether an EXPRESSION_RENDERER root attaches the
+            // trailing segment to its close (broken root) or sits it beside a flat root: both complete Docs are built
+            // and ranked once with bestFitting, so the true rendered column always wins.
+            if (chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER) {
+                Doc flat = Doc.concat(
+                    expressionRenderer.format(methodRoot, LayoutContext.root()),
+                    methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)
+                );
+                Doc broken = Doc.concat(
+                    this.calls.brokenMethodCall(methodRoot),
+                    methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth)
+                );
+                return Optional.of(Doc.bestFitting(List.of(flat, broken)));
+            }
             // Attach the single trailing segment at the column it actually renders at. A broken expression-renderer root
             // ({@code IntStream.range(}⏎ args ⏎{@code )}) puts it on the closing CONTINUATION line, so measure there
             // ({@code ")" + segment}) — the same continuation-column measurement a source-multiline root uses — so both

@@ -286,39 +286,52 @@ final class MethodCallPrinter {
      * surrounding expression printers that already decided the call arguments must break.
      */
     private Doc methodCall(MethodCallExpr expression, MethodCallBreakMode breakMode, LayoutContext layout) {
+        return methodCall(expression, breakMode, layout, "");
+    }
+
+    // Mirrors ObjectCreationPrinter#objectCreation's suffix threading: the generic argument-list group folds
+    // {@code tailText} into its closing {@code )} so the flat verdict counts the terminator; every earlier branch
+    // appends it outside, unchanged. Callers pass "" except the with-tail comment-carrying fallback.
+    private Doc methodCall(MethodCallExpr expression, MethodCallBreakMode breakMode, LayoutContext layout, String tailText) {
         if (
             expression.getScope().isEmpty()
             && expression.getNameAsString().equals("yield")
             && !expression.getArguments().isEmpty()
         ) {
-            return Doc.text("yield (" + compactSource.compactJoin(expression.getArguments()) + ")");
+            return withTailText(
+                Doc.text("yield (" + compactSource.compactJoin(expression.getArguments()) + ")"),
+                tailText
+            );
         }
         if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
             Expression scope = expression.getScope().orElseThrow();
             if (scope instanceof TextBlockLiteralExpr) {
                 Optional<Doc> stableTextBlockCall = textBlockScopedArgumentList(scope, expression);
                 if (stableTextBlockCall.isPresent()) {
-                    return stableTextBlockCall.orElseThrow();
+                    return withTailText(stableTextBlockCall.orElseThrow(), tailText);
                 }
             }
             Doc call = methodCallWithoutScope(expression);
             if (scope instanceof TextBlockLiteralExpr) {
                 call = Doc.indent(call);
             }
-            return Doc.concat(
-                expressionRenderer.format(scope, LayoutContext.root()),
-                Doc.text("."),
-                call
+            return withTailText(
+                Doc.concat(
+                    expressionRenderer.format(scope, LayoutContext.root()),
+                    Doc.text("."),
+                    call
+                ),
+                tailText
             );
         }
         Optional<Doc> sourceMultilineExpressionLambda = sourceMultilineExpressionLambda(expression, layout);
         if (sourceMultilineExpressionLambda.isPresent()) {
-            return sourceMultilineExpressionLambda.orElseThrow();
+            return withTailText(sourceMultilineExpressionLambda.orElseThrow(), tailText);
         }
         if (!breakMode.isForced()) {
             Optional<Doc> chain = methodCallChain(expression, layout);
             if (chain.isPresent()) {
-                return chain.orElseThrow();
+                return withTailText(chain.orElseThrow(), tailText);
             }
         } else if (methodCallChainIsSourceMultiline(expression) || chainFansByCanonicalRule(expression)) {
             // A FORCED chain that fans by the canonical rule
@@ -338,24 +351,24 @@ final class MethodCallPrinter {
             // FORCED render must break anyway.
             Optional<Doc> chain = methodCallChain(expression, breakMode, "", layout);
             if (chain.isPresent()) {
-                return chain.orElseThrow();
+                return withTailText(chain.orElseThrow(), tailText);
             }
         }
         Optional<Doc> sourceMultilineArguments = sourceMultilineArguments(expression);
         if (sourceMultilineArguments.isPresent()) {
-            return sourceMultilineArguments.orElseThrow();
+            return withTailText(sourceMultilineArguments.orElseThrow(), tailText);
         }
         Optional<Doc> suffixedEnclosed = suffixedEnclosedMethodCall(expression, false);
         if (suffixedEnclosed.isPresent()) {
-            return suffixedEnclosed.orElseThrow();
+            return withTailText(suffixedEnclosed.orElseThrow(), tailText);
         }
         String prefix = methodCallPrefix(expression);
         if (expression.getArguments().isEmpty()) {
             Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
             if (commentedArguments.isPresent()) {
-                return commentedArguments.orElseThrow();
+                return withTailText(commentedArguments.orElseThrow(), tailText);
             }
-            return Doc.text(prefix + "()");
+            return Doc.text(prefix + "()" + tailText);
         }
         // A heavy argument list (see {@link ArgumentHeaviness}) must break one-per-line, so a trailing lambda argument
         // must NOT hug the opener — hugging keeps the sibling arguments on the opener line. Skip the pure lambda-hug
@@ -367,12 +380,12 @@ final class MethodCallPrinter {
         if (!heavy) {
             Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
             if (huggableLambda.isPresent()) {
-                return huggableLambda.orElseThrow();
+                return withTailText(huggableLambda.orElseThrow(), tailText);
             }
         }
         Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument.apply(prefix, expression);
         if (commentedExpressionLambda.isPresent()) {
-            return commentedExpressionLambda.orElseThrow();
+            return withTailText(commentedExpressionLambda.orElseThrow(), tailText);
         }
         // The expression-lambda hug rebuilds the call opener from comment-stripped compact text and only renders the
         // lambda body through a comment path, so a comment sitting OUTSIDE the trailing lambda — an opener-to-lambda gap
@@ -387,22 +400,22 @@ final class MethodCallPrinter {
                 expressionLambdaColumnWidthFallback()
             );
             if (huggableExpressionLambda.isPresent()) {
-                return huggableExpressionLambda.orElseThrow();
+                return withTailText(huggableExpressionLambda.orElseThrow(), tailText);
             }
         }
         if (!commentOutsideTrailingLambda) {
             Optional<Doc> brokenExpressionLambdaArguments = brokenExpressionLambdaArgumentsForOverflow(prefix, expression, layout);
             if (brokenExpressionLambdaArguments.isPresent()) {
-                return brokenExpressionLambdaArguments.orElseThrow();
+                return withTailText(brokenExpressionLambdaArguments.orElseThrow(), tailText);
             }
         }
         Optional<Doc> singleTextBlockArgument = singleTextBlockArgument(prefix, expression);
         if (singleTextBlockArgument.isPresent()) {
-            return singleTextBlockArgument.orElseThrow();
+            return withTailText(singleTextBlockArgument.orElseThrow(), tailText);
         }
         Optional<Doc> singleObjectCreationArgument = singleObjectCreationArgument(prefix, expression);
         if (singleObjectCreationArgument.isPresent()) {
-            return singleObjectCreationArgument.orElseThrow();
+            return withTailText(singleObjectCreationArgument.orElseThrow(), tailText);
         }
         // The canonical-fan single-CHAIN-ARGUMENT hug position. Checked BEFORE the
         // {@link #singleMethodCallArgument} hug and the generic exploded argument list below — because
@@ -419,19 +432,19 @@ final class MethodCallPrinter {
         // chain arguments; every other single-call argument still reaches the hug / generic paths below.
         Optional<Doc> singleFanChainArgument = singleFanChainArgumentBestFitting(prefix, expression);
         if (singleFanChainArgument.isPresent()) {
-            return singleFanChainArgument.orElseThrow();
+            return withTailText(singleFanChainArgument.orElseThrow(), tailText);
         }
         Optional<Doc> singleMethodCallArgument = singleMethodCallArgument(prefix, expression);
         if (singleMethodCallArgument.isPresent()) {
-            return singleMethodCallArgument.orElseThrow();
+            return withTailText(singleMethodCallArgument.orElseThrow(), tailText);
         }
         Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), breakMode);
         if (singleBinaryArgument.isPresent()) {
-            return singleBinaryArgument.orElseThrow();
+            return withTailText(singleBinaryArgument.orElseThrow(), tailText);
         }
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
         if (commentedArguments.isPresent()) {
-            return commentedArguments.orElseThrow();
+            return withTailText(commentedArguments.orElseThrow(), tailText);
         }
         Doc call = Doc.concat(
             heavy ? Doc.BREAK_PARENT : Doc.EMPTY,
@@ -443,7 +456,7 @@ final class MethodCallPrinter {
                 )
             ),
             methodCallLine(breakMode),
-            Doc.text(")")
+            Doc.text(")" + tailText)
         );
         if (breakMode.isForced()) {
             recordArgumentListWidthBreak(expression, prefix);
@@ -514,11 +527,19 @@ final class MethodCallPrinter {
                 return tail.appendTo(unsuffixedChain.orElseThrow());
             }
         }
-        return appendTailBeforeFinalTrailingLineComment(
-            methodCall(expression, breakMode, layout),
-            expression,
-            tail
-        );
+        // Thread the tail into the call render so the generic argument-list group counts the terminator in its flat
+        // verdict; a flat form that fits only without its `;` breaks instead of emitting an over-width line. The final
+        // trailing line comment stays outside as a width-free suffix.
+        Doc call = methodCall(expression, breakMode, layout, tail.text());
+        Doc trailingComment = finalTrailingLineComment(expression);
+        if (trailingComment == Doc.EMPTY) {
+            return call;
+        }
+        return Doc.concat(call, Doc.text(" "), trailingComment);
+    }
+
+    private static Doc withTailText(Doc doc, String tailText) {
+        return tailText.isEmpty() ? doc : Doc.concat(doc, Doc.text(tailText));
     }
 
     // Canonical-fan seam: a fan-threshold, comment/lambda-free EXPRESSION-STATEMENT chain
@@ -567,18 +588,6 @@ final class MethodCallPrinter {
             ToIntFunction<String> lineWidth
     ) {
         return lineWidth.applyAsInt(compactSource.compact(expression) + tail.text()) > options.lineWidth();
-    }
-
-    private Doc appendTailBeforeFinalTrailingLineComment(
-            Doc call,
-            MethodCallExpr expression,
-            ExpressionTail tail
-    ) {
-        Doc trailingComment = finalTrailingLineComment(expression);
-        if (trailingComment == Doc.EMPTY) {
-            return tail.appendTo(call);
-        }
-        return Doc.concat(call, tail.doc(), Doc.text(" "), trailingComment);
     }
 
     private Doc finalTrailingLineComment(MethodCallExpr expression) {

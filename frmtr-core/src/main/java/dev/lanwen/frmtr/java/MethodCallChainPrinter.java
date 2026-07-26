@@ -1002,8 +1002,7 @@ final class MethodCallChainPrinter {
         // root / segment / between-selector comment.
         boolean rootDocIsPlainExpressionRenderRoot =
             chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
-            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
-            && !expressionRenderedChainRootBreaksMethodCall(chainPlan.root(), firstLineWidth);
+            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis));
         if (calls.isEmpty()) {
             return Optional.of(appendFinalSegmentSuffix(rootDoc, finalSegmentSuffix));
         }
@@ -1275,6 +1274,14 @@ final class MethodCallChainPrinter {
         // promoted/grouped/broken-object-creation root, a first-segment-attached root, or a root-trailing-comment-wrapped
         // root produces a different {@code rootDoc}, so those keep the inline construction.
         if (rootDocIsPlainExpressionRenderRoot) {
+            // A multi-arg MethodCallExpr root may need to break; rank the fan (plain root, one selector per line)
+            // against a force-broken root with the first selector attached to its close, so the renderer picks
+            // whichever fits at the true column instead of a source-width estimate deciding up front.
+            if (root instanceof MethodCallExpr rootCall && rootCall.getArguments().size() > 1) {
+                Doc fanned = chainFanOut(root, calls, finalSegmentSuffix, layout);
+                Doc inlineBroken = brokenRootChainWithAttachedFirstSegment(rootCall, calls, finalSegmentSuffix, lineWidth);
+                return Optional.of(Doc.bestFitting(List.of(fanned, inlineBroken)));
+            }
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
         // Object-creation root seam: a comment-free, non-anonymous, non-empty-argument
@@ -1809,6 +1816,25 @@ final class MethodCallChainPrinter {
 
     private Doc chainContinuation(Expression root, List<Doc> segments) {
         return rootChainContinuation(root, segments, this::chainContinuation);
+    }
+
+    /**
+     * The broken-root chain shape: the root force-broken one-argument-per-line. A lone selector attaches to the
+     * close, matching the single-segment site's shape. Two or more selectors instead continue at the SAME dotted
+     * continuation indent (the shape {@link #chainFanOut} produces) — attaching only the first to the close while
+     * the rest sit one level deeper is a stairstep no source shape would ever author.
+     */
+    private Doc brokenRootChainWithAttachedFirstSegment(
+            MethodCallExpr root,
+            List<MethodCallExpr> calls,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> lineWidth
+    ) {
+        Doc brokenRoot = this.calls.brokenMethodCall(root);
+        if (calls.size() == 1) {
+            return Doc.concat(brokenRoot, methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth));
+        }
+        return Doc.concat(brokenRoot, chainContinuation(root, methodCallChainSegments(calls, finalSegmentSuffix)));
     }
 
     private Doc lambdaBodyChainContinuation(Expression root, List<Doc> segments) {

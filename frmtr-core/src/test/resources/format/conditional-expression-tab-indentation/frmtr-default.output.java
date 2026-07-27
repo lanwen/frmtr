@@ -66,7 +66,11 @@ class ConditionalExpression {
     }
 
     void ternaryInParentheses() {
-        (featureEnabled ? quotaAvailable : regionAvailable.planReady().fallbackReady().policyReady());
+        (featureEnabled
+            ? quotaAvailable
+            : regionAvailable.planReady()
+                    .fallbackReady()
+                    .policyReady());
     }
 
     void assignment() {

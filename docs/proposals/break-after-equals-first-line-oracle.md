@@ -362,7 +362,8 @@ that differ by one argument's name length, both structurally "multi-segment plai
 would render identically under a structural rule even though one fits after `=` and the other
 doesn't by one column. Fixtures anchored on that exact near-limit behavior would need to be re-audited
 for whether the corpus actually contains that discontinuity today or whether it is untested; this
-proposal cannot determine that without running the suite (deferred, see §6).
+proposal cannot determine that without running the suite; the §6 prototype ran it — see the verdict
+above for the result.
 
 ### Oscillation / idempotence fit
 
@@ -383,13 +384,31 @@ catch and exactly the class of change that cannot be evaluated without running i
 buckets right (§ above) is a design task in its own right, plausibly comparable in size to Option A's
 implementation cost even though the resulting code is simpler.
 
-## 6. Deferred: the one-site prototype
+### Verdict (prototyped): not viable as a pure structural rule; a partial win is salvageable
 
-The issue's Option-A deliverable calls for a one-site prototype and a corpus delta. This checkout is
-read-only for the duration of this revision (another agent is actively editing
-`MethodCallChainPrinter.java` and running gradle here), so no prototype, build, or corpus run was
-attempted for this doc. The prototype is deferred; whoever implements should run it before committing
-to Option A or Option D as the final recommendation. Concretely:
+The §6 one-site prototype (`variableWithMethodCallChainPrototype`, wired only from `:455`,
+`spike/465-option-d` @ `f19c469e`, unpushed) implements the bucket chain above in full and tests it
+against fixtures, a targeted width sweep, and the full kafka/camel corpora. Two of the four buckets
+(short-name-attaches, poorly-breakable-chain-breaks) hold up cleanly. The remaining bucket — a
+"breakable" chain whose name is not short and whose root is not an object creation, defaulting to
+"attach and trust the renderer" — does not: frmtr's chain renderer only offers a fan-style reflow
+fallback at 3+ selectors over a plain receiver, so a 2-selector chain in this bucket has no fallback
+to fall into when the attached first line overflows. A width sweep reproduces this directly and
+deterministically (a 104-column first line at a 40-column budget, where the width-gated baseline
+correctly breaks after `=`); the full 6033-file kafka corpus shows the same failure at scale (+86
+over-width files, +389 non-idempotent files) even though 800-file subsets of kafka and camel, and a
+5000-file camel subset, show zero delta — subset silence does not mean the failure is absent, only
+that it is corpus-frequency-dependent. This is the concrete form of the gap Option B's analysis (§3)
+already predicted in the abstract: without a queue-lookahead fits primitive, there is no way for a
+purely structural "attach" default to know the flat prefix won't fit. §7 recommends a hybrid: the two
+buckets that hold up ship as a structural fast path, and the one that doesn't falls back to Option
+A's ranked-Docs approach rather than to an unconditional structural attach.
+
+## 6. The one-site prototype
+
+The issue's Option-A deliverable calls for a one-site prototype and a corpus delta; this has now been
+run (see the verdict in §5 above). Recorded here for reference — the same recipe would apply if the
+hybrid's Option-A fallback (§7) needs its own one-site prototype before the six-site rollout.
 
 - **Site**: `initializerFansWidthDrivenTwoSelectorChain`'s branch at `VariableInitializerLayout.java:455`
   — comment-free (guarded by `trailingCommentLayout.preSemicolonInitializerComment(variable) ==
@@ -429,14 +448,26 @@ to Option A or Option D as the final recommendation. Concretely:
   classification versus the width-gated baseline, since that is exactly the discontinuity §5 flags as
   the open risk.
 
-Both the recommendation below and any final choice between Options A and D should be treated as
-**conditional on this prototype's outcome**, not as settled by this document alone.
+This prototype has been run; §5's verdict subsection settles the choice between Options A and D that
+this section originally left open, and §7 below reflects that outcome.
 
 ## 7. Recommendation
 
-**Recommend running the deferred one-site prototype (§6) for Option D first, with Option A as the
-fallback if D's structural buckets do not hold up against the corpus; do not pursue Option B for this
-seam; do not ship Option C until the `CompactSourceText` bug is fixed.**
+**Ship a hybrid: Option D's structural fast path for the short-name and poorly-breakable-chain
+buckets, falling back to Option A's ranked-Docs approach (`bestFittingFirstLine`) for the remaining
+"breakable, non-short-name, non-object-creation-root" bucket; do not pursue Option B for this seam;
+do not ship Option C until the `CompactSourceText` bug is fixed.**
+
+The §6 prototype settled the open question between A and D: a pure Option D — structural rules with
+an unconditional "attach" default and no fits check anywhere — is not viable, because the seam's most
+common bucket (a multi-argument, plain-receiver, 2-selector chain) has no renderer-side fallback to
+catch an over-width attach. The hybrid keeps Option D's win where it is real (short-name and
+poorly-breakable chains decide structurally, with no width read and no oscillation exposure) and
+accepts Option A's cost only where a genuine fits check is unavoidable. It is smaller than shipping
+Option A across all six sites, but it is not free of Option A's machinery — the ranked-Docs shape
+still has to be built and verified for the fallback bucket, at all six sites. The evidence trail for
+this verdict lives on branch `spike/465-option-d` (commit `f19c469e`, unpushed) — an isolated
+prototype wired from `:455` only, plus a targeted width sweep and full-corpus run.
 
 This differs from the rejected draft's recommendation (Option C now, A only partially, B deferred
 indefinitely) because two of the three premises that draft anchored on have flipped:
@@ -457,43 +488,43 @@ indefinitely) because two of the three premises that draft anchored on have flip
   top of them, solve. Building queue lookahead into `DocWidths` is a real, scoped, cheaper-than-before
   renderer change, but it would not retire the oracle at this seam regardless. It stays deferred to a
   future seam whose reader legitimately comes after its decider.
-- **Option D is new and, on a fair read of biome, is closer to biome's actual design than the width-
-  gated oracle is.** Biome's own layout selection is structural first, width-based only in a
-  last-resort fallback (§5) — the opposite of what the rejected draft claimed. D also sidesteps both
-  Option A's residual width-measurement risk and Option C's current correctness problem, at the cost
-  of a harder-to-derive rule set and a real discontinuity risk at near-limit fixtures that only the
-  deferred prototype (§6) can settle.
+- **Option D holds for two of its four buckets and fails for the one that matters most.** The
+  prototype (§5's verdict) shows the short-name and poorly-breakable-chain buckets decide correctly
+  with no width read at all, but the "breakable, non-short-name" bucket — the seam's most common
+  shape — has no renderer-side fallback below the 3-selector canonical-fan threshold, so an
+  unconditional structural "attach" default there is a confirmed, reproducible over-width regression,
+  not a theoretical risk. A pure Option D is not supportable by the evidence; the hybrid is.
 
-Between A and D, D is offered as the first prototype target because it removes the oracle from the
-seam entirely (no `methodCallRootFirstLine` string, no predicted-width comparison, hence no exposure
-to further `CompactSourceText`-class bugs) and is idempotence-safe by construction — but this
-recommendation is explicitly conditional: if the §6 prototype shows D's structural buckets disagree
-with the corpus's near-limit width-gated behavior often enough to be a real regression risk, A (§2)
-is the fallback, scoped to all six sites via the shared-segment discipline rather than the two sites
-the rejected draft limited it to.
+The hybrid keeps D's buckets 1 and 3 as a structural fast path (no oracle, no width read, no
+oscillation exposure for those shapes) and routes bucket 4 — the multi-argument, non-short-name,
+non-object-creation-root chain — through Option A's ranked-Docs shape instead of a structural
+default. This is smaller than shipping Option A at all six sites for every bucket, but it still
+needs Option A's machinery (the broken-after-`=` Doc shape, `bestFittingFirstLine` ranking, and the
+shared-segment discipline for the three comment-bearing sites) for the bucket that needs it.
 
 **Sequencing:**
 1. Land the fix for **issue #473** (`CompactSourceText` raw-token-fallback measured-text divergence)
    — this is a prerequisite for Option C, which is blocked on #473 regardless of whether C ships now,
    since the divergence is a source-neutrality hazard independent of this proposal.
-2. Run the §6 prototype for Option D at `:455`; if the near-limit corpus check shows no material
-   discontinuity, extend it to the other five `name = ` sites.
-3. If D's discontinuity risk turns out to be real, fall back to Option A (§2) at all six sites using
-   the shared-segment discipline.
-4. `:2708` (lambda-arrow) stays out of scope for this round regardless of which of A/D is chosen; it
-   keeps using the oracle unconditionally (§1).
+2. Ship Option D's short-name and poorly-breakable-chain buckets as a structural fast path at `:455`,
+   then the other five `name = ` sites — no oracle, no ranking, for those two buckets only.
+3. Build Option A's ranked-Docs shape (broken-after-`=` Doc + `bestFittingFirstLine`, shared-segment
+   discipline for the comment-bearing sites) as the fallback for the remaining bucket, at all six
+   sites.
+4. `:2708` (lambda-arrow) stays out of scope for this round regardless; it keeps using the oracle
+   unconditionally (§1).
 5. Leave Option B's queue-lookahead gap documented (§3) as a known, scoped renderer limitation for a
    future seam that genuinely needs a reader-after-decider primitive — not for this one.
 
 **Effort estimate:**
 - Issue #473 (`CompactSourceText` measured-text divergence fix): unscoped by this doc — needs its own
   investigation; treat as a dependency, not a sub-task, of this proposal.
-- Option D prototype (§6, one site): ~1-2 days including the near-limit discontinuity check.
-- Option D (if the prototype holds, extended to all six `name = ` sites): ~2-4 days beyond the
-  prototype — deriving and wiring the structural rule set, no new Doc/ranking machinery.
-- Option A (fallback, all six sites via shared-segment discipline): ~4-6 days — larger than the
-  rejected draft's ~3-5 day estimate for 2 sites, because it now covers all six and needs the
-  shared-segment discipline built and verified for the three comment-bearing sites.
+- Option D's structural fast path (short-name and poorly-breakable-chain buckets, all six sites):
+  ~2-4 days — deriving and wiring the two structural rules, no new Doc/ranking machinery.
+- Option A's ranked-Docs fallback (the remaining bucket, all six sites via shared-segment
+  discipline): ~4-6 days — the same cost as shipping A everywhere, since the fallback bucket still
+  needs the full machinery (new Doc shapes, shared-segment discipline, corpus verification); the
+  hybrid saves risk and rule-derivation cost, not this implementation cost.
 - Option B (queue lookahead in `DocWidths`/`DocRenderer`): a multi-day-to-low-single-digit-week
   renderer change if a future seam needs it — smaller than the rejected draft's ~2-3 week estimate
   (the Doc/group-id layer already exists), but not undertaken for this seam regardless of size,

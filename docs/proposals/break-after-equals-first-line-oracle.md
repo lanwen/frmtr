@@ -260,18 +260,21 @@ of raw token text is exactly the source-shape leak the chain-path migration exis
 `SourceShapePolicy.fitsOnOneLine` (`SourceShapePolicy.java:134`) — the width gate this whole family
 of oracle branches ultimately feeds — measures that fallen-back text un-cleaned.
 
-There is a confirmed live repro: a scoped, comment-bearing chain initializer renders a 129-column
-over-width line when the source chain is broken at the dot, and self-heals on a second pass
-(non-idempotent) — the textbook symptom of a width gate reading source-shaped text. This is filed as
-**issue #467** (`CompactSourceText`'s raw-token fallback), separately from this proposal.
+A confirmed live repro once demonstrated this — a scoped, comment-bearing chain initializer that
+rendered a 129-column over-width line and self-healed on a second pass — and was tracked as issue
+#467. #467 is now fixed (PR #472), but its root cause turned out to be a terminator sitting outside
+the width-measured group, not the `compactTokenText` divergence described above; fixing it left that
+divergence itself untouched. The divergence is real (measured text can be up to one column wider
+than emitted text whenever `compactTokenText`'s raw-token fallback fires) but currently has no known
+repro of its own — it is tracked separately as **issue #473**.
 
 This breaks Option C's premise, not just its evidence: the oracle is source-neutral *when the chain
-is comment-free*, but for a comment-bearing chain it inherits `CompactSourceText`'s fallback and is
-currently **not** source-neutral. Documenting "the oracle is source-neutral by design" in
-`ARCHITECTURE.md` right now would assert an invariant the codebase demonstrably violates for one of
-this seam's own live cases (three of the seven consumer sites in §1 exist specifically to handle
-comment-bearing initializers). **Option C is blocked on #467** — it cannot ship until that bug is
-fixed.
+is comment-free*, but for a comment-bearing chain it inherits `CompactSourceText`'s fallback, which
+is not proven source-neutral. Documenting "the oracle is source-neutral by design" in
+`ARCHITECTURE.md` right now would assert an invariant the codebase has not verified for one of this
+seam's own live cases (three of the seven consumer sites in §1 exist specifically to handle
+comment-bearing initializers). **Option C is blocked on #473** — it cannot ship until that divergence
+is closed.
 
 ### What Option C would need to say instead
 
@@ -282,12 +285,12 @@ two honest forms:
    nodes reconstruct compact text the same way `attachedSingleSegmentChainMustBreakAfterEquals`
    already does for its one narrow case — AST-reconstruct rather than fall back to raw tokens — while
    still routing the comment itself through the existing claim/`lineSuffix` machinery), then document
-   the oracle's source-neutrality as a now-true invariant, with a regression test pinned to the
-   comment-bearing chain-initializer case that currently misbehaves.
+   the oracle's source-neutrality as a now-true invariant, with a regression test pinned to an
+   exact-limit-boundary comment-bearing case.
 2. **Document the target, not the current state.** State in `ARCHITECTURE.md` that this seam's
-   oracle *is intended to be* source-neutral and currently is **not**, for comment-bearing chains,
-   pending the `CompactSourceText` fix — i.e., document a known gap with a forward pointer to the bug,
-   rather than asserting an invariant.
+   oracle *is intended to be* source-neutral and currently is **not proven to be**, for comment-bearing
+   chains, pending the `CompactSourceText` fix tracked in #473 — i.e., document a known gap with a
+   forward pointer to the issue, rather than asserting an invariant.
 
 Per this repo's own documentation rule (state current-state, not aspiration-as-fact), form 2 without
 the fix landed is a worse outcome than shipping the fix first and writing form 1. Either way, Option
@@ -470,9 +473,9 @@ is the fallback, scoped to all six sites via the shared-segment discipline rathe
 the rejected draft limited it to.
 
 **Sequencing:**
-1. Land the fix for **issue #467** (`CompactSourceText` raw-token-fallback bug) — this is a
-   prerequisite for Option C, which is blocked on #467 regardless of whether C ships now, since the
-   bug is a live non-idempotence defect independent of this proposal.
+1. Land the fix for **issue #473** (`CompactSourceText` raw-token-fallback measured-text divergence)
+   — this is a prerequisite for Option C, which is blocked on #473 regardless of whether C ships now,
+   since the divergence is a source-neutrality hazard independent of this proposal.
 2. Run the §6 prototype for Option D at `:455`; if the near-limit corpus check shows no material
    discontinuity, extend it to the other five `name = ` sites.
 3. If D's discontinuity risk turns out to be real, fall back to Option A (§2) at all six sites using
@@ -483,8 +486,8 @@ the rejected draft limited it to.
    future seam that genuinely needs a reader-after-decider primitive — not for this one.
 
 **Effort estimate:**
-- Issue #467 (`CompactSourceText` bug fix): unscoped by this doc — needs its own investigation; treat
-  as a dependency, not a sub-task, of this proposal.
+- Issue #473 (`CompactSourceText` measured-text divergence fix): unscoped by this doc — needs its own
+  investigation; treat as a dependency, not a sub-task, of this proposal.
 - Option D prototype (§6, one site): ~1-2 days including the near-limit discontinuity check.
 - Option D (if the prototype holds, extended to all six `name = ` sites): ~2-4 days beyond the
   prototype — deriving and wiring the structural rule set, no new Doc/ranking machinery.
@@ -495,5 +498,5 @@ the rejected draft limited it to.
   renderer change if a future seam needs it — smaller than the rejected draft's ~2-3 week estimate
   (the Doc/group-id layer already exists), but not undertaken for this seam regardless of size,
   since §3 shows it would not retire the oracle here even after landing.
-- Option C (blocked on #467; after it lands): ~0.5 day doc paragraph + DoD amendment, as originally
+- Option C (blocked on #473; after it lands): ~0.5 day doc paragraph + DoD amendment, as originally
   scoped — now correctly sequenced after, not instead of, the bug fix.

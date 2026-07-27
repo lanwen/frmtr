@@ -93,7 +93,8 @@ final class ChainRootPromotionLayout {
     Doc methodCallChainRootDoc(
             MethodCallChainSourcePlanner.MethodCallChainPlan chainPlan,
             ToIntFunction<String> firstLineWidth,
-            LayoutContext layout
+            LayoutContext layout,
+            boolean chainIsCommentFree
     ) {
         return switch (chainPlan.rootRendering()) {
             case INLINE_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
@@ -103,33 +104,32 @@ final class ChainRootPromotionLayout {
                 ? groupedPromotedMethodCall(methodCall)
                 : expressionRenderer.format(chainPlan.root(), LayoutContext.root());
             case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainPlan.root());
-            case EXPRESSION_RENDERER -> expressionRenderedChainRoot(chainPlan.root(), firstLineWidth);
+            case EXPRESSION_RENDERER -> expressionRenderedChainRoot(chainPlan.root(), firstLineWidth, chainIsCommentFree);
         };
     }
 
+    /**
+     * The EXPRESSION_RENDERER chain root: a multi-argument {@link MethodCallExpr} root ranks the flat and
+     * force-broken shapes at the true rendered column via {@link Doc#bestFitting}, so the renderer decides instead
+     * of a source-width estimate. {@code chainIsCommentFree} — whether the WHOLE chain (not just this root) carries
+     * no comment — must gate the ranking: building both candidates renders (and claims) the root twice, which would
+     * double-claim any comment anywhere in the chain, including one attached between this root and its first
+     * selector that the caller has not resolved yet when this is called.
+     */
     private Doc expressionRenderedChainRoot(
             Expression root,
-            ToIntFunction<String> firstLineWidth
+            ToIntFunction<String> firstLineWidth,
+            boolean chainIsCommentFree
     ) {
-        if (expressionRenderedChainRootBreaksMethodCall(root, firstLineWidth)) {
-            return calls.brokenMethodCall((MethodCallExpr) root);
+        if (!(root instanceof MethodCallExpr methodCall) || methodCall.getArguments().size() <= 1) {
+            return expressionRenderer.format(root, LayoutContext.root());
         }
-        return expressionRenderer.format(root, LayoutContext.root());
-    }
-
-    /**
-     * Whether {@link #expressionRenderedChainRoot} breaks a multi-argument root through
-     * {@link MethodCallPrinter#brokenMethodCall} rather than plain expression dispatch. The {@code false} case matches the
-     * root {@link ChainFanLayout#chainFanOut} builds, so the multi-segment fall-through routes through the shared fan-out
-     * builder byte-identically only then. Side-effect-free, so steering the fall-through with it never double-claims a comment.
-     */
-    boolean expressionRenderedChainRootBreaksMethodCall(
-            Expression root,
-            ToIntFunction<String> firstLineWidth
-    ) {
-        return root instanceof MethodCallExpr methodCall
-            && methodCall.getArguments().size() > 1
-            && firstLineWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth();
+        if (!chainIsCommentFree) {
+            return firstLineWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth()
+                ? calls.brokenMethodCall(methodCall)
+                : expressionRenderer.format(root, LayoutContext.root());
+        }
+        return Doc.bestFitting(List.of(expressionRenderer.format(root, LayoutContext.root()), calls.brokenMethodCall(methodCall)));
     }
 
     /**

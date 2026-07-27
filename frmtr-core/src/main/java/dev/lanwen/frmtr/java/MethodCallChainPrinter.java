@@ -986,24 +986,23 @@ final class MethodCallChainPrinter {
         chainPlan = promoteFirstBlockLambdaCallWithLambdaBodyComments(analysis, chainPlan).orElse(chainPlan);
         root = chainPlan.root();
         calls = chainPlan.calls();
-        Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth, layout);
-        // Track whether {@code rootDoc} is still the plain {@code expressionRenderer.format(root, root())} doc — the exact
-        // root {@link #chainFanOut} rebuilds — so the multi-segment fall-through below can route through the shared fan-out
-        // builder byte-identically only in that case. It holds only for an EXPRESSION_RENDERER root that did not fall to the
-        // broken-method-call shape; a promoted/grouped/broken-object-creation root, a first-segment-attached root, or a
-        // root-trailing-comment-wrapped root produces a different {@code rootDoc} and stays on the inline construction.
+        Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth, layout, !analysis.hasComments());
+        // Track whether {@code rootDoc} is an EXPRESSION_RENDERER root the multi-segment fall-through below may route
+        // through the shared {@link #chainFanOut} builder (which re-renders root and selectors from the AST, ranked
+        // against a force-broken-root alternative for a multi-arg root — see the fall-through). A promoted/grouped/
+        // broken-object-creation root, a first-segment-attached root, or a root-trailing-comment-wrapped root produces
+        // a different {@code rootDoc} and stays on the inline construction.
         //
-        // The comment gate is load-bearing: the fall-through routing through {@code chainFanOut} re-renders the root a
-        // second time (the {@code rootDoc} built here is discarded in that path). Admitted comment-free, OR when the chain's
-        // only comment is a last-selector trailing line comment ({@code chainCommentsAreOnlyTrailingLine}) — that relaxation
+        // The comment gate is load-bearing: re-rendering the root a second time through {@code chainFanOut} (the
+        // {@code rootDoc} built here is discarded in that path) is admitted comment-free, OR when the chain's only
+        // comment is a last-selector trailing line comment ({@code chainCommentsAreOnlyTrailingLine}) — that relaxation
         // requires {@code !rootHasComments}, so the root re-renders to a byte-identical {@code Doc} and {@code chainFanOut}'s
         // {@code methodCallChainSegments} re-emits the last selector's trailing slot. Every other comment family keeps the
         // unchanged inline construction (rendered once); re-rendering the root through the fan would drop or destabilize a
         // root / segment / between-selector comment.
         boolean rootDocIsPlainExpressionRenderRoot =
             chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
-            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
-            && !expressionRenderedChainRootBreaksMethodCall(chainPlan.root(), firstLineWidth);
+            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis));
         if (calls.isEmpty()) {
             return Optional.of(appendFinalSegmentSuffix(rootDoc, finalSegmentSuffix));
         }
@@ -1189,13 +1188,28 @@ final class MethodCallChainPrinter {
                     groupedPromotedRootWithSingleSegment(rootDoc, calls.getFirst(), finalSegmentSuffix)
                 );
             }
-            // Attach the single trailing segment at the column it actually renders at. A broken expression-renderer root
-            // ({@code IntStream.range(}⏎ args ⏎{@code )}) puts it on the closing CONTINUATION line, so measure there
-            // ({@code ")" + segment}) — the same continuation-column measurement a source-multiline root uses — so both
-            // passes agree and a lambda selector stops flipping broken⇄collapsed. A FLAT root sits it BESIDE the compact
-            // root, where that continuation measure would under-count the column and hug an over-wide lambda opener, so
-            // keep the beside-the-root measure there.
-            Doc singleSegment = expressionRenderedChainRootBreaksMethodCall(methodRoot, firstLineWidth)
+            // The renderer, not a source-width estimate, decides whether an EXPRESSION_RENDERER root attaches the
+            // trailing segment to its close (broken root) or sits it beside a flat root: both complete Docs are built
+            // and ranked once with bestFitting, so the true rendered column always wins.
+            if (chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER) {
+                Doc flat = Doc.concat(
+                    expressionRenderer.format(methodRoot, LayoutContext.root()),
+                    methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)
+                );
+                Doc broken = Doc.concat(
+                    this.calls.brokenMethodCall(methodRoot),
+                    methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth)
+                );
+                return Optional.of(Doc.bestFitting(List.of(flat, broken)));
+            }
+            // Only an INLINE_PROMOTED_METHOD_CALL root reaches here (EXPRESSION_RENDERER ranked above,
+            // GROUPED_PROMOTED_METHOD_CALL returned earlier); rootDoc's own broken/flat shape already came from
+            // promotedMethodCallRoot's width check, so attach the segment at the column that shape actually renders
+            // at: a broken root's close line ({@code IntStream.range(}⏎ args ⏎{@code )}) beside a source-width
+            // estimate of the SAME multi-arg-overflow condition, or, flat, beside the compact root.
+            Doc singleSegment =
+                methodRoot.getArguments().size() > 1
+                    && firstLineWidth.applyAsInt(compactSource.compactWithoutOwnComment(methodRoot)) > options.lineWidth()
                 ? methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth)
                 : methodCallChainSegment(calls.getFirst(), finalSegmentSuffix);
             return Optional.of(Doc.concat(rootDoc, singleSegment));
@@ -1253,14 +1267,20 @@ final class MethodCallChainPrinter {
         // does not lay the chain out one per line, so recording before them could attribute a "N segments, one per line"
         // layout to a path that never produced it.
         chainWidthBreakExplain.record(expression, analysis, layout);
-        // The multi-segment fall-through builds the exact one-segment-per-line fan-out
-        // {@code chainFanOut} produces — root then each selector on its own dotted continuation line
-        // ({@code Doc.concat(root, chainContinuation(root, methodCallChainSegments(calls, tail)))}) — so route it through
-        // the shared source-neutral builder rather than reconstructing that shape inline. This is equivalent only when
-        // {@code rootDoc} is the plain {@code expressionRenderer.format(root, root())} doc chainFanOut rebuilds; a
-        // promoted/grouped/broken-object-creation root, a first-segment-attached root, or a root-trailing-comment-wrapped
-        // root produces a different {@code rootDoc}, so those keep the inline construction.
+        // The multi-segment fall-through routes an EXPRESSION_RENDERER root through the shared source-neutral
+        // {@code chainFanOut} builder — root then each selector on its own dotted continuation line — rather than
+        // reconstructing that shape inline. A promoted/grouped/broken-object-creation root, a first-segment-attached
+        // root, or a root-trailing-comment-wrapped root produces a different {@code rootDoc}, so those keep the
+        // inline construction below instead.
         if (rootDocIsPlainExpressionRenderRoot) {
+            // A multi-arg MethodCallExpr root may need to break; rank the fan (plain root, one selector per line)
+            // against a force-broken root (lone selector attached to close; multiple selectors uniform), so the
+            // renderer picks the best fit at the true column instead of a source-width estimate deciding up front.
+            if (root instanceof MethodCallExpr rootCall && rootCall.getArguments().size() > 1) {
+                Doc fanned = chainFanOut(root, calls, finalSegmentSuffix, layout);
+                Doc inlineBroken = brokenRootChainWithAttachedFirstSegment(rootCall, calls, finalSegmentSuffix, lineWidth);
+                return Optional.of(Doc.bestFitting(List.of(fanned, inlineBroken)));
+            }
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
         // Object-creation root seam: a comment-free, non-anonymous, non-empty-argument
@@ -1675,16 +1695,10 @@ final class MethodCallChainPrinter {
     private Doc methodCallChainRootDoc(
             MethodCallChainSourcePlanner.MethodCallChainPlan chainPlan,
             ToIntFunction<String> firstLineWidth,
-            LayoutContext layout
+            LayoutContext layout,
+            boolean chainIsCommentFree
     ) {
-        return rootPromotion.methodCallChainRootDoc(chainPlan, firstLineWidth, layout);
-    }
-
-    private boolean expressionRenderedChainRootBreaksMethodCall(
-            Expression root,
-            ToIntFunction<String> firstLineWidth
-    ) {
-        return rootPromotion.expressionRenderedChainRootBreaksMethodCall(root, firstLineWidth);
+        return rootPromotion.methodCallChainRootDoc(chainPlan, firstLineWidth, layout, chainIsCommentFree);
     }
 
     private Doc singleSegmentMethodRootDoc(MethodCallExpr methodRoot) {
@@ -1795,6 +1809,25 @@ final class MethodCallChainPrinter {
 
     private Doc chainContinuation(Expression root, List<Doc> segments) {
         return rootChainContinuation(root, segments, this::chainContinuation);
+    }
+
+    /**
+     * The broken-root chain shape: the root force-broken one-argument-per-line. A lone selector attaches to the
+     * close, matching the single-segment site's shape. Two or more selectors instead continue at the SAME dotted
+     * continuation indent (the shape {@link #chainFanOut} produces) — attaching only the first to the close while
+     * the rest sit one level deeper is a stairstep no source shape would ever author.
+     */
+    private Doc brokenRootChainWithAttachedFirstSegment(
+            MethodCallExpr root,
+            List<MethodCallExpr> calls,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> lineWidth
+    ) {
+        Doc brokenRoot = this.calls.brokenMethodCall(root);
+        if (calls.size() == 1) {
+            return Doc.concat(brokenRoot, methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth));
+        }
+        return Doc.concat(brokenRoot, chainContinuation(root, methodCallChainSegments(calls, finalSegmentSuffix)));
     }
 
     private Doc lambdaBodyChainContinuation(Expression root, List<Doc> segments) {

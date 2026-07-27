@@ -140,7 +140,10 @@ final class ExpressionPrinters {
             rendering,
             binaries::lines,
             binaries::nestedLines,
-            binaries::expressionHasParenthesizedNestedBinary
+            binaries::expressionHasParenthesizedNestedBinary,
+            // Forward reference: methodCalls is constructed later in this constructor, but this method reference is
+            // only invoked during rendering, well after the field is assigned.
+            this::methodCallChainInitializerShape
         );
         this.lambdas = new LambdaExpressionPrinter(
             comments,
@@ -195,7 +198,8 @@ final class ExpressionPrinters {
             context.layoutWidth::continuationStatement,
             casts::nestedCastDepth,
             lambdas::parenthesizedLambdaBreak,
-            conditionals::conditionalExpression
+            conditionals::conditionalExpression,
+            conditionals::shouldBreakForFanningBranchChain
         );
         this.unaries = new UnaryExpressionPrinter(
             compactSource::compact,

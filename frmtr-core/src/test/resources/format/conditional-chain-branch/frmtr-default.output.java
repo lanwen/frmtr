@@ -6,7 +6,7 @@ class ConditionalChainBranchSample {
             source.count() > 0
                 ? source.entries()
                         .stream()
-                        .map(entry -> new Target(entry.value()))
+                        .map(entry -> new TargetRecord(entry.value()))
                         .toList()
                 : List.of()
         );

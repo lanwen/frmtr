@@ -208,15 +208,12 @@ final class ChainFanLayout {
      * chain) and the early canonical-fan route (which fans a breaking one). Both of those gate on
      * {@code !sourceMultilineArguments}, so a caller reaching {@code methodCallChain} in {@code FORCED} mode on a pass
      * whose inner-selector arguments span source lines ({@code sourceMultilineArguments == true}) skips them and lands on
-     * the source-shape-sensitive imperative ladder below — {@code canAttachFirstSegmentToSimpleRoot} in particular folds
-     * the first selector onto a simple receiver root ({@code parser.accepts(...)}) when the source chain was multiline and
-     * root+selector started on the same source line. Its already-fanned re-format then has single-line arguments,
-     * {@code sourceMultilineArguments} flips to {@code false}, the early route fires, and {@code chainFanOut} splits the
-     * first selector onto its own line ({@code parser}⏎{@code .accepts(...)}). The two passes disagree forever. Emitting
-     * the {@code chainFanOut} shape here — the same shape both {@code sourceMultilineArguments} passes must converge on —
-     * before the caller can consult source shape removes that dependence: {@code chainFanOut} is a pure function of the
-     * AST, so both passes rebuild the identical fan (a fixpoint by construction, the argument the single-segment rankers
-     * and the initializer / factory-root seams already rely on).
+     * the imperative ladder below, which reads the author's source shape and can disagree with a re-format whose
+     * {@code sourceMultilineArguments} has flipped to {@code false}. Emitting the {@code chainFanOut} shape here — the
+     * same shape both {@code sourceMultilineArguments} passes must converge on — before the caller can consult source
+     * shape removes that dependence: {@code chainFanOut} is a pure function of the AST, so both passes rebuild the
+     * identical fan (a fixpoint by construction, the argument the single-segment rankers and the initializer /
+     * factory-root seams already rely on).
      *
      * <p>Withheld, matching the other fan routes: a chain with any own or contained comment, any block-lambda argument,
      * or any commented segment re-renders its root once through the fan and would double-claim comments. Additionally
@@ -1203,13 +1200,10 @@ final class ChainFanLayout {
      * Reports whether a chain root is a parenthesized (or parenthesized-cast) expression wrapping a fan-threshold method-call
      * chain — {@code ((OffsetFetchRequestData) res.unsentRequests.get(0).requestBuilder().build().data())}. Such a root
      * renders across multiple lines (its inner chain fans by the canonical rule), so its closing {@code )} lands on a
-     * continuation line; whether the chain's FIRST selector ({@code .groups()}) attaches to that {@code )} line then depends
-     * purely on the author's source shape ({@code canAttachFirstSegmentToSimpleRoot}'s {@code startsOnSameLine} probe),
-     * flipping {@code .data()).groups()} ⇄ {@code .data())}⏎{@code .groups()} across passes — the
-     * {@code CommitRequestManagerTest} residual. Withholding the attach here fans the first selector onto its own dotted line
-     * on both passes (the collapsed-source fixpoint the fanned re-format already settles on), a source-neutral verdict.
-     * Keyed strictly on an enclosed/cast root whose inner chain fans ({@code chainFansByCanonicalRule}); a parenthesized
-     * non-chain receiver ({@code (a + b).foo()}) renders on one line and keeps its established attach.
+     * continuation line; the chain's first selector fans onto its own dotted line rather than attaching there, a
+     * source-neutral verdict independent of how the author wrote the source. Keyed strictly on an enclosed/cast root whose
+     * inner chain fans ({@code chainFansByCanonicalRule}); a parenthesized non-chain receiver ({@code (a + b).foo()})
+     * renders on one line and keeps its established attach.
      */
     boolean rootIsEnclosedFanningChain(Expression root) {
         if (!(root instanceof EnclosedExpr enclosed)) {

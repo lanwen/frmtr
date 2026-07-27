@@ -56,8 +56,6 @@ final class ChainRootPromotionLayout {
 
     private final ChainFanLayout.RootLineWidth rootLineWidth;
 
-    private final Function<MethodCallExpr, Optional<Doc>> forcedRootMethodCallChain;
-
     ChainRootPromotionLayout(
             MethodCallPrinter calls,
             TypePrinter types,
@@ -73,8 +71,7 @@ final class ChainRootPromotionLayout {
             Function<Doc, Doc> chainContinuation,
             Function<Doc, Doc> softChainContinuation,
             Predicate<MethodCallExpr> methodCallSegmentHasBlockLambdaArgument,
-            ChainFanLayout.RootLineWidth rootLineWidth,
-            Function<MethodCallExpr, Optional<Doc>> forcedRootMethodCallChain
+            ChainFanLayout.RootLineWidth rootLineWidth
     ) {
         this.calls = calls;
         this.types = types;
@@ -91,7 +88,6 @@ final class ChainRootPromotionLayout {
         this.softChainContinuation = softChainContinuation;
         this.methodCallSegmentHasBlockLambdaArgument = methodCallSegmentHasBlockLambdaArgument;
         this.rootLineWidth = rootLineWidth;
-        this.forcedRootMethodCallChain = forcedRootMethodCallChain;
     }
 
     Doc methodCallChainRootDoc(
@@ -137,8 +133,8 @@ final class ChainRootPromotionLayout {
     }
 
     /**
-     * Ranks the single-segment method root against a broken alternative at the true rendered column when one is offered,
-     * so the renderer — not a source-estimate gate — decides the break; with no broken alternative the inline root stands.
+     * The single-segment chain root, source-multiline arguments kept verbatim when present; otherwise the plain
+     * inline expression form (a method-call root reaching here is always scope-less, so no broken alternative applies).
      */
     Doc singleSegmentMethodRootDoc(MethodCallExpr methodRoot) {
         Optional<Doc> sourceMultilineArguments =
@@ -146,35 +142,7 @@ final class ChainRootPromotionLayout {
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        Doc inline = expressionRenderer.format(methodRoot, LayoutContext.root());
-        Optional<Doc> broken = brokenTypeLikeScopedMethodRoot(methodRoot)
-                .or(() -> forcedRootMethodCallChain.apply(methodRoot));
-        if (broken.isEmpty()) {
-            return inline;
-        }
-        return Doc.bestFitting(List.of(inline, broken.orElseThrow()));
-    }
-
-    /**
-     * The type-like scoped-root break shape ({@code Type.factory(a, b)} broken, selector continued) offered as the broken
-     * ranking candidate when the root's scope is a promoting multi-argument call. Width is left to the renderer, which
-     * ranks this against the inline root at the true column.
-     */
-    private Optional<Doc> brokenTypeLikeScopedMethodRoot(MethodCallExpr methodRoot) {
-        Optional<MethodCallExpr> scopedCall = methodRoot.getScope()
-                .filter(MethodCallExpr.class::isInstance)
-                .map(MethodCallExpr.class::cast)
-                .filter(call -> call.getArguments().size() > 1)
-                .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent());
-        if (scopedCall.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                calls.brokenMethodCall(scopedCall.orElseThrow()),
-                chainContinuation.apply(segmentRenderer.methodCallChainSegment(methodRoot))
-            )
-        );
+        return expressionRenderer.format(methodRoot, LayoutContext.root());
     }
 
     private String compactSourceWidthText(Expression expression) {
@@ -189,22 +157,6 @@ final class ChainRootPromotionLayout {
             calls.sourceMultilineArguments(expression);
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
-        }
-        boolean multiArg = expression.getArguments().size() > 1;
-        boolean blockLambda = methodCallSegmentHasBlockLambdaArgument.test(expression);
-        if (multiArg && !blockLambda) {
-            // Rank the grouped selector shape against the fully-broken argument list at the true rendered column; the
-            // grouped form wins by fewer lines whenever it fits, so the renderer breaks arguments only when it must. A
-            // block-lambda argument keeps the estimate pre-emption below — its hard-break body defeats fewest-lines ranking.
-            Doc grouped = groupedPromotedSelector(expression);
-            return Doc.bestFitting(List.of(grouped, calls.brokenMethodCall(expression)));
-        }
-        if (
-            multiArg
-            // Measure the promoted block-lambda call at its true rendered block/type depth (nodeLine) instead of CURRENT.
-            && !sourceShapePolicy.fitsOnOneLine(expression, text -> layoutWidth.nodeLine(expression, text))
-        ) {
-            return calls.brokenMethodCall(expression);
         }
         Optional<Doc> huggableExpressionLambda =
             groupedPromotedExpressionLambda(expression);

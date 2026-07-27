@@ -251,8 +251,7 @@ final class MethodCallChainPrinter {
             this::chainContinuation,
             this::softChainContinuation,
             this::methodCallSegmentHasBlockLambdaArgument,
-            this::rootLineWidth,
-            methodRoot -> methodCallChain(methodRoot, MethodCallBreakMode.FORCED, LayoutContext.root())
+            this::rootLineWidth
         );
         this.compactRootBrokenSegment = new CompactRootBrokenSegmentLayout(
             segmentWidth,
@@ -1005,20 +1004,6 @@ final class MethodCallChainPrinter {
             chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
             && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && !expressionRenderedChainRootBreaksMethodCall(chainPlan.root(), firstLineWidth);
-        boolean firstSegmentAttachedToRoot = false;
-        if (canAttachFirstSegmentToSimpleRoot(expression, chainPlan, calls, analysis)) {
-            MethodCallExpr firstCall = calls.getFirst();
-            root = firstCall;
-            calls = new ArrayList<>(calls.subList(1, calls.size()));
-            rootDoc = firstSegmentAttachedToSimpleRootDoc(
-                chainPlan.root(),
-                firstCall
-            );
-            firstSegmentAttachedToRoot = true;
-            // The first segment is now glued onto the root, so {@code rootDoc} is the attached-root shape, not the plain
-            // expression-renderer root chainFanOut would build; keep this chain on the inline construction.
-            rootDocIsPlainExpressionRenderRoot = false;
-        }
         if (calls.isEmpty()) {
             return Optional.of(appendFinalSegmentSuffix(rootDoc, finalSegmentSuffix));
         }
@@ -1105,7 +1090,6 @@ final class MethodCallChainPrinter {
         if (
             root instanceof MethodCallExpr methodRoot
             && calls.size() == 1
-            && !firstSegmentAttachedToRoot
             && methodRootCanKeepSingleSuffixAttached(methodRoot)
             && methodCallSegmentHasNoOwnContainedComments(calls.getFirst())
             && !chainComments.methodCallSegmentHasComment(calls.getFirst())
@@ -1227,7 +1211,6 @@ final class MethodCallChainPrinter {
         if (
             root instanceof MethodCallExpr promotedFactoryRoot
             && calls.size() == 1
-            && !firstSegmentAttachedToRoot
             && (chainPlan.rootRendering()
                     == MethodCallChainSourcePlanner.ChainRootRendering.GROUPED_PROMOTED_METHOD_CALL
                 || chainPlan.rootRendering()
@@ -1298,7 +1281,6 @@ final class MethodCallChainPrinter {
         if (
             objectCreationRootIsWidthDrivenFanEligible(root)
             && chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION
-            && !firstSegmentAttachedToRoot
             && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && !analysis.hasBlockLambdaArgument()
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
@@ -1663,78 +1645,12 @@ final class MethodCallChainPrinter {
         );
     }
 
-    private boolean canAttachFirstSegmentToSimpleRoot(
-            MethodCallExpr expression,
-            MethodCallChainSourcePlanner.MethodCallChainPlan chainPlan,
-            List<MethodCallExpr> calls,
-            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis
-    ) {
-        // This gate is a pure structural no-op: every path returns false, so first-segment attachment never engages
-        // and both passes take the imperative chain path identically. The guards are kept as an inert structural
-        // placeholder.
-        if (
-            chainPlan.rootRendering() != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
-            || calls.size() < 2
-            || analysis.hasComments()
-            || chainPlan.root() instanceof MethodCallExpr
-            || chainPlan.root() instanceof ObjectCreationExpr
-            || rootIsEnclosedFanningChain(chainPlan.root())
-        ) {
-            return false;
-        }
-        return false;
-    }
-
     /**
      * Reports whether a chain root is a parenthesized (or parenthesized-cast) expression wrapping a fan-threshold
      * method-call chain (its inner chain fans by the canonical rule). Delegates to {@link ChainFanLayout}.
      */
     private boolean rootIsEnclosedFanningChain(Expression root) {
         return chainFan.rootIsEnclosedFanningChain(root);
-    }
-
-    private Doc firstSegmentAttachedToSimpleRootDoc(
-            Expression root,
-            MethodCallExpr firstCall
-    ) {
-        // Measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
-        if (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))) {
-            return inlineMethodCall(firstCall);
-        }
-        return brokenFirstSegmentAttachedToSimpleRoot(root, firstCall);
-    }
-
-    private String firstSegmentAttachedToSimpleRootFirstLine(Expression root, MethodCallExpr firstCall) {
-        // Measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
-        if (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))) {
-            return compactSource.compact(firstCall);
-        }
-        String typeArguments = firstCall.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        return compactSource.compact(root) + "." + typeArguments + firstCall.getNameAsString() + "(";
-    }
-
-    private Doc brokenFirstSegmentAttachedToSimpleRoot(Expression root, MethodCallExpr expression) {
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String prefix = "." + typeArguments + expression.getNameAsString();
-        return Doc.concat(
-            expressionRenderer.format(root, LayoutContext.root()),
-            Doc.text(prefix + "("),
-            Doc.indent(
-                Doc.indent(
-                    Doc.indent(
-                        Doc.concat(
-                            Doc.HARD_LINE,
-                            calls.methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
-                        )
-                    )
-                )
-            ),
-            Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(")"))))
-        );
     }
 
     private String methodCallSegmentPrefixText(MethodCallExpr expression) {
@@ -1984,9 +1900,6 @@ final class MethodCallChainPrinter {
             return compactSource.compact(expression);
         }
         MethodCallChainSourcePlanner.MethodCallChainPlan plan = methodChainPlanner.plan(analysis, true);
-        if (canAttachFirstSegmentToSimpleRoot(expression, plan, plan.calls(), analysis)) {
-            return firstSegmentAttachedToSimpleRootFirstLine(plan.root(), plan.calls().getFirst());
-        }
         if (plan.root() instanceof MethodCallExpr methodRoot) {
             Optional<String> rootFirstLine = methodCallRootFirstLine(methodRoot);
             if (rootFirstLine.isPresent()) {

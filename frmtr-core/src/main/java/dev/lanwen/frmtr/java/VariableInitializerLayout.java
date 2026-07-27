@@ -447,12 +447,11 @@ final class VariableInitializerLayout {
                 LayoutContext.root().withLeftEdgePrefix(flatName + " = ")
             );
             if (fannedChain.isPresent()) {
-                Doc declaration = variableWithMethodCallChain(
+                Doc declaration = variableWithMethodCallChainPrototype(
                     variable,
                     variableName(variable),
                     flatName,
                     methodCall,
-                    methodCallChainFirstLine.apply(methodCall),
                     fannedChain.orElseThrow()
                 );
                 return Doc.concat(
@@ -2601,6 +2600,111 @@ final class VariableInitializerLayout {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }
         return Doc.concat(Doc.text(name + " = "), chain);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // SPIKE (issue #465, Option D prototype): an isolated copy of variableWithMethodCallChain's attach/break decision
+    // that replaces the openerLineWidth/firstLine width probe with biome-style STRUCTURAL predicates — no
+    // methodCallChainFirstLine string, no rendered-column read. Wired ONLY from the initializerFansWidthDrivenTwoSelectorChain
+    // branch (:455) per the prototype's isolation requirement; variableWithMethodCallChain and its five other call
+    // sites are untouched. Not intended to ship as-is — see docs/proposals findings for the corpus verdict.
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * Spike copy of {@link #variableWithMethodCallChain}'s decision, structural instead of width-probed: replaces
+     * steps 2-3 (object-creation opener probe, general {@code openerLineWidth} test) with
+     * {@link #structurallyAttachesAfterEquals}. Step 1 ({@link #attachedSingleSegmentChainMustBreakAfterEquals}) is
+     * kept verbatim — it is already a structural rule, not a width probe.
+     */
+    private Doc variableWithMethodCallChainPrototype(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall,
+            Doc chain
+    ) {
+        if (attachedSingleSegmentChainMustBreakAfterEquals(variable, flatName, methodCall)) {
+            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
+        }
+        if (structurallyAttachesAfterEquals(flatName, methodCall)) {
+            return Doc.concat(Doc.text(name + " = "), chain);
+        }
+        return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
+    }
+
+    /**
+     * Biome-derived structural attach/break predicate chain (no rendered-width read): a short left-hand name always
+     * attaches (biome {@code is_left_short}); otherwise a chain that cannot usefully break internally — simple head,
+     * every call zero-arg or one short argument, per biome's {@code is_poorly_breakable_member_or_call_chain} — always
+     * breaks after {@code =} since attaching would not help it; otherwise (object-creation root, or a "breakable"
+     * chain whose own arguments/selectors can reflow) attaches, trusting the renderer's own width-aware groups to
+     * reflow the chain body — frmtr has no queue-lookahead primitive (issue #465 Option B) to give this last bucket a
+     * genuine reader-after-decider fits check, so it defaults to attach rather than biome's render-time {@code Fluid}.
+     */
+    private boolean structurallyAttachesAfterEquals(String flatName, MethodCallExpr methodCall) {
+        if (flatName.length() <= options.lineWidth() / 3) {
+            return true;
+        }
+        if (methodCallChainRootIsObjectCreation.test(methodCall)) {
+            return true;
+        }
+        return !chainIsStructurallyPoorlyBreakable(methodCall);
+    }
+
+    /**
+     * Mirrors biome's {@code is_poorly_breakable_member_or_call_chain}: a chain rooted at a simple identifier/field
+     * access/{@code this} whose every call segment carries zero arguments or exactly one structurally short argument.
+     * Such a chain has no interior break point that attaching-then-exploding could exploit, so it gains nothing from
+     * staying on the assignment line — breaking after {@code =} is the only lever left.
+     */
+    private boolean chainIsStructurallyPoorlyBreakable(MethodCallExpr methodCall) {
+        List<MethodCallExpr> calls = new ArrayList<>();
+        Expression current = methodCall;
+        boolean simpleHead = false;
+        while (current != null) {
+            if (current instanceof MethodCallExpr call) {
+                calls.add(call);
+                current = call.getScope().orElse(null);
+            } else if (current instanceof FieldAccessExpr fieldAccess) {
+                current = fieldAccess.getScope();
+            } else if (current.isNameExpr() || current.isThisExpr()) {
+                simpleHead = true;
+                current = null;
+            } else {
+                return false;
+            }
+        }
+        if (!simpleHead) {
+            return false;
+        }
+        return calls.stream().allMatch(this::callIsStructurallyUnbreakable);
+    }
+
+    private boolean callIsStructurallyUnbreakable(MethodCallExpr call) {
+        NodeList<Expression> arguments = call.getArguments();
+        if (arguments.isEmpty()) {
+            return true;
+        }
+        if (arguments.size() > 1) {
+            return false;
+        }
+        return argumentIsStructurallyShort(arguments.get(0));
+    }
+
+    /**
+     * A structural proxy for biome's {@code is_short_argument} (own {@code line_width / 4} text-length threshold):
+     * literals, bare names, and {@code this} are always short; anything else falls back to compact-text length against
+     * the same fraction, but only when it carries no nested call/lambda/object-creation (those have their own interior
+     * break points and so are not "poorly breakable" by this argument alone).
+     */
+    private boolean argumentIsStructurallyShort(Expression argument) {
+        if (argument.isLiteralExpr() || argument.isNameExpr() || argument.isThisExpr()) {
+            return true;
+        }
+        if (argument.isMethodCallExpr() || argument.isObjectCreationExpr() || argument.isLambdaExpr()) {
+            return false;
+        }
+        return compact.apply(argument).length() <= options.lineWidth() / 4;
     }
 
     /**

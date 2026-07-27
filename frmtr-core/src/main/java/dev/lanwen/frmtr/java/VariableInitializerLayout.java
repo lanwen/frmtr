@@ -447,12 +447,11 @@ final class VariableInitializerLayout {
                 LayoutContext.root().withLeftEdgePrefix(flatName + " = ")
             );
             if (fannedChain.isPresent()) {
-                Doc declaration = variableWithMethodCallChain(
+                Doc declaration = variableWithMethodCallChainRanked(
                     variable,
                     variableName(variable),
                     flatName,
                     methodCall,
-                    methodCallChainFirstLine.apply(methodCall),
                     fannedChain.orElseThrow()
                 );
                 return Doc.concat(
@@ -2562,6 +2561,27 @@ final class VariableInitializerLayout {
             Doc.text(name + " = " + firstLine),
             Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, tailSegment)))
         ));
+    }
+
+    /**
+     * Isolated variant of {@link #variableWithMethodCallChain} for the two-selector fan site only: instead of comparing
+     * a string first-line estimate against the width, it builds both statement shapes and ranks them by true rendered
+     * first line ({@link Doc#bestFittingFirstLine}) — the same discriminator the switch-header and block-lambda hug
+     * sites use when both arms can hard-break. Other {@code name = } call sites are unaffected.
+     */
+    private Doc variableWithMethodCallChainRanked(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall,
+            Doc chain
+    ) {
+        if (attachedSingleSegmentChainMustBreakAfterEquals(variable, flatName, methodCall)) {
+            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
+        }
+        Doc attached = Doc.concat(Doc.text(name + " = "), chain);
+        Doc brokenAfterEquals = Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
+        return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals));
     }
 
     /**

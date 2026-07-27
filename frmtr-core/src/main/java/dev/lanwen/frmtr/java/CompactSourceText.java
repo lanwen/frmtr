@@ -344,10 +344,15 @@ final class CompactSourceText {
         if (node.findFirst(TextBlockLiteralExpr.class).isPresent()) {
             return rawSource.raw(node);
         }
-        return node.getTokenRange()
+        String normalized = node.getTokenRange()
                 .map(Object::toString)
                 .map(rawSource::normalizeWhitespace)
                 .orElseGet(() -> rawSource.normalizeWhitespace(node.toString()));
+        // Cleans a source-broken chain's stray pre-dot space so this fallback's measured length matches what the
+        // emit path renders. Withheld for a comment-bearing node: its normalized text can still carry an embedded
+        // newline from a preserved `//` comment, and callers rely on that newline (not this cleanup) to keep such
+        // text out of flat/width-fits paths.
+        return node.getAllContainedComments().isEmpty() ? rawSource.dropSpaceBeforeChainDot(normalized) : normalized;
     }
 
     private boolean isFullyParsed(Node node) {

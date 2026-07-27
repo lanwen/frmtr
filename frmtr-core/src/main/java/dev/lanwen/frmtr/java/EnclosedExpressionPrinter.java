@@ -54,6 +54,8 @@ final class EnclosedExpressionPrinter {
 
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
 
+    private final Predicate<ConditionalExpr> conditionalBranchChainFansByRule;
+
     EnclosedExpressionPrinter(
             FormatterOptions options,
             ExpressionRendering rendering,
@@ -66,7 +68,8 @@ final class EnclosedExpressionPrinter {
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<Expression> nestedCastDepth,
             Function<LambdaExpr, Doc> parenthesizedLambdaBreak,
-            BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression
+            BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
+            Predicate<ConditionalExpr> conditionalBranchChainFansByRule
     ) {
         this.options = options;
         this.rendering = rendering;
@@ -80,6 +83,7 @@ final class EnclosedExpressionPrinter {
         this.nestedCastDepth = nestedCastDepth;
         this.parenthesizedLambdaBreak = parenthesizedLambdaBreak;
         this.conditionalExpression = conditionalExpression;
+        this.conditionalBranchChainFansByRule = conditionalBranchChainFansByRule;
     }
 
     /**
@@ -87,10 +91,11 @@ final class EnclosedExpressionPrinter {
      *
      * <p>Cast chains stay inline up to depth two, but deeper chains break
      * inside the parentheses because repeated cast-plus-scope nesting becomes hard to scan. Parenthesized conditionals
-     * use the assignment-style conditional break only when the compact parenthesized text overflows continuation width.
-     * A lambda used as a whole expression statement needs the lambda-specific parenthesized break so the body does not
-     * collapse into a compact parenthesized expression statement. If none of those cases applies, compact parentheses win
-     * when they fit at the current indentation.
+     * use the assignment-style conditional break when the compact parenthesized text overflows continuation width, or
+     * when a branch is a chain that fans by the canonical chain rule regardless of width. A lambda used as a whole
+     * expression statement needs the lambda-specific parenthesized break so the body does not collapse into a compact
+     * parenthesized expression statement. If none of those cases applies, compact parentheses win when they fit at the
+     * current indentation.
      */
     Doc enclosedExpression(EnclosedExpr expression) {
         if (expression.getInner() instanceof CastExpr) {
@@ -106,7 +111,10 @@ final class EnclosedExpressionPrinter {
         }
         if (
             expression.getInner() instanceof ConditionalExpr conditionalExpr
-            && continuationStatementWidth.applyAsInt(compact.apply(expression)) >= options.lineWidth()
+            && (
+                continuationStatementWidth.applyAsInt(compact.apply(expression)) >= options.lineWidth()
+                || conditionalBranchChainFansByRule.test(conditionalExpr)
+            )
         ) {
             return Doc.concat(
                 Doc.text("("),

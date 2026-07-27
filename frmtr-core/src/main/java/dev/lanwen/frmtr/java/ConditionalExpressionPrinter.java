@@ -12,6 +12,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -57,6 +58,8 @@ final class ConditionalExpressionPrinter {
 
     private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
 
+    private final Function<MethodCallExpr, MethodCallChainSourcePlanner.InitializerChainShape> methodCallChainInitializerShape;
+
     /**
      * Names whether conditional-expression layout is caller-forced or selected by local width and comment checks.
      *
@@ -101,7 +104,8 @@ final class ConditionalExpressionPrinter {
             ExpressionRendering rendering,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer,
-            Predicate<Expression> expressionHasParenthesizedNestedBinary
+            Predicate<Expression> expressionHasParenthesizedNestedBinary,
+            Function<MethodCallExpr, MethodCallChainSourcePlanner.InitializerChainShape> methodCallChainInitializerShape
     ) {
         this.options = context.options;
         this.sourceShapePolicy = context.sourceShapePolicy;
@@ -112,6 +116,7 @@ final class ConditionalExpressionPrinter {
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.nestedBinaryExpressionLinesRenderer = nestedBinaryExpressionLinesRenderer;
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
+        this.methodCallChainInitializerShape = methodCallChainInitializerShape;
         this.conditionalComments = new ConditionalCommentLayout(
             context.comments,
             context.commentPlacementPolicy,
@@ -182,6 +187,20 @@ final class ConditionalExpressionPrinter {
             && binaryExpr.findAll(MethodCallExpr.class).stream().findAny().isPresent();
     }
 
+    /**
+     * Reports whether either branch is (or unwraps to) a method-call chain that fans by the canonical chain rule, so
+     * the ternary must break at {@code ?}/{@code :} and let the branch fan through ordinary chain printing.
+     */
+    boolean shouldBreakForFanningBranchChain(ConditionalExpr expression) {
+        return branchChainFansByRule(expression.getThenExpr()) || branchChainFansByRule(expression.getElseExpr());
+    }
+
+    private boolean branchChainFansByRule(Expression branch) {
+        Expression unwrapped = branch instanceof EnclosedExpr enclosedExpr ? enclosedExpr.getInner() : branch;
+        return unwrapped instanceof MethodCallExpr methodCallExpr
+            && methodCallChainInitializerShape.apply(methodCallExpr).chainBreaksByRule();
+    }
+
     Doc conditionalExpression(ConditionalExpr expression) {
         return conditionalExpression(expression, ConditionalBreakMode.AUTO);
     }
@@ -210,7 +229,16 @@ final class ConditionalExpressionPrinter {
         // around this ternary's own {@code ?}/{@code :}, but a line comment inside a branch sub-expression (e.g. a binary
         // branch's between-operand {@code //}) would be swallowed by the flat {@code compact} arm, so the broken shape
         // renders each branch through the ordinary renderer to place them correctly.
-        if (breakMode.isForced() || conditionalComments.conditionalContainsLineComment(expression)) {
+        //
+        // A ternary whose direct branch is a method-call chain that fans by the canonical chain rule
+        // (MethodCallChainSourcePlanner#chainBreaksByRule) also breaks unconditionally: the structural fan verdict is
+        // width-independent, so a chain that would fan on its own must not be hidden inside a flat ternary just because
+        // the whole line happens to fit.
+        if (
+            breakMode.isForced()
+            || conditionalComments.conditionalContainsLineComment(expression)
+            || shouldBreakForFanningBranchChain(expression)
+        ) {
             recordTernaryWidthBreak(expression);
             return brokenConditionalExpression(expression);
         }

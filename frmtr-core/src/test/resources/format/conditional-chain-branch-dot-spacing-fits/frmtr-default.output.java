@@ -1,4 +1,4 @@
-class ConditionalChainBranchSample {
+class ConditionalChainDotSpacingSample {
 
     Result map(Source source) {
         return new Result(
@@ -6,7 +6,7 @@ class ConditionalChainBranchSample {
             source.count() > 0
                 ? source.entries()
                         .stream()
-                        .map(entry -> new TargetRecord(entry.value()))
+                        .map(entry -> new Target(entry.value()))
                         .toList()
                 : List.of()
         );

@@ -216,8 +216,7 @@ final class ChainRootPromotionLayout {
         return Doc.group(
             Doc.concat(
                 rootDoc,
-                // Measure the segment on its own continuation line (softChainContinuation drops it there when it breaks),
-                // not the beside-a-token source column which reads the author's shape and flips the argument list across passes.
+                // Measure the segment on its own continuation line, where softChainContinuation drops it when it breaks.
                 softChainContinuation.apply(
                     segmentRenderer.methodCallChainSegment(
                         expression,

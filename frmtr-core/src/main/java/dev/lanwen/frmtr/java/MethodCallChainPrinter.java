@@ -909,8 +909,7 @@ final class MethodCallChainPrinter {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
-                        // Segment sits alone on its own continuation line, so measure at the continuation column rather
-                        // than the beside-a-token source column, which flips its argument list between passes.
+                        // Segment sits alone on its own continuation line, so measure it at the continuation column.
                         chainContinuation(methodCallChainSegment(
                             calls.getFirst(),
                             Optional.empty(),
@@ -932,8 +931,7 @@ final class MethodCallChainPrinter {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
-                        // Segment sits alone on its own continuation line, so measure at the continuation column rather
-                        // than the beside-a-token source column, which flips its argument list between passes.
+                        // Segment sits alone on its own continuation line, so measure it at the continuation column.
                         chainContinuation(methodCallChainSegment(
                             calls.getFirst(),
                             Optional.empty(),
@@ -1037,9 +1035,8 @@ final class MethodCallChainPrinter {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
-                        // The segment lands alone on its own continuation line below the comment-carrying root, so measure
-                        // it at the continuation column, not the beside-a-token source column: the source estimate reads
-                        // the author's shape and flips the segment's argument list between broken and collapsed per pass.
+                        // The segment lands alone on its own continuation line below the comment-carrying root, so
+                        // measure it at the continuation column.
                         chainContinuation(methodCallChainSegment(
                             calls.getFirst(),
                             Optional.empty(),
@@ -1052,7 +1049,12 @@ final class MethodCallChainPrinter {
             }
         }
         if (canKeepSuffixAttachedToPromotedBlockLambdaRoot(chainPlan, root, calls, finalSegmentSuffix)) {
-            return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)));
+            return Optional.of(
+                Doc.concat(
+                    rootDoc,
+                    methodCallChainSegmentAttachedToBlockLambdaClose(calls.getFirst(), finalSegmentSuffix)
+                )
+            );
         }
         if (
             root instanceof ObjectCreationExpr objectCreation
@@ -1107,8 +1109,7 @@ final class MethodCallChainPrinter {
                 chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.INLINE_PROMOTED_METHOD_CALL
                 && promotedNoArgRootScopeOverflows(methodRoot, firstLineWidth)
             ) {
-                // Segment sits alone on its own continuation line, so measure at the continuation column rather than the
-                // beside-a-token source column, which flips its argument list between passes.
+                // Segment sits alone on its own continuation line, so measure it at the continuation column.
                 return Optional.of(
                     Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(
                         calls.getFirst(),
@@ -1181,7 +1182,10 @@ final class MethodCallChainPrinter {
             ) {
                 if (methodCallSegmentHasBlockLambdaArgument(methodRoot)) {
                     return Optional.of(
-                        Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst(), finalSegmentSuffix))
+                        Doc.concat(
+                            rootDoc,
+                            methodCallChainSegmentAttachedToBlockLambdaClose(calls.getFirst(), finalSegmentSuffix)
+                        )
                     );
                 }
                 return Optional.of(
@@ -2097,6 +2101,13 @@ final class MethodCallChainPrinter {
         return segmentRenderer.methodCallChainSegment(expression, finalSegmentSuffix);
     }
 
+    private Doc methodCallChainSegmentAttachedToBlockLambdaClose(
+            MethodCallExpr expression,
+            MethodCallChainTail finalSegmentSuffix
+    ) {
+        return segmentRenderer.methodCallChainSegmentAttachedToBlockLambdaClose(expression, finalSegmentSuffix);
+    }
+
     private Doc methodCallChainSegmentAttachedToRootClose(
             MethodCallExpr expression,
             MethodCallChainTail finalSegmentSuffix,
@@ -2107,10 +2118,8 @@ final class MethodCallChainPrinter {
 
     /**
      * Measures a single segment attached right after a flat, compact method-call root at the root's true rendered
-     * column ({@code firstLineWidth}), rather than the segment's stale source column
-     * ({@link ChainSegmentWidthLayout#methodCallSegmentWidth}'s fallback), which reads a different width depending on
-     * whether the author happened to wrap the call — flipping the argument-break verdict between an authored-flat and
-     * an authored-wrapped pass over the identical AST.
+     * column ({@code firstLineWidth}), so the segment's argument-break verdict follows the rendered geometry rather
+     * than whatever column the author left the call at.
      */
     private ToIntFunction<String> attachedRootSegmentWidth(MethodCallExpr methodRoot, ToIntFunction<String> firstLineWidth) {
         String rootText = compactSource.compactWithoutOwnComment(methodRoot);

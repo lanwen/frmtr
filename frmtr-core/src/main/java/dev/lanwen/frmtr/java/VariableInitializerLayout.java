@@ -192,8 +192,6 @@ final class VariableInitializerLayout {
 
     private final Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot;
 
-    private final Function<MethodCallExpr, String> methodCallChainFirstLine;
-
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
 
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
@@ -273,7 +271,6 @@ final class VariableInitializerLayout {
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
-            Function<MethodCallExpr, String> methodCallChainFirstLine,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Function<MethodCallExpr, MethodCallChainSourcePlanner.InitializerChainShape> methodCallChainInitializerShape,
@@ -324,7 +321,6 @@ final class VariableInitializerLayout {
         this.packedMethodCallChain = packedMethodCallChain;
         this.methodCallWithSemicolon = methodCallWithSemicolon;
         this.mixedFieldMethodCallRoot = mixedFieldMethodCallRoot;
-        this.methodCallChainFirstLine = methodCallChainFirstLine;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.methodCallChainInitializerShape = methodCallChainInitializerShape;
@@ -1396,10 +1392,6 @@ final class VariableInitializerLayout {
         // call (whose collapse is a broken-constructor shape rendered by its own branches, not this
         // whole-call collapse); for that shape the predicate keeps the deterministic argument-break decision. It keys
         // purely on AST shape + measured width, never source line breaks, so this path stays idempotent.
-        //
-        // Stays on the width-estimate path here: the forced chain's final argument list renders source-shape-sensitively
-        // (a forced break when source already wrapped it, a fit-checked one when flat), so ranking it by measured line
-        // count would oscillate between passes.
         if (
             initializerChainShape.shouldForceWideInitializerChain()
             && !singleCallConvergesOnArgumentBreak(
@@ -1407,12 +1399,9 @@ final class VariableInitializerLayout {
                 argumentBreakOpenerFits(variable, methodCall, declarationPrefix + variable.getNameAsString())
             )
         ) {
-            Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
-                variable,
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                methodCall
-            );
+            String probeFlatName = declarationPrefix + variable.getNameAsString();
+            Optional<Doc> forcedChain = forcedMethodCallChain(variable, methodCall, probeFlatName)
+                .map(chain -> variableWithMethodCallChainRanked(variable, name, probeFlatName, methodCall, chain, new int[] { 1, 0 }));
             if (forcedChain.isPresent()) {
                 return forcedChain.orElseThrow();
             }
@@ -1438,12 +1427,9 @@ final class VariableInitializerLayout {
         if (sourceMultilineBlockLambdaCall.isPresent()) {
             return sourceMultilineBlockLambdaCall.orElseThrow();
         }
-        Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
-            variable,
-            name,
-            declarationPrefix + variable.getNameAsString(),
-            methodCall
-        );
+        String fallbackFlatName = declarationPrefix + variable.getNameAsString();
+        Optional<Doc> forcedChain = forcedMethodCallChain(variable, methodCall, fallbackFlatName)
+            .map(chain -> variableWithMethodCallChainRanked(variable, name, fallbackFlatName, methodCall, chain, new int[] { 1, 0 }));
         if (forcedChain.isPresent()) {
             return forcedChain.orElseThrow();
         }
@@ -2095,22 +2081,6 @@ final class VariableInitializerLayout {
         );
     }
 
-    private Optional<Doc> variableWithForcedMethodCallChain(
-            VariableDeclarator variable,
-            String name,
-            String flatName,
-            MethodCallExpr methodCall
-    ) {
-        return forcedMethodCallChain(variable, methodCall, flatName).map(chain -> variableWithMethodCallChain(
-                variable,
-                name,
-                flatName,
-                methodCall,
-                methodCallChainFirstLine.apply(methodCall),
-                chain
-        ));
-    }
-
     /**
      * Identifies receiver-call initializers where the assignment opener should be tried before chain fallback.
      */
@@ -2393,27 +2363,11 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Renders the {@link #attachedSingleSegmentChainMustBreakAfterEquals} shape as a DOT-BREAK — the
-     * constructor root on the assignment line and the zero-argument tail selector fanned onto its own dotted continuation
-     * line ({@code = new RelaySubject<>(...)}⏎{@code .withoutAuthentication(); // note}) — whenever the constructor opener
-     * fits on the assignment line. This supersedes break-after-{@code =} for exactly this comment-bearing, empty-tail
-     * object-creation chain: the width-driven no-comment sibling already dot-breaks (its renderer-measured conditional
-     * group fans the tail at the true column), so reproducing that shape byte-for-byte on the comment sink makes the two
-     * converge — a flat-source pass fans through that gate, and the re-parsed broken-source pass, which parks the trailing
-     * comment on the selector line, reaches here and lands the identical fan (a one-pass fixpoint).
-     *
-     * <p>Built HERE, ahead of {@code variableWithMethodCallChain}, rather than by attaching the pre-built chain doc: the fan
-     * must claim the trailing comment itself. The chain doc ({@code methodCallWithSemicolon}) renders the comment-bearing
-     * tail flat (the packed fan refuses comment-bearing chains) and, being built first, would claim the comment at doc-build
-     * time and leave this re-render empty — dropping it. Rendering the constructor root from its source-neutral first line
-     * ({@link #methodCallChainFirstLine}) and the tail as {@code .selector()} text keeps the shape a pure width + AST
-     * function; the trailing comment rides as a {@link Doc#lineSuffix} after the {@code ;}, exactly as
-     * {@code MethodCallChainPrinter} emits a chain's final trailing comment.
-     *
-     * <p>Returns empty — falling back to the break-after-{@code =} shape — unless the constructor opener fits on the
-     * assignment line AND the chain carries no comment other than the tail trailing line comments (a constructor-argument or
-     * selector-name comment would be dropped by the text root render), so no other chain shape is disturbed and no comment
-     * is lost.
+     * Ranks the DOT-BREAK shape ({@code = new RelaySubject<>(...)}⏎{@code .withoutAuthentication(); // note}) against
+     * break-after-{@code =} for a comment-bearing, empty-tail object-creation chain, by true rendered first line
+     * ({@link Doc#bestFittingFirstLine}) over a constructor root Doc built once and shared by both candidates. Built
+     * HERE, ahead of {@link #variableWithMethodCallChainRanked}, so this fan claims the trailing comment itself before
+     * the chain doc ({@code methodCallWithSemicolon}) can claim it first and leave this re-render comment-empty.
      */
     private Optional<Doc> dotBrokenObjectRootTailChain(
             VariableDeclarator variable,
@@ -2424,13 +2378,9 @@ final class VariableInitializerLayout {
         if (!attachedSingleSegmentChainMustBreakAfterEquals(variable, flatName, methodCall)) {
             return Optional.empty();
         }
-        // The constructor root and the selector are rendered as source-neutral TEXT (the constructor from its
-        // {@code methodCallChainFirstLine}, the zero-argument tail as {@code .selector()}), so those renders carry NO
-        // comment; only the tail trailing line comment is re-emitted. Bail unless every comment reachable in the chain is
-        // one of those tail comments (a constructor-argument, selector-name, or chain-own comment would be dropped). This is
-        // source-shape-independent: JavaParser parks the same trailing comment on the SELECTOR NAME when the chain is broken
-        // across source lines and on the whole expression when the tail shares the assignment line, but both surface it
-        // through {@code methodCallFinalTrailingLineComments}, so both shapes take this route and converge on the same fan.
+        // The constructor renders comment-free; only the tail trailing line comment is re-emitted. Bail unless every
+        // comment reachable in the chain is one of those tail comments (a constructor-argument or selector-name comment
+        // would be dropped by the comment-free constructor render).
         List<JavaCommentTrivia> tailComments = methodCallFinalTrailingLineComments(methodCall);
         List<Comment> renderedComments = tailComments.stream().map(JavaCommentTrivia::comment).toList();
         List<Comment> allChainComments = new ArrayList<>(methodCall.getAllContainedComments());
@@ -2438,10 +2388,10 @@ final class VariableInitializerLayout {
         if (!allChainComments.stream().allMatch(renderedComments::contains)) {
             return Optional.empty();
         }
-        String firstLine = methodCallChainFirstLine.apply(methodCall);
-        if (openerLineWidth(variable, flatName + " = " + firstLine) > options.lineWidth()) {
-            return Optional.empty();
-        }
+        // The constructor renders through the ordinary comment-blind expression printer, built exactly ONCE and shared
+        // by both ranked candidates below: it carries its own width-driven group (breaks its argument list on overflow),
+        // so the renderer — not a string first-line estimate — decides whether the constructor stays flat here.
+        Doc constructorRoot = expressionWithoutOwnComment.apply(methodCall.getScope().orElseThrow());
         Doc commentSuffix = tailComments.isEmpty()
             ? Doc.EMPTY
             : Doc.lineSuffix(Doc.concat(
@@ -2449,18 +2399,22 @@ final class VariableInitializerLayout {
                 Doc.join(Doc.text(" "), tailComments.stream().map(comments::comment).toList())
             ));
         Doc tailSegment = Doc.concat(Doc.text(methodCallSegmentPrefix(methodCall) + "();"), commentSuffix);
-        return Optional.of(Doc.concat(
-            Doc.text(name + " = " + firstLine),
+        Doc dotBroken = Doc.concat(
+            Doc.text(name + " = "),
+            constructorRoot,
             Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, tailSegment)))
-        ));
+        );
+        Doc brokenAfterEquals = Doc.concat(
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(constructorRoot, tailSegment)))
+        );
+        return Optional.of(Doc.bestFittingFirstLine(List.of(dotBroken, brokenAfterEquals), new int[] { 1, 0 }));
     }
 
     /**
-     * Isolated variant of {@link #variableWithMethodCallChain} for the two-selector fan site, the pre-{@code ;}
-     * comment-tail branch, and the final-trailing-comment branch of {@link #variableWithStatementTerminator}, ranking
-     * both statement shapes by true rendered first line ({@link Doc#bestFittingFirstLine}) instead of a string
-     * first-line estimate. The lineSuffix-blind measurement (#487) and an attach-first priority for the
-     * final-trailing-comment caller (below) resolve both blockers #482 identified for that branch.
+     * Ranks the attach-after-{@code =} and break-after-{@code =} shapes of a method-call chain initializer by true
+     * rendered first line ({@link Doc#bestFittingFirstLine}), the single seam every {@code initializerChain}-backed
+     * chain caller in this class routes through instead of a string first-line estimate.
      */
     private Doc variableWithMethodCallChainRanked(
             VariableDeclarator variable,
@@ -2491,73 +2445,6 @@ final class VariableInitializerLayout {
         Doc attached = Doc.concat(Doc.text(name + " = "), chain);
         Doc brokenAfterEquals = Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), priorities);
-    }
-
-    /**
-     * Decides whether a method-call chain can start after {@code =} or must move entirely to an indented continuation.
-     */
-    private Doc variableWithMethodCallChain(
-            VariableDeclarator variable,
-            String name,
-            String flatName,
-            MethodCallExpr methodCall,
-            String firstLine,
-            Doc chain
-    ) {
-        if (attachedSingleSegmentChainMustBreakAfterEquals(variable, flatName, methodCall)) {
-            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
-        }
-        if (
-            methodCallChainRootIsObjectCreation.test(methodCall)
-            && openerLineWidth(variable, flatName + " = " + firstLine + ";") > options.lineWidth()
-        ) {
-            // Prefer breaking the constructor's argument list over breaking after `=`. The chain root's constructor
-            // renders through a column-aware Doc.group (ObjectCreationPrinter.widthDrivenObjectCreation), so when the flat
-            // constructor cannot start after `NAME = ` we still attach the chain — provided the constructor OPENER
-            // (`new X(`) fits on the assignment line, measured here at the real `NAME = ` column — and let the renderer
-            // break the argument list. Only when even the opener cannot start after `NAME = ` do we break after `=`.
-            Optional<String> constructorOpener = objectCreationChainRootOpener(methodCall);
-            if (
-                constructorOpener.isPresent()
-                && openerLineWidth(variable, flatName + " = " + constructorOpener.orElseThrow())
-                    <= options.lineWidth()
-            ) {
-                return Doc.concat(Doc.text(name + " = "), chain);
-            }
-            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
-        }
-        if (openerLineWidth(variable, flatName + " = " + firstLine) > options.lineWidth()) {
-            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
-        }
-        return Doc.concat(Doc.text(name + " = "), chain);
-    }
-
-    /**
-     * Returns the constructor opener ({@code new X(}) of an object-creation-rooted chain, so the initializer can probe
-     * whether the constructor can start on the assignment line and its argument list break below it. The opener
-     * is only offered when the root constructor actually carries an argument list to break; a no-argument constructor has
-     * nothing to reflow, so it stays on the break-after-{@code =} path. The root is located by walking the receiver spine
-     * (through method-call and field-access selectors) to the {@link ObjectCreationExpr} that
-     * {@code methodCallChainRootIsObjectCreation} already confirmed is present.
-     */
-    private Optional<String> objectCreationChainRootOpener(MethodCallExpr methodCall) {
-        Expression current = methodCall.getScope().orElse(null);
-        while (current != null) {
-            if (current instanceof ObjectCreationExpr objectCreation) {
-                if (objectCreation.getArguments().isEmpty()) {
-                    return Optional.empty();
-                }
-                return Optional.of(objectCreationPrefix.apply(objectCreation) + "(");
-            }
-            if (current instanceof MethodCallExpr scopedCall) {
-                current = scopedCall.getScope().orElse(null);
-            } else if (current instanceof FieldAccessExpr fieldAccess) {
-                current = fieldAccess.getScope();
-            } else {
-                return Optional.empty();
-            }
-        }
-        return Optional.empty();
     }
 
     /**

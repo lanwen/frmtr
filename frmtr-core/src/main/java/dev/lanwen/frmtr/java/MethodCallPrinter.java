@@ -1213,10 +1213,6 @@ final class MethodCallPrinter {
         return methodChains.methodCallChainRootIsFieldAccess(expression);
     }
 
-    String methodCallChainFirstLine(MethodCallExpr expression) {
-        return methodChains.methodCallChainFirstLine(expression);
-    }
-
     /**
      * Rebuilds empty argument lists that contain comments JavaParser exposes outside the argument list.
      *

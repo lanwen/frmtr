@@ -168,6 +168,7 @@ The combinator vocabulary groups into a handful of concerns:
 | Conditional content | `IfBreak` | Different output for flat vs. broken layout, optionally keyed to a named group. |
 | Deferred content | `LineSuffix` | Trailing comments that lay out after the code on their line. |
 | Diagnostics | `Label` | Debug-only provenance; transparent to rendering and width. |
+| Pinned layout | `Doc.flat` / `Doc.flatCandidate` | Rewrite a subtree with every break decision resolved flat, so a ranked set can offer a genuinely single-line arm. |
 
 The four **width-deciding** primitives are the heart of the model:
 
@@ -184,6 +185,15 @@ The four **width-deciding** primitives are the heart of the model:
   opts a node into a first-line-fit ranking mode (a static per-node fact, not a width): when every alternative carries
   the same over-width body so none fits, it ranks first-line fit first, then less overflow before fewer lines — the arm
   whose header fits wins over the fewest-lines arm whose opener spills.
+
+`Doc.flat` is the ranking counterpart to those primitives rather than a node of its own: a pure `Doc` → `Doc` rewrite
+that denies every break *request* (a group loses its choice, `Line` becomes a space, `SoftLine`/`BreakParent` vanish,
+`IfBreak` takes its flat branch, a conditional/best-fitting node collapses to its first alternative) while keeping
+mandatory newlines, which are content. Ranking needs it because an arm that can re-break internally shrinks its own
+first line and so satisfies both the fewest-lines and first-line-fit keys no matter how wide its content really is; a
+pinned arm reports the overrun honestly and concedes. `Doc.flatCandidate` is the gated form, empty when a surviving
+`HardLine` means no single-line arm exists. Because the pinned arm shares the original's leaves, a comment claimed once
+at build time is offered to both arms of a ranked pair without being claimed twice.
 
 ```
    ┌─ Group ──────────► flat if it fits, else break

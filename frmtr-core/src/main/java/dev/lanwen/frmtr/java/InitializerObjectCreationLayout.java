@@ -9,6 +9,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -146,7 +147,8 @@ final class InitializerObjectCreationLayout {
 
     /**
      * Breaks constructor arguments when the assignment and constructor prefix still fit, so only the argument list moves
-     * to hard lines.
+     * to hard lines. A short argument list additionally offers a pinned-flat whole-creation arm, and the renderer keeps
+     * it only while it genuinely stays on the {@code NAME = } line.
      */
     private Optional<Doc> variableWithBrokenObjectCreationArguments(
             VariableDeclarator variable,
@@ -161,27 +163,39 @@ final class InitializerObjectCreationLayout {
         if (openerLineWidth.applyAsInt(variable, flatName + " = " + prefix + "(") > options.lineWidth()) {
             return Optional.empty();
         }
-        if (smallConstructorCanStayFlat(variable, flatName, objectCreation)) {
-            return Optional.of(Doc.concat(Doc.text(name + " = "), expression.apply(objectCreation)));
-        }
+        Doc argumentsBroken = brokenArgumentList(name, prefix, objectCreation);
+        // Rank the whole creation pinned flat against the argument break. Pinning matters: left breakable the "flat" arm
+        // renders its own operand splits, so it wins on line count while its content no longer sits on one line.
         return Optional.of(
-            Doc.concat(
-                Doc.text(name + " = " + prefix + "("),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            objectCreation.getArguments()
-                                    .stream()
-                                    .map(this::brokenObjectCreationArgument)
-                                    .toList()
-                        )
+            smallConstructorFlatArm(name, objectCreation)
+                    .map(flatArm -> Doc.bestFittingFirstLine(List.of(flatArm, argumentsBroken), new int[] {1, 0}))
+                    .orElse(argumentsBroken)
+        );
+    }
+
+    /** The whole creation on the {@code NAME = } line, offered only for a short argument list with no forced break. */
+    private Optional<Doc> smallConstructorFlatArm(String name, ObjectCreationExpr objectCreation) {
+        if (objectCreation.getArguments().size() > 3) {
+            return Optional.empty();
+        }
+        return Doc.flatCandidate(expression.apply(objectCreation))
+                .map(value -> Doc.concat(Doc.text(name + " = "), value));
+    }
+
+    private Doc brokenArgumentList(String name, String prefix, ObjectCreationExpr objectCreation) {
+        return Doc.concat(
+            Doc.text(name + " = " + prefix + "("),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        objectCreation.getArguments().stream().map(this::brokenObjectCreationArgument).toList()
                     )
-                ),
-                Doc.HARD_LINE,
-                Doc.text(")")
-            )
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(")")
         );
     }
 
@@ -208,16 +222,6 @@ final class InitializerObjectCreationLayout {
             return binaryExpressionLines.apply(binaryExpr, true);
         }
         return expression.apply(argument);
-    }
-
-    private boolean smallConstructorCanStayFlat(
-            VariableDeclarator variable,
-            String flatName,
-            ObjectCreationExpr objectCreation
-    ) {
-        return objectCreation.getArguments().size() <= 3
-            && openerLineWidth.applyAsInt(variable, flatName + " = " + compact.apply(objectCreation) + ";")
-                <= options.lineWidth();
     }
 
     /**

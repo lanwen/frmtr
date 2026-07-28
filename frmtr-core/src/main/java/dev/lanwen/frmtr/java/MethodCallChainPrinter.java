@@ -1004,20 +1004,6 @@ final class MethodCallChainPrinter {
         if (calls.isEmpty()) {
             return Optional.of(appendFinalSegmentSuffix(rootDoc, finalSegmentSuffix));
         }
-        if (
-            root instanceof MethodCallExpr methodRoot
-            && calls.size() == 1
-            && !sourceShapePolicy.hasContainedComments(root)
-            && !chainComments.methodCallSegmentHasComment(calls.getFirst())
-            && methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
-            && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                    // Measure the block-lambda root first line at the root's true rendered block/type depth
-                    // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-                    .filter(firstLine -> layoutWidth.nodeLine(methodRoot, firstLine) <= options.lineWidth())
-                    .isPresent()
-        ) {
-            return Optional.empty();
-        }
         Doc rootTrailingComment = chainComments.rootTrailingLineCommentBeforeFirstSegment(root, calls);
         if (rootTrailingComment != Doc.EMPTY) {
             if (
@@ -1095,16 +1081,6 @@ final class MethodCallChainPrinter {
             && methodCallSegmentHasNoOwnContainedComments(calls.getFirst())
             && !chainComments.methodCallSegmentHasComment(calls.getFirst())
         ) {
-            if (
-                methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
-                && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                        // Measure the block-lambda root first line at the root's true rendered block/type depth
-                        // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-                        .filter(firstLine -> layoutWidth.nodeLine(methodRoot, firstLine) <= options.lineWidth())
-                        .isPresent()
-            ) {
-                return Optional.empty();
-            }
             if (
                 chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.INLINE_PROMOTED_METHOD_CALL
                 && promotedNoArgRootScopeOverflows(methodRoot, firstLineWidth)
@@ -1731,17 +1707,6 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix
     ) {
         return rootPromotion.groupedPromotedRootWithSingleSegment(rootDoc, expression, finalSegmentSuffix);
-    }
-
-    private Optional<String> blockLambdaSegmentFirstLine(String root, MethodCallExpr expression) {
-        String prefix = root
-            + "."
-            + expression
-                    .getTypeArguments()
-                    .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                    .orElse("")
-            + expression.getNameAsString();
-        return huggableBlockLambdaFirstLine.apply(prefix, expression.getArguments());
     }
 
     /**

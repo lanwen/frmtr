@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.TestFormatterOptions;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class DocRendererTest {
@@ -924,5 +925,104 @@ final class DocRendererTest {
 
         // The plain render() path returns the text with no per-line signal; renderIndented() opts into accumulating it.
         assertThat(renderer(80).renderIndented(doc).lines()).isNotEmpty();
+    }
+
+    /** A parenthesized ternary condition: one group that stays on a line while it fits and splits once it does not. */
+    private static Doc enclosedCondition() {
+        return Doc.group(
+            Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("alpha"), Doc.text(" &&"), Doc.LINE, Doc.text("beta"))),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+    }
+
+    @Test
+    void flatDeniesEveryBreakRequestSoTheArmStaysOnOneLineAtAnyWidth() {
+        Doc heavyArguments = Doc.group(
+            Doc.concat(
+                Doc.text("compute("),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("first"), Doc.text(","), Doc.LINE, Doc.text("second"))),
+                Doc.SOFT_LINE,
+                Doc.text(")"),
+                Doc.BREAK_PARENT
+            )
+        );
+
+        // The heaviness marker forces the group apart at any width; flattened it renders as one line regardless.
+        assertThat(renderer(20).render(heavyArguments)).isEqualTo(
+            """
+                compute(
+                  first,
+                  second
+                )"""
+        );
+        assertThat(renderer(20).render(Doc.flat(heavyArguments))).isEqualTo("compute(first, second)");
+    }
+
+    @Test
+    void flatCollapsesRankedAlternativesToTheFlattestAndTakesTheFlatIfBreakBranch() {
+        Doc ranked = Doc.bestFitting(
+            List.of(
+                Doc.concat(Doc.text("veryLongValueExpression"), Doc.ifBreak(Doc.text("!"), Doc.text("?"))),
+                Doc.concat(Doc.text("veryLongValue"), Doc.HARD_LINE, Doc.text("Expression"))
+            )
+        );
+
+        // Ranking is a break decision too: flat keeps the first alternative and reads the IfBreak's flat branch.
+        assertThat(renderer(20).render(ranked)).isEqualTo(
+            """
+                veryLongValue
+                Expression"""
+        );
+        assertThat(renderer(20).render(Doc.flat(ranked))).isEqualTo("veryLongValueExpression?");
+    }
+
+    @Test
+    void flatKeepsMandatoryNewlinesSoACommentLedSubtreeIsNotSilentlyJoined() {
+        Doc commentLed = Doc.group(Doc.concat(Doc.text("// note"), Doc.HARD_LINE, Doc.text("value")));
+
+        // A HardLine is content, not a break request: flattening must not swallow the newline after a line comment.
+        assertThat(Doc.flat(commentLed)).matches(DocRenderer::containsHardLine);
+        assertThat(renderer(80).render(Doc.flat(commentLed))).isEqualTo(
+            """
+                // note
+                value"""
+        );
+    }
+
+    @Test
+    void flatMakesAPreferredAttachArmConcedeOnceItsHeadNoLongerFitsOnOneLine() {
+        Doc branches = Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("? one"), Doc.HARD_LINE, Doc.text(": two")));
+        Doc breakAfterEquals = Doc.concat(
+            Doc.text("head ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, enclosedCondition(), branches))
+        );
+        Doc attach = Doc.concat(Doc.text("head = "), enclosedCondition(), branches);
+        Doc attachHeadPinnedFlat = Doc.concat(Doc.text("head = "), Doc.flat(enclosedCondition()), branches);
+
+        // The attach arm is preferred by priority. Left breakable it satisfies the first-line gate by breaking its own
+        // head, so it wins with the condition split below the initializer; pinned flat the head overruns and concedes.
+        assertThat(renderer(20).render(Doc.bestFittingFirstLine(List.of(attach, breakAfterEquals), new int[] {1, 0})))
+                .isEqualTo(
+                    """
+                        head = (
+                          alpha &&
+                          beta
+                        )
+                          ? one
+                          : two"""
+                );
+        assertThat(
+            renderer(20).render(Doc.bestFittingFirstLine(List.of(attachHeadPinnedFlat, breakAfterEquals), new int[] {1, 0}))
+        ).isEqualTo(
+            """
+                head =
+                  (alpha && beta)
+                    ? one
+                    : two"""
+        );
     }
 }

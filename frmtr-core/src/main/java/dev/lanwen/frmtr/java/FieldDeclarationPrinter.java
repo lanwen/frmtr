@@ -142,7 +142,6 @@ final class FieldDeclarationPrinter {
             singleSelectorDotSplit,
             packedMethodCallChain,
             methodCallWithSemicolon,
-            mixedFieldMethodCallRoot,
             methodCallChainRootIsObjectCreation,
             methodCallChainIsSourceMultiline,
             methodCallChainInitializerShape,

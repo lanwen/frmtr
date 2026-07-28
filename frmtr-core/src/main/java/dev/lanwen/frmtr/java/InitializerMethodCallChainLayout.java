@@ -486,26 +486,28 @@ final class InitializerMethodCallChainLayout {
             return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
         }
         Doc attach = brokenMethodCallArgumentList(name, methodCall, callPrefix);
-        if (
-            methodCallChainInitializerShape.apply(methodCall).singleCall()
-            && singleCallHasInlineMethodCallRoot(methodCall)
-            && singleSelectorTailFitsOnContinuation(methodCall)
-        ) {
-            // The selector's arguments fit flat on one continuation line, so split by dot (root on the `=` line, the
-            // selector on its own continuation line) rather than opening and exploding the argument list. When the
-            // arguments would explode (a broken lambda body, a nested breaking call), fall through to the opener-attach.
-            return Optional.of(Doc.concat(Doc.text(name + " = "), singleSelectorDotSplit.apply(methodCall)));
-        }
-        return Optional.of(attach);
+        return Optional.of(
+            singleSelectorDotSplitArm(name, methodCall)
+                    .map(dotSplit -> Doc.bestFitting(List.of(dotSplit, attach)))
+                    .orElse(attach)
+        );
     }
 
     /**
-     * Whether the single selector rendered flat ({@code .name(compactArgs)}) fits on its own dotted continuation line,
-     * so the dot-split keeps the argument list on one line rather than exploding it.
+     * The dot-split arm: the root on the {@code =} line and the sole selector on its own continuation line, with the
+     * selector's argument list pinned flat. Pinning is what makes the arm rankable — left breakable the selector explodes
+     * around a lambda argument and still wins on line count, which is the shape the dot-split exists to avoid.
      */
-    private boolean singleSelectorTailFitsOnContinuation(MethodCallExpr methodCall) {
-        String tail = "." + methodCall.getNameAsString() + "(" + compactJoin.apply(methodCall.getArguments()) + ");";
-        return layoutWidth.continuationStatement(tail) <= options.lineWidth();
+    private Optional<Doc> singleSelectorDotSplitArm(String name, MethodCallExpr methodCall) {
+        if (
+            !methodCallChainInitializerShape.apply(methodCall).singleCall()
+            || !singleCallHasInlineMethodCallRoot(methodCall)
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(Doc.text(name + " = "), Doc.flat(singleSelectorDotSplit.apply(methodCall)))
+        );
     }
 
     /**

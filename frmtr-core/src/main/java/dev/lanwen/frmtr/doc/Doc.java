@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.doc;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 public sealed interface Doc
     permits
@@ -111,6 +112,51 @@ public sealed interface Doc
      */
     static Doc ifBreak(Doc breakDoc, Doc flatDoc, String groupId) {
         return new IfBreak(breakDoc, flatDoc, groupId);
+    }
+
+    /**
+     * Rewrites {@code doc} into the layout it would take if every break decision inside it came out flat, so a ranked
+     * candidate set can offer a <em>genuinely single-line</em> arm beside the same content's breakable form. Without it a
+     * cascade cannot express "prefer this shape only while it stays on one line": the preferred arm re-breaks internally,
+     * its first line shrinks to fit, and both fewest-lines and first-line-fit ranking stop discriminating.
+     *
+     * <p>Break <em>requests</em> are denied — {@link Group} loses its flat/break choice, {@link Line} becomes a space,
+     * {@link SoftLine} and {@link #BREAK_PARENT} vanish, {@link IfBreak} takes its flat branch, and a
+     * {@link ConditionalGroup}/{@link BestFitting} collapses to its first (flattest) alternative. Mandatory newlines are
+     * <em>content</em> and survive: a {@link HardLine} still breaks, so a subtree carrying one is not a usable flat
+     * candidate and the caller gates it out ({@link DocRenderer#containsHardLine} answers that question).
+     *
+     * <p>The result shares the original's text and line-suffix leaves, so a comment claimed once at build time is offered
+     * to both arms of a ranked pair without being claimed twice; only one arm is ever rendered.
+     */
+    static Doc flat(Doc doc) {
+        return switch (doc) {
+            case Line ignored -> text(" ");
+            case SoftLine ignored -> EMPTY;
+            case BreakParent ignored -> EMPTY;
+            case Concat concat -> concat(concat.docs().stream().map(Doc::flat).toList());
+            case Fill fill -> concat(fill.parts().stream().map(Doc::flat).toList());
+            case Group group -> flat(group.doc());
+            case Indent indented -> indent(flat(indented.doc()));
+            case IfBreak conditional -> flat(conditional.flatDoc());
+            case ConditionalGroup conditionalGroup -> flat(conditionalGroup.alternatives().getFirst());
+            case BestFitting bestFitting -> flat(bestFitting.alternatives().getFirst());
+            case Label label -> label(label.label(), flat(label.doc()));
+            case Text ignored -> doc;
+            case HardLine ignored -> doc;
+            case LineSuffix ignored -> doc;
+        };
+    }
+
+    /**
+     * The pinned-flat arm a ranked candidate set can offer for {@code doc}, or empty when the content carries a mandatory
+     * newline and no single-line arm exists. The gated form of {@link #flat(Doc)}: a caller that would rank a flat shape
+     * against a broken one asks here, so an unflattenable subtree drops out of the ranking instead of entering it as a
+     * multi-line arm that then wins on priority.
+     */
+    static Optional<Doc> flatCandidate(Doc doc) {
+        Doc flattened = flat(doc);
+        return DocRenderer.containsHardLine(flattened) ? Optional.empty() : Optional.of(flattened);
     }
 
     /**

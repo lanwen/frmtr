@@ -143,8 +143,6 @@ final class VariableInitializerLayout {
 
     private final Function<Node, String> compact;
 
-    private final ConditionalExpressionLineProjection conditionalProjection;
-
     private final Function<Node, String> compactWithoutOwnComment;
 
     private final Function<List<? extends Node>, String> compactJoin;
@@ -207,10 +205,6 @@ final class VariableInitializerLayout {
 
     private final Function<Type, Doc> castType;
 
-    private final Function<ConditionalExpr, Doc> brokenConditionalExpression;
-
-    private final Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer;
-
     private final BiFunction<ArrayInitializerExpr, Boolean, Doc> arrayInitializer;
 
     private final Function<ObjectCreationExpr, String> objectCreationPrefix;
@@ -252,6 +246,11 @@ final class VariableInitializerLayout {
     // Extracted arm-emitter cluster: the cast-type break that keeps the assignment and cast opener together while a
     // generic/intersection cast type absorbs the overflow. See {@link InitializerCastLayout}.
     private final InitializerCastLayout castLayout;
+
+    // Extracted arm-emitter cluster: the ternary-initializer break, its over-width probe, and the binary-initializer
+    // first-operand-with-`=` probe consulted by the comment/source-shape pre-empt tier. See
+    // {@link InitializerConditionalLayout}.
+    private final InitializerConditionalLayout conditionalLayout;
 
     VariableInitializerLayout(
             JavaFormatContext context,
@@ -304,7 +303,6 @@ final class VariableInitializerLayout {
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
         this.compact = context.compactSource::compact;
-        this.conditionalProjection = new ConditionalExpressionLineProjection(context.compactSource::compact);
         this.compactWithoutOwnComment = context.compactSource::compactWithoutOwnComment;
         this.compactJoin = context.compactSource::compactJoin;
         this.expression = expression;
@@ -331,8 +329,6 @@ final class VariableInitializerLayout {
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.methodCallChainInitializerShape = methodCallChainInitializerShape;
         this.castType = castType;
-        this.brokenConditionalExpression = brokenConditionalExpression;
-        this.shouldBreakBeforeConditionalInitializer = shouldBreakBeforeConditionalInitializer;
         this.arrayInitializer = arrayInitializer;
         this.objectCreationPrefix = objectCreationPrefix;
         this.typeNameWithoutArguments = typeNameWithoutArguments;
@@ -381,6 +377,14 @@ final class VariableInitializerLayout {
             this.expression,
             context.compactSource::compactTypeLike,
             this.typeNameWithoutArguments
+        );
+        this.conditionalLayout = new InitializerConditionalLayout(
+            this.options,
+            this.layoutWidth,
+            this.compact,
+            context.compactSource::compact,
+            brokenConditionalExpression,
+            shouldBreakBeforeConditionalInitializer
         );
     }
 
@@ -719,7 +723,7 @@ final class VariableInitializerLayout {
             ));
         }
         if (initializer instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments.test(binaryExpr)) {
-            if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
+            if (conditionalLayout.binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
                 return Optional.of(Doc.concat(
                     Doc.text(name + " = "),
                     Doc.indent(binaryExpressionLinesWithComments.apply(binaryExpr))
@@ -732,11 +736,11 @@ final class VariableInitializerLayout {
         }
         if (
             initializer instanceof ConditionalExpr conditionalExpr
-            && conditionalInitializerLineOverflows(variable, declarationPrefix, conditionalExpr)
+            && conditionalLayout.conditionalInitializerLineOverflows(variable, declarationPrefix, conditionalExpr)
             && !initializerHasOwnBreak(initializer)
         ) {
             return Optional.of(
-                conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
+                conditionalLayout.conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
             );
         }
         if (
@@ -784,7 +788,7 @@ final class VariableInitializerLayout {
             }
             if (initializer instanceof ConditionalExpr conditionalExpr && !initializerHasOwnBreak(initializer)) {
                 return Optional.of(
-                    conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
+                    conditionalLayout.conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
                 );
             }
             if (
@@ -823,7 +827,7 @@ final class VariableInitializerLayout {
                 ));
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
-                if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
+                if (conditionalLayout.binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
                     return Optional.of(Doc.concat(
                         Doc.text(name + " = "),
                         Doc.indent(binaryExpressionLines.apply(initializer, true))
@@ -1212,7 +1216,7 @@ final class VariableInitializerLayout {
                     (CastExpr) initializer
                 );
             case CONDITIONAL:
-                return conditionalInitializer(
+                return conditionalLayout.conditionalInitializer(
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     (ConditionalExpr) initializer
@@ -1512,65 +1516,6 @@ final class VariableInitializerLayout {
             Doc.text(name + " ="),
             Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(variable, initializer)))
         );
-    }
-
-    private boolean conditionalInitializerLineOverflows(
-            VariableDeclarator variable,
-            String declarationPrefix,
-            ConditionalExpr initializer
-    ) {
-        String line = declarationPrefix
-            + variable.getNameAsString()
-            + " = "
-            + conditionalProjection.line(initializer)
-            + ";";
-        return layoutWidth.variableInitializer(variable, line) > options.lineWidth();
-    }
-
-    /**
-     * Keeps a binary initializer from stranding {@code =} when the first operand still fits on the declaration line.
-     */
-    private boolean binaryInitializerCanKeepFirstOperandWithEquals(
-            VariableDeclarator variable,
-            String declarationPrefix,
-            BinaryExpr binaryExpr
-    ) {
-        // A leading comment before the first operand cannot ride the `=` line ({@code = // note} swallows the operand and
-        // re-parses onto its own line), so break after `=` and let the comment lead the first operand.
-        if (binaryInitializerHasLeadingFirstOperandComment(binaryExpr)) {
-            return false;
-        }
-        String firstOperand = binaryInitializerFirstOperandLine(binaryExpr);
-        return layoutWidth.variableInitializer(
-            variable,
-            declarationPrefix + variable.getNameAsString() + " = " + firstOperand
-        ) <= options.lineWidth();
-    }
-
-    private boolean binaryInitializerHasLeadingFirstOperandComment(BinaryExpr binaryExpr) {
-        Expression firstOperand = firstBinaryOperand(binaryExpr);
-        return isLineCommentBefore(binaryExpr.getComment().orElse(null), firstOperand)
-            || isLineCommentBefore(firstOperand.getComment().orElse(null), firstOperand);
-    }
-
-    private boolean isLineCommentBefore(Comment comment, Expression operand) {
-        return comment instanceof LineComment && CommentIndex.startsBefore(comment, operand);
-    }
-
-    private String binaryInitializerFirstOperandLine(BinaryExpr binaryExpr) {
-        Expression firstOperand = firstBinaryOperand(binaryExpr);
-        if (firstOperand instanceof TextBlockLiteralExpr) {
-            return "\"\"\"";
-        }
-        return compact.apply(firstOperand);
-    }
-
-    private Expression firstBinaryOperand(BinaryExpr binaryExpr) {
-        Expression left = binaryExpr.getLeft();
-        while (left instanceof BinaryExpr leftBinary && leftBinary.getOperator() == binaryExpr.getOperator()) {
-            left = leftBinary.getLeft();
-        }
-        return left;
     }
 
     /**
@@ -2599,54 +2544,6 @@ final class VariableInitializerLayout {
                 .filter(root -> !(root instanceof ObjectCreationExpr))
                 .map(compact)
                 .orElseGet(() -> methodCallChainFirstLine.apply(methodCall));
-    }
-
-    /**
-     * Chooses the conditional initializer shape, preferring to break the ternary itself over breaking after {@code =}.
-     *
-     * <p>Break-after-{@code =} is a last resort: when {@code NAME = <whole ternary>} overflows we would
-     * rather keep the condition on the {@code NAME = <condition>} line and let the ternary own its {@code ?}/{@code :}
-     * break than strand {@code =} at end of line. So the condition-stays-on-the-{@code =}-line shapes (a condition that
-     * fits after {@code =}, or a parenthesized condition whose opener fits) are chosen ahead of the break-after-{@code =}
-     * shapes. Only when the condition genuinely cannot start after {@code =} do we break there — preferring the whole
-     * ternary flat on the continuation line when it fits, otherwise the fully-broken ternary under {@code =}. The
-     * structural {@link #shouldBreakBeforeConditionalInitializer} rule (a binary condition combined with a binary branch,
-     * which reads better wholly under the assignment) is honored first and is independent of this width policy.
-     */
-    private Doc conditionalInitializer(String name, String flatName, ConditionalExpr initializer) {
-        String conditionLine = flatName + " = " + compact.apply(initializer.getCondition());
-        String compactInitializer = compact.apply(initializer);
-        if (shouldBreakBeforeConditionalInitializer.test(initializer)) {
-            return Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer)))
-            );
-        }
-        if (layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()) {
-            return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
-        }
-        if (parenthesizedConditionalConditionOpenerFits(flatName, initializer)) {
-            return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
-        }
-        // The condition itself will not start after `=`; break there. Keep the whole ternary flat on the continuation
-        // line when it fits, otherwise fall back to the fully-broken ternary under `=`.
-        if (layoutWidth.continuationStatement(compactInitializer + ";") <= options.lineWidth()) {
-            return Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compactInitializer)))
-            );
-        }
-        return Doc.concat(
-            Doc.text(name + " ="),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer)))
-        );
-    }
-
-    private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
-        return initializer.getCondition() instanceof EnclosedExpr
-            // Measure the {@code NAME = (} opener at the initializer's true rendered block/type depth rather than a fixed
-            // current-column baseline.
-            && layoutWidth.nodeLine(initializer, flatName + " = (") <= options.lineWidth();
     }
 
     /**

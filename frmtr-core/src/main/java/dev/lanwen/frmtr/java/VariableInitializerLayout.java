@@ -23,7 +23,6 @@ import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -142,8 +141,6 @@ final class VariableInitializerLayout {
     /** Stateless precedence authority, used to measure the canonical (clarity-parenthesized) width for the routing gate. */
     private final NestedBinaryParenthesesLayout binaryParentheses = new NestedBinaryParenthesesLayout();
 
-    private final Function<Node, String> compactTypeLike;
-
     private final Function<Node, String> compact;
 
     private final ConditionalExpressionLineProjection conditionalProjection;
@@ -252,6 +249,10 @@ final class VariableInitializerLayout {
     // fallback, element-per-line last resort) and the array own-break classification. See {@link InitializerArrayLayout}.
     private final InitializerArrayLayout arrayLayout;
 
+    // Extracted arm-emitter cluster: the cast-type break that keeps the assignment and cast opener together while a
+    // generic/intersection cast type absorbs the overflow. See {@link InitializerCastLayout}.
+    private final InitializerCastLayout castLayout;
+
     VariableInitializerLayout(
             JavaFormatContext context,
             Function<Expression, Doc> expression,
@@ -302,7 +303,6 @@ final class VariableInitializerLayout {
         this.rawSource = context.rawSource;
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
-        this.compactTypeLike = context.compactSource::compactTypeLike;
         this.compact = context.compactSource::compact;
         this.conditionalProjection = new ConditionalExpressionLineProjection(context.compactSource::compact);
         this.compactWithoutOwnComment = context.compactSource::compactWithoutOwnComment;
@@ -374,6 +374,13 @@ final class VariableInitializerLayout {
             this.arrayInitializer,
             compactArrayInitializerWithSourceSpacing,
             this.compactJoin
+        );
+        this.castLayout = new InitializerCastLayout(
+            this.options,
+            this.layoutWidth,
+            this.expression,
+            context.compactSource::compactTypeLike,
+            this.typeNameWithoutArguments
         );
     }
 
@@ -1147,7 +1154,7 @@ final class VariableInitializerLayout {
             case MethodCallExpr methodCall -> InitializerLayoutArm.METHOD_CALL_BROKEN;
             case CastExpr cast when cast.getExpression() instanceof MethodCallExpr && !initializerHasOwnBreak(cast) ->
                 InitializerLayoutArm.CAST_METHOD_CALL_BREAK;
-            case CastExpr cast when castTypeNeedsBreak(flatName, cast.getType()) && !initializerHasOwnBreak(cast) ->
+            case CastExpr cast when castLayout.castTypeNeedsBreak(flatName, cast.getType()) && !initializerHasOwnBreak(cast) ->
                 InitializerLayoutArm.CAST_TYPE_BREAK;
             case ConditionalExpr conditional when !initializerHasOwnBreak(conditional) ->
                 InitializerLayoutArm.CONDITIONAL;
@@ -1199,7 +1206,7 @@ final class VariableInitializerLayout {
                 );
             }
             case CAST_TYPE_BREAK:
-                return variableWithCastTypeBreak(
+                return castLayout.variableWithCastTypeBreak(
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     (CastExpr) initializer
@@ -2816,51 +2823,6 @@ final class VariableInitializerLayout {
             return name;
         }
         return commentText(leadingBlockComment) + " " + name;
-    }
-
-    /**
-     * Keeps assignment and cast opener together when the cast type itself owns the first useful break.
-     *
-     * <p>Simple casts still use the ordinary wide-initializer fallback because they do not provide an internal type break
-     * that can absorb the overflow after {@code =}.
-     */
-    private Doc variableWithCastTypeBreak(String name, String flatName, CastExpr castExpr) {
-        Doc initializer = expression.apply(castExpr);
-        if (castTypeOpenerFitsOnEqualsLine(flatName, castExpr.getType())) {
-            return Doc.group(Doc.concat(Doc.text(name + " = "), initializer));
-        }
-        return Doc.group(Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.LINE, initializer))));
-    }
-
-    private boolean castTypeNeedsBreak(String flatName, Type type) {
-        // Measure the cast opener at the type's true rendered block/type depth rather than a fixed current-column
-        // baseline. The cast type sits directly under the declarator (no intervening block/type), so it shares the
-        // declarator's rendered depth.
-        return castTypeCanBreak(type)
-            && layoutWidth.nodeLine(type, flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
-    }
-
-    private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {
-        // Measure the {@code NAME = (Type)} opener at the type's true rendered block/type depth, not the current column.
-        return layoutWidth.nodeLine(type, flatName + " = " + castTypeOpener(type)) <= options.lineWidth();
-    }
-
-    private String castTypeOpener(Type type) {
-        if (
-            type instanceof ClassOrInterfaceType classOrInterfaceType
-            && classOrInterfaceType.getTypeArguments().isPresent()
-        ) {
-            return "(" + typeNameWithoutArguments.apply(classOrInterfaceType) + "<";
-        }
-        return "(";
-    }
-
-    private boolean castTypeCanBreak(Type type) {
-        return (
-            type instanceof IntersectionType
-            || (type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent())
-        );
     }
 
     /**

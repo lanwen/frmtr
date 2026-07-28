@@ -5,7 +5,6 @@ import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
 import java.util.Optional;
@@ -32,8 +31,6 @@ final class InitializerArrayLayout {
 
     private final SourceShapePolicy sourceShapePolicy;
 
-    private final FormatterOptions options;
-
     private final LayoutWidth layoutWidth;
 
     private final BiPredicate<ArrayCreationExpr, ToIntFunction<String>> arrayCreationTypeBreaks;
@@ -48,7 +45,6 @@ final class InitializerArrayLayout {
 
     InitializerArrayLayout(
             SourceShapePolicy sourceShapePolicy,
-            FormatterOptions options,
             LayoutWidth layoutWidth,
             BiPredicate<ArrayCreationExpr, ToIntFunction<String>> arrayCreationTypeBreaks,
             Function<ArrayCreationExpr, String> arrayCreationPrefix,
@@ -57,7 +53,6 @@ final class InitializerArrayLayout {
             Function<List<? extends Node>, String> compactJoin
     ) {
         this.sourceShapePolicy = sourceShapePolicy;
-        this.options = options;
         this.layoutWidth = layoutWidth;
         this.arrayCreationTypeBreaks = arrayCreationTypeBreaks;
         this.arrayCreationPrefix = arrayCreationPrefix;
@@ -67,13 +62,16 @@ final class InitializerArrayLayout {
     }
 
     /**
-     * Breaks an over-width array-creation initializer between the opener-hug, the compact-continuation fallback, and
-     * the element-per-line last resort, leaving own-breaking type arguments and commented creations to the caller's
-     * {@code new Type<...>[]} type-argument break.
+     * Ranks an over-width array-creation initializer across the opener-hug, the compact-continuation fallback, and the
+     * element-per-line last resort at the true rendered column, leaving own-breaking type arguments and commented
+     * creations to the caller's {@code new Type<...>[]} type-argument break.
+     *
+     * <p>The opener-hug seam ranks on its rendered first line ({@code NAME = new T[] {}); the two break-after-{@code =}
+     * shapes then rank against each other by whole-line fit, so the compact continuation wins only while it fits. The
+     * element list Doc is built once and shared by the hug and the last resort.
      */
     Optional<Doc> variableWithBrokenArrayCreation(
             String name,
-            String flatName,
             ArrayCreationExpr arrayCreation
     ) {
         ToIntFunction<String> continuationPrefixWidth = layoutWidth::continuationStatement;
@@ -86,30 +84,23 @@ final class InitializerArrayLayout {
         }
         String prefix = arrayCreationPrefix.apply(arrayCreation);
         ArrayInitializerExpr initializer = arrayCreation.getInitializer().orElseThrow();
-        // Measure the {@code NAME = new T[] {} opener on the assignment line at the initializer's true rendered
-        // block/type depth ({@link LayoutWidth#nodeLine}) rather than a fixed current-column baseline.
-        if (layoutWidth.nodeLine(arrayCreation, flatName + " = " + prefix + " {") <= options.lineWidth()) {
-            return Optional.of(
-                Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer.apply(initializer, true))
-            );
-        }
-        Optional<String> compactContinuation = compactObjectCreationArrayInitializer(initializer);
-        if (
-            compactContinuation.isPresent()
-            && layoutWidth.currentIndented(prefix + " " + compactContinuation.orElseThrow()) <= options.lineWidth()
-        ) {
-            return Optional.of(
-                Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " " + compactContinuation.orElseThrow())))
-                )
-            );
-        }
+        Doc elements = arrayInitializer.apply(initializer, true);
+        Doc openerHug = Doc.concat(Doc.text(name + " = " + prefix + " "), elements);
+        Doc elementsUnderEquals = Doc.concat(
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), elements))
+        );
+        Doc brokenAfterEquals = compactObjectCreationArrayInitializer(initializer)
+                .map(compactContinuation -> Doc.bestFitting(List.of(
+                    Doc.concat(
+                        Doc.text(name + " ="),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " " + compactContinuation)))
+                    ),
+                    elementsUnderEquals
+                )))
+                .orElse(elementsUnderEquals);
         return Optional.of(
-            Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), arrayInitializer.apply(initializer, true)))
-            )
+            Doc.bestFittingFirstLine(List.of(openerHug, brokenAfterEquals), new int[] { 1, 0 })
         );
     }
 

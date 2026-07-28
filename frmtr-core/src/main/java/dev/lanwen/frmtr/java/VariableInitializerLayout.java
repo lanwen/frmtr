@@ -152,8 +152,6 @@ final class VariableInitializerLayout {
 
     private final Function<Node, String> compact;
 
-    private final Function<Node, String> compactWithoutOwnComment;
-
     private final Function<List<? extends Node>, String> compactJoin;
 
     private final Function<Expression, Doc> expression;
@@ -295,7 +293,6 @@ final class VariableInitializerLayout {
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
         this.compact = context.compactSource::compact;
-        this.compactWithoutOwnComment = context.compactSource::compactWithoutOwnComment;
         this.compactJoin = context.compactSource::compactJoin;
         this.expression = expression;
         this.expressionWithoutOwnComment = expressionWithoutOwnComment;
@@ -371,7 +368,6 @@ final class VariableInitializerLayout {
         );
         this.arrayLayout = new InitializerArrayLayout(
             context.sourceShapePolicy,
-            this.options,
             this.layoutWidth,
             arrayCreationTypeBreaks,
             arrayCreationPrefix,
@@ -383,8 +379,7 @@ final class VariableInitializerLayout {
             this.options,
             this.layoutWidth,
             this.expression,
-            context.compactSource::compactTypeLike,
-            this.typeNameWithoutArguments
+            context.compactSource::compactTypeLike
         );
         this.conditionalLayout = new InitializerConditionalLayout(
             this.options,
@@ -680,41 +675,12 @@ final class VariableInitializerLayout {
         Optional<Doc> preEqualsBlockComment = preEqualsBlockComment(variable, initializer);
         if (preEqualsBlockComment.isPresent()) {
             String commentedName = name + " " + commentText(preEqualsBlockComment.orElseThrow());
-            String commentedFlat = declarationPrefix
-                + commentedName
-                + " = "
-                + compactWithoutOwnComment.apply(initializer)
-                + ";";
-            if (layoutWidth.blockStatement(commentedFlat) > options.lineWidth()) {
-                return Optional.of(Doc.concat(
-                    Doc.text(commentedName + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment.apply(initializer)))
-                ));
-            }
-            return Optional.of(
-                Doc.concat(Doc.text(commentedName + " = "), expressionWithoutOwnComment.apply(initializer))
-            );
+            return Optional.of(blockCommentedInitializer(commentedName + " =", initializer));
         }
         Optional<Doc> postEqualsBlockComment = postEqualsBlockComment(variable, initializer);
         if (postEqualsBlockComment.isPresent()) {
             String commentText = commentText(postEqualsBlockComment.orElseThrow());
-            String commentedFlat = declarationPrefix
-                + name
-                + " = "
-                + commentText
-                + " "
-                + compactWithoutOwnComment.apply(initializer)
-                + ";";
-            if (layoutWidth.blockStatement(commentedFlat) > options.lineWidth()) {
-                return Optional.of(Doc.concat(
-                    Doc.text(name + " = " + commentText),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment.apply(initializer)))
-                ));
-            }
-            return Optional.of(Doc.concat(
-                Doc.text(name + " = " + commentText + " "),
-                expressionWithoutOwnComment.apply(initializer)
-            ));
+            return Optional.of(blockCommentedInitializer(name + " = " + commentText, initializer));
         }
         Optional<Doc> leadingInitializerComments = leadingInitializerComments(variable, initializer);
         if (leadingInitializerComments.isPresent()) {
@@ -731,16 +697,9 @@ final class VariableInitializerLayout {
             ));
         }
         if (initializer instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments.test(binaryExpr)) {
-            if (conditionalLayout.binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
-                return Optional.of(Doc.concat(
-                    Doc.text(name + " = "),
-                    Doc.indent(binaryExpressionLinesWithComments.apply(binaryExpr))
-                ));
-            }
-            return Optional.of(Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesWithComments.apply(binaryExpr)))
-            ));
+            return Optional.of(
+                rankedBinaryInitializer(name, binaryExpr, binaryExpressionLinesWithComments.apply(binaryExpr), null)
+            );
         }
         if (
             initializer instanceof ConditionalExpr conditionalExpr
@@ -808,11 +767,7 @@ final class VariableInitializerLayout {
                 );
             }
             if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
-                Optional<Doc> arrayCreation = arrayLayout.variableWithBrokenArrayCreation(
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    arrayCreationExpr
-                );
+                Optional<Doc> arrayCreation = arrayLayout.variableWithBrokenArrayCreation(name, arrayCreationExpr);
                 if (arrayCreation.isPresent()) {
                     return Optional.of(arrayCreation.orElseThrow());
                 }
@@ -835,21 +790,16 @@ final class VariableInitializerLayout {
                 ));
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
-                if (conditionalLayout.binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
-                    return Optional.of(Doc.concat(
-                        Doc.text(name + " = "),
-                        Doc.indent(binaryExpressionLines.apply(initializer, true))
-                    ));
-                }
-                if (shouldKeepCastDivisionContinuationFlat.test(binaryExpr)) {
-                    return Optional.of(Doc.concat(
-                        Doc.text(name + " ="),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(binaryExpr)))
-                    ));
-                }
-                return Optional.of(Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(initializer, true)))
+                // A cast-division continuation keeps the whole binary flat under a broken `=` instead of the
+                // operand-per-line shape, so it supplies its own broken arm to the same first-operand ranking.
+                Doc brokenBody = shouldKeepCastDivisionContinuationFlat.test(binaryExpr)
+                    ? expression.apply(binaryExpr)
+                    : null;
+                return Optional.of(rankedBinaryInitializer(
+                    name,
+                    binaryExpr,
+                    binaryExpressionLines.apply(initializer, true),
+                    brokenBody
                 ));
             }
         }
@@ -861,6 +811,40 @@ final class VariableInitializerLayout {
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Ranks the attach and break-after-{@code =} shapes of an initializer whose block comment already sits on the
+     * assignment line, over a value Doc built once so neither arm re-offers the value's comments. {@code head} ends at
+     * the seam — after {@code =} for a pre-{@code =} comment, after the comment for a post-{@code =} one — so both
+     * comment routes share one ranking.
+     */
+    private Doc blockCommentedInitializer(String head, Expression initializer) {
+        Doc value = expressionWithoutOwnComment.apply(initializer);
+        Doc attached = Doc.concat(Doc.text(head + " "), value);
+        Doc brokenAfterEquals = Doc.concat(
+            Doc.text(head),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, value))
+        );
+        return Doc.bestFitting(List.of(attached, brokenAfterEquals));
+    }
+
+    /**
+     * Ranks a broken binary initializer's first-operand-on-the-{@code =}-line shape against break-after-{@code =} on the
+     * true rendered first line, over one shared operand-per-line Doc. A binary whose first operand is led by a comment
+     * cannot ride the {@code =} line at all, so it is pinned to the broken shape. {@code brokenBody} overrides what the
+     * broken arm renders when a construct keeps a different continuation shape there; {@code null} reuses {@code lines}.
+     */
+    private Doc rankedBinaryInitializer(String name, BinaryExpr binaryExpr, Doc lines, Doc brokenBody) {
+        Doc brokenAfterEquals = Doc.concat(
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenBody == null ? lines : brokenBody))
+        );
+        if (conditionalLayout.binaryInitializerMustBreakAfterEquals(binaryExpr)) {
+            return brokenAfterEquals;
+        }
+        Doc attached = Doc.concat(Doc.text(name + " = "), Doc.indent(lines));
+        return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), new int[] { 1, 0 });
     }
 
     /**
@@ -1217,11 +1201,7 @@ final class VariableInitializerLayout {
                 );
             }
             case CAST_TYPE_BREAK:
-                return castLayout.variableWithCastTypeBreak(
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    (CastExpr) initializer
-                );
+                return castLayout.variableWithCastTypeBreak(name, (CastExpr) initializer);
             case CONDITIONAL:
                 return conditionalLayout.conditionalInitializer(
                     name,
@@ -1249,9 +1229,9 @@ final class VariableInitializerLayout {
 
 
     /**
-     * The {@link InitializerLayoutArm#LAMBDA} arm: the ordered broken-lambda sub-cascade (expression body, block body,
-     * broken parameters) for an over-width, no-own-break lambda initializer. When every probe declines, the lambda falls
-     * back to the generic break.
+     * The {@link InitializerLayoutArm#LAMBDA} arm: the ordered broken-lambda sub-cascade (expression body, then block
+     * body) for an over-width, no-own-break lambda initializer. When both decline, the lambda falls back to the generic
+     * break.
      */
     private Doc lambdaBrokenInitializer(
             VariableDeclarator variable,
@@ -1268,21 +1248,9 @@ final class VariableInitializerLayout {
         if (expressionLambdaInitializer.isPresent()) {
             return expressionLambdaInitializer.orElseThrow();
         }
-        Optional<Doc> blockLambdaInitializer = variableWithBlockLambdaInitializer(
-            name,
-            declarationPrefix + variable.getNameAsString(),
-            lambdaExpr
-        );
+        Optional<Doc> blockLambdaInitializer = variableWithBlockLambdaInitializer(name, lambdaExpr);
         if (blockLambdaInitializer.isPresent()) {
             return blockLambdaInitializer.orElseThrow();
-        }
-        Optional<Doc> lambdaInitializer = variableWithBrokenLambdaParameters(
-            name,
-            declarationPrefix + variable.getNameAsString(),
-            lambdaExpr
-        );
-        if (lambdaInitializer.isPresent()) {
-            return lambdaInitializer.orElseThrow();
         }
         return genericBrokenInitializer(variable, lambdaExpr, name);
     }
@@ -1425,47 +1393,22 @@ final class VariableInitializerLayout {
 
 
     /**
-     * Keeps lambda initializer parameters and body with the shared lambda formatter when only the parameter list needs a
-     * declaration-width-driven break.
+     * Keeps a block-lambda initializer on the assignment line while its opener fits, ranking that attach against
+     * break-after-{@code =} on the true rendered first line over one shared lambda Doc. The opener is whichever header
+     * the lambda renderer actually emits ({@code params -> {} or a broken parameter list), so no header string is
+     * reconstructed here.
      */
-    private Optional<Doc> variableWithBrokenLambdaParameters(
-            String name,
-            String flatName,
-            LambdaExpr lambdaExpr
-    ) {
-        String parameters = lambdaParameters.apply(lambdaExpr);
-        if (
-            !lambdaExpr.getBody().isBlockStmt()
-            || !lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            // Measure the {@code NAME = (} opener at the lambda's true rendered block/type depth, not the current column.
-            || layoutWidth.nodeLine(lambdaExpr, flatName + " = (") > options.lineWidth()
-        ) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(Doc.text(name + " = "), lambdaExpression.apply(lambdaExpr)));
-    }
-
-    /**
-     * Keeps direct block-lambda initializers on the assignment line while the lambda opener still fits.
-     */
-    private Optional<Doc> variableWithBlockLambdaInitializer(
-            String name,
-            String flatName,
-            LambdaExpr lambdaExpr
-    ) {
+    private Optional<Doc> variableWithBlockLambdaInitializer(String name, LambdaExpr lambdaExpr) {
         if (!lambdaExpr.getBody().isBlockStmt()) {
             return Optional.empty();
         }
-        String parameters = lambdaParameters.apply(lambdaExpr);
-        if (
-            lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            // Measure the {@code NAME = params -> {} opener at the lambda's true rendered block/type depth rather than a
-            // fixed current-column baseline.
-            || layoutWidth.nodeLine(lambdaExpr, flatName + " = " + parameters + " -> {") > options.lineWidth()
-        ) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(Doc.text(name + " = "), lambdaExpression.apply(lambdaExpr)));
+        Doc lambda = lambdaExpression.apply(lambdaExpr);
+        Doc attached = Doc.concat(Doc.text(name + " = "), lambda);
+        Doc brokenAfterEquals = Doc.concat(
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, lambda))
+        );
+        return Optional.of(Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), new int[] { 1, 0 }));
     }
 
     /**

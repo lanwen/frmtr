@@ -7,6 +7,7 @@ import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.List;
 import java.util.function.Function;
 
 /**
@@ -15,8 +16,8 @@ import java.util.function.Function;
  *
  * <p>This helper hosts the family that keeps the assignment and cast opener together while the type breaks
  * ({@link #variableWithCastTypeBreak}): whether the type shape can break at all (an intersection type or a generic
- * class/interface type), whether the {@code NAME = (Type<} opener still fits the assignment line, and the opener text
- * itself. It claims no ownership of casts whose value is a method call (that shape stays with the caller's
+ * class/interface type) and the attach-versus-break-after-{@code =} ranking of the shared cast Doc. It claims no
+ * ownership of casts whose value is a method call (that shape stays with the caller's
  * {@code CAST_METHOD_CALL_BREAK} arm) or of the type's own broken rendering, which the caller's {@code expression}
  * renderer already produces.
  */
@@ -30,34 +31,32 @@ final class InitializerCastLayout {
 
     private final Function<Type, String> compactTypeLike;
 
-    private final Function<ClassOrInterfaceType, String> typeNameWithoutArguments;
-
     InitializerCastLayout(
             FormatterOptions options,
             LayoutWidth layoutWidth,
             Function<Expression, Doc> expression,
-            Function<Type, String> compactTypeLike,
-            Function<ClassOrInterfaceType, String> typeNameWithoutArguments
+            Function<Type, String> compactTypeLike
     ) {
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.expression = expression;
         this.compactTypeLike = compactTypeLike;
-        this.typeNameWithoutArguments = typeNameWithoutArguments;
     }
 
     /**
-     * Keeps assignment and cast opener together when the cast type itself owns the first useful break.
+     * Keeps assignment and cast opener together when the cast type itself owns the first useful break, ranking that
+     * attach against break-after-{@code =} on the true rendered first line over one shared cast Doc.
      *
      * <p>Simple casts still use the ordinary wide-initializer fallback because they do not provide an internal type break
      * that can absorb the overflow after {@code =}.
      */
-    Doc variableWithCastTypeBreak(String name, String flatName, CastExpr castExpr) {
+    Doc variableWithCastTypeBreak(String name, CastExpr castExpr) {
         Doc initializer = expression.apply(castExpr);
-        if (castTypeOpenerFitsOnEqualsLine(flatName, castExpr.getType())) {
-            return Doc.group(Doc.concat(Doc.text(name + " = "), initializer));
-        }
-        return Doc.group(Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.LINE, initializer))));
+        Doc attached = Doc.group(Doc.concat(Doc.text(name + " = "), initializer));
+        Doc brokenAfterEquals = Doc.group(
+            Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.LINE, initializer)))
+        );
+        return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), new int[] { 1, 0 });
     }
 
     boolean castTypeNeedsBreak(String flatName, Type type) {
@@ -66,21 +65,6 @@ final class InitializerCastLayout {
         // declarator's rendered depth.
         return castTypeCanBreak(type)
             && layoutWidth.nodeLine(type, flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
-    }
-
-    private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {
-        // Measure the {@code NAME = (Type)} opener at the type's true rendered block/type depth, not the current column.
-        return layoutWidth.nodeLine(type, flatName + " = " + castTypeOpener(type)) <= options.lineWidth();
-    }
-
-    private String castTypeOpener(Type type) {
-        if (
-            type instanceof ClassOrInterfaceType classOrInterfaceType
-            && classOrInterfaceType.getTypeArguments().isPresent()
-        ) {
-            return "(" + typeNameWithoutArguments.apply(classOrInterfaceType) + "<";
-        }
-        return "(";
     }
 
     private boolean castTypeCanBreak(Type type) {

@@ -8,7 +8,6 @@ import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.function.Function;
@@ -16,13 +15,13 @@ import java.util.function.Predicate;
 
 /**
  * Owns the ternary-initializer break ({@link #conditionalInitializer}) and its over-width probe
- * ({@link #conditionalInitializerLineOverflows}), plus the binary-initializer first-operand-with-{@code =} probe
- * ({@link #binaryInitializerCanKeepFirstOperandWithEquals}) consulted by the same pre-empt tier.
+ * ({@link #conditionalInitializerLineOverflows}), plus the binary-initializer break-after-{@code =} rule
+ * ({@link #binaryInitializerMustBreakAfterEquals}) consulted by the same pre-empt tier.
  *
  * <p>This helper hosts the family that prefers breaking a ternary or binary initializer over stranding {@code =} at
  * end of line: the condition-stays-on-the-{@code =}-line shapes (a condition that fits after {@code =}, or a
- * parenthesized condition whose opener fits), the fully-broken-ternary fallback, and the first-binary-operand line
- * probe that decides whether a comment-carrying binary initializer can keep its first operand on the {@code =} line.
+ * parenthesized condition whose opener fits), the fully-broken-ternary fallback, and the structural rule that pins a
+ * comment-led binary initializer to the break-after-{@code =} shape.
  * It claims no ownership of the structural {@link Predicate} that orders these ahead of width policy, nor of the
  * binary/ternary rendering itself, both of which the caller threads in.
  */
@@ -118,26 +117,11 @@ final class InitializerConditionalLayout {
     }
 
     /**
-     * Keeps a binary initializer from stranding {@code =} when the first operand still fits on the declaration line.
+     * Reports that a binary initializer must break after {@code =} whatever the width: a leading comment before the first
+     * operand cannot ride the {@code =} line ({@code = // note} swallows the operand and re-parses onto its own line), so
+     * the comment has to lead the first operand on its own continuation line.
      */
-    boolean binaryInitializerCanKeepFirstOperandWithEquals(
-            VariableDeclarator variable,
-            String declarationPrefix,
-            BinaryExpr binaryExpr
-    ) {
-        // A leading comment before the first operand cannot ride the `=` line ({@code = // note} swallows the operand and
-        // re-parses onto its own line), so break after `=` and let the comment lead the first operand.
-        if (binaryInitializerHasLeadingFirstOperandComment(binaryExpr)) {
-            return false;
-        }
-        String firstOperand = binaryInitializerFirstOperandLine(binaryExpr);
-        return layoutWidth.variableInitializer(
-            variable,
-            declarationPrefix + variable.getNameAsString() + " = " + firstOperand
-        ) <= options.lineWidth();
-    }
-
-    private boolean binaryInitializerHasLeadingFirstOperandComment(BinaryExpr binaryExpr) {
+    boolean binaryInitializerMustBreakAfterEquals(BinaryExpr binaryExpr) {
         Expression firstOperand = firstBinaryOperand(binaryExpr);
         return isLineCommentBefore(binaryExpr.getComment().orElse(null), firstOperand)
             || isLineCommentBefore(firstOperand.getComment().orElse(null), firstOperand);
@@ -145,14 +129,6 @@ final class InitializerConditionalLayout {
 
     private boolean isLineCommentBefore(Comment comment, Expression operand) {
         return comment instanceof LineComment && CommentIndex.startsBefore(comment, operand);
-    }
-
-    private String binaryInitializerFirstOperandLine(BinaryExpr binaryExpr) {
-        Expression firstOperand = firstBinaryOperand(binaryExpr);
-        if (firstOperand instanceof TextBlockLiteralExpr) {
-            return "\"\"\"";
-        }
-        return compact.apply(firstOperand);
     }
 
     private Expression firstBinaryOperand(BinaryExpr binaryExpr) {

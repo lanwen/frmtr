@@ -639,18 +639,10 @@ final class ChainFanLayout {
             : expressionRenderer.format(root, LayoutContext.root());
     }
 
-    // Single selector: the lone segment fans onto its own dotted continuation line. It renders through the SAME
-    // on-own-line segment renderer as the multi-selector fan below ({@code methodCallChainSegments}), so its
-    // force-break decision is measured at the continuation column, not the segment's stale source column. A
-    // single-SIMPLE-argument tail still stays compact (its argument never force-breaks regardless of that width basis),
-    // and a single NON-simple-argument tail ({@code .withRegistryAddress(entry.getKey())}) no longer breaks its argument
-    // list apart on a flat-source pass and then collapses on the re-format: the ordinary (not-on-own-line) renderer used
-    // to measure the final segment through the source-relative {@code MethodCallChainPrinter.methodCallSegmentWidth},
-    // which places the segment BESIDE its preceding source token, so a flat source (selector on the root's line) read
-    // as over width and exploded while the already-fanned re-format (selector on its own line) read as fitting and
-    // collapsed — flipping exploded<->flat forever (the testcontainers {@code RegistryAuthLocator} idempotence break).
-    // The lone segment is wrapped with the single-Doc {@code chainContinuation} (never the multi-selector's short-root
-    // padding branch), so the rendered indentation is byte-for-byte the previous single-selector shape.
+    // Single selector: the lone segment fans onto its own dotted continuation line through the SAME on-own-line
+    // segment renderer as the multi-selector fan ({@code methodCallChainSegments}), so its force-break decision is
+    // measured at the continuation column. The single-Doc {@code chainContinuation} wrap (never the multi-selector's
+    // short-root padding branch) keeps the rendered indentation at the plain single-selector column.
     private Doc fanSingleSelectorLayout(ChainFanCandidate candidate) {
         Doc segment = methodCallChainSegments.apply(candidate.calls(), candidate.tail()).getFirst();
         return widthRankedFan(candidate, continuation -> Doc.concat(

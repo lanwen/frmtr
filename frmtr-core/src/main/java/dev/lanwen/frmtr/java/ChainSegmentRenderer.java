@@ -130,14 +130,31 @@ final class ChainSegmentRenderer {
             MethodCallChainTail finalSegmentSuffix,
             ToIntFunction<String> lineWidth
     ) {
-        // Measure the segment at the continuation column of the root's closing line ({@code ).thenReturn(arg)}), not the
-        // beside-a-token source column which reads the author's shape and flips the argument list across passes.
+        // Measure the segment at the continuation column of the root's closing line ({@code ).thenReturn(arg)}).
         return methodCallChainSegment(
             expression,
             Optional.empty(),
             finalSegmentSuffix,
             segment -> lineWidth.applyAsInt(")" + segment),
             true
+        );
+    }
+
+    /**
+     * Measures a segment glued to a hugged block-lambda root's close — the {@code })} line sitting at the root's own
+     * rendered indent ({@code }).retryWhen(…)}) — so the argument-break verdict follows nesting depth rather than
+     * whatever column the author left the selector at.
+     */
+    Doc methodCallChainSegmentAttachedToBlockLambdaClose(
+            MethodCallExpr expression,
+            MethodCallChainTail finalSegmentSuffix
+    ) {
+        return methodCallChainSegment(
+            expression,
+            Optional.empty(),
+            finalSegmentSuffix,
+            segment -> layoutWidth.nodeLine(expression, "})" + segment),
+            false
         );
     }
 
@@ -235,8 +252,7 @@ final class ChainSegmentRenderer {
                 expression,
                 reserveStatementTerminator,
                 compactSegment,
-                compactSegmentWidth,
-                segmentOnOwnLine
+                compactSegmentWidth
             )) {
             return brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
         }
@@ -408,7 +424,7 @@ final class ChainSegmentRenderer {
         for (int i = 0; i < calls.size(); i++) {
             Optional<MethodCallExpr> next = i + 1 < calls.size() ? Optional.of(calls.get(i + 1)) : Optional.empty();
             // Every segment in this one-per-line layout renders alone on its own continuation line, so the final
-            // segment must be measured at the continuation indent rather than its stale source column.
+            // segment is measured at the continuation indent.
             segments.add(
                 methodCallChainSegment(
                     calls.get(i),

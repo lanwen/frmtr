@@ -419,10 +419,9 @@ final class DocWidths {
             }
 
             /**
-             * Mirrors {@link DocRenderer#newline}: flush buffered line suffixes onto the closing line (advancing the
-             * column, never adding a newline since suffix content is single-line), account the closing line's overflow,
-             * count the break, then reset the column to the indent. Trailing-whitespace trimming is a text concern with
-             * no effect on the line count, so it is intentionally not replayed here.
+             * Mirrors {@link DocRenderer#newline}: flush buffered line suffixes onto the closing line, account the
+             * closing line's overflow, count the break, then reset the column to the indent. Trailing-whitespace
+             * trimming is a text concern with no effect on the line count, so it is intentionally not replayed here.
              */
             private void newline(int indent) {
                 flushLineSuffixes();
@@ -431,7 +430,14 @@ final class DocWidths {
                 column = indentWidth * indent;
             }
 
+            /**
+             * Walks buffered suffixes (so nested structure is replayed identically to the renderer) but restores
+             * {@code column} to its pre-flush value afterward: a {@link Doc.Group}'s fit check measures
+             * {@link Doc.LineSuffix} as zero width, so this ranking walk must match — a trailing comment can never
+             * inflate the measured line, only the code that precedes it.
+             */
             private void flushLineSuffixes() {
+                int widthBlindColumn = column;
                 while (!lineSuffixes.isEmpty()) {
                     List<BufferedSuffix> pending = List.copyOf(lineSuffixes);
                     lineSuffixes.clear();
@@ -439,6 +445,7 @@ final class DocWidths {
                         walk(suffix.content(), suffix.indent(), suffix.mode());
                     }
                 }
+                column = widthBlindColumn;
             }
 
             private void accountOverflow() {

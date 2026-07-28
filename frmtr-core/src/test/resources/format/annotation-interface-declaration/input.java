@@ -6,4 +6,5 @@ public @interface AnnotationInterfaceDeclaration {
     @RandomAnnotationWithObject({"North", "South", "East", "West", "Central", "Remote", "Primary", "Backup", "Archive", "Audit"})
     V[][] annotatedGrid = (V[][]) new Object[rowList.size()][columnList.size()];
     record Config(String region, String tier) {}
+    Map<String, List<VeryLongGenericArgumentNameThatForcesTheSignatureOntoItsOwnLineByBeingLongEnough>> lookupTableByAccountRegion();
 }

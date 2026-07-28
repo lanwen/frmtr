@@ -3,12 +3,10 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.Parameter;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Prints shared method and constructor throws-clause placement after declaration headers have been assembled.
@@ -19,36 +17,21 @@ import java.util.function.ToIntFunction;
  * concern.
  *
  * <p>Callers still decide declaration header assembly, parameter-list rendering, body or semicolon suffix selection,
- * and compact source text policy. This helper owns the width calculation and measures the candidate same-line throws
- * clause at the declaration's real rendered column (its block/type nesting depth) rather than a fixed baseline, so a
- * {@code throws …} on a member of an inner class or nested type is judged against the column where it actually renders.
- * It asks the caller only for the declaration node (for that depth) plus the already assembled flat pieces needed to
- * choose where the throws clause lands.
+ * and compact source text policy. The same-line versus broken choice is a {@link Doc#conditionalGroup} ranked at the
+ * declaration's true rendered column, so a nested type's deeper indentation is judged correctly with no width probe.
  */
 final class ThrowsClausePrinter {
-
-    private final FormatterOptions options;
 
     private final Function<Node, String> compact;
 
     private final Function<List<? extends Node>, String> compactJoin;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
-    private final LayoutWidth layoutWidth;
-
     ThrowsClausePrinter(
-            FormatterOptions options,
             Function<Node, String> compact,
-            Function<List<? extends Node>, String> compactJoin,
-            ToIntFunction<String> currentIndentedWidth,
-            LayoutWidth layoutWidth
+            Function<List<? extends Node>, String> compactJoin
     ) {
-        this.options = options;
         this.compact = compact;
         this.compactJoin = compactJoin;
-        this.currentIndentedWidth = currentIndentedWidth;
-        this.layoutWidth = layoutWidth;
     }
 
     Doc throwsClause(
@@ -59,37 +42,14 @@ final class ThrowsClausePrinter {
             LayoutContext layout,
             boolean parametersBreak
     ) {
-        // The same-line content the caller emits after the throws clause — the "{" of a body or the ";" of an abstract
-        // declaration — is carried on the context as trailing content rather than passed as a loose suffix string, so
-        // the width gate reads "what follows me on this line" from the LayoutContext instead of the caller
-        // re-describing it here.
-        String suffix = layout.trailingContent();
         String exceptions = compactJoin.apply(thrownExceptions);
         String throwsText = "throws " + exceptions;
-        String flatParameters = "("
-            + parameters.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("")
-            + ")";
-        String flatSignature = prefix + flatParameters;
-        // The same-line throws width is measured at the declaration's real rendered column, not the fixed
-        // one-indent-level `currentIndented` baseline. A `throws …` on a member of an inner class / nested type renders
-        // one block/type level deeper per enclosing scope, which the fixed baseline under-counts, so an over-width
-        // nested clause would be kept inline against reality. `LayoutWidth.nodeLine` counts every enclosing
-        // TypeDeclaration/BlockStmt around the declaration and floors at one level, and the `currentIndentedWidth` term
-        // is kept as a floor so a top-level member is still measured against at least one unit — leaving top-level
-        // declarations byte-identical while correcting the deeper-nested ones (the same real-column measure the
-        // unary/ternary/return gates and the try-with-resources opener gate use). The trailer still arrives from
-        // LayoutContext (above).
-        String sameLine = parametersBreak
-            ? ") " + throwsText + suffix
-            : flatSignature + " " + throwsText + suffix;
-        int sameLineWidth = Math.max(
-            layoutWidth.nodeLine(declaration, sameLine),
-            currentIndentedWidth.applyAsInt(sameLine)
-        );
-        if (sameLineWidth <= options.lineWidth()) {
-            return Doc.text(" " + throwsText);
-        }
-        return brokenThrowsClause(thrownExceptions);
+        // The renderer decides same-line versus broken at the true rendered column: both candidates are built once and
+        // ranked there (fits-flat wins, else the broken form), instead of re-deriving the line's width from a
+        // source-shaped probe string against a fixed indentation baseline.
+        Doc flatCandidate = Doc.text(" " + throwsText);
+        Doc brokenCandidate = brokenThrowsClause(thrownExceptions);
+        return Doc.conditionalGroup(List.of(flatCandidate, brokenCandidate));
     }
 
     /**

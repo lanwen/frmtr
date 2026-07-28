@@ -12,7 +12,6 @@ import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterException;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,10 +36,6 @@ final class AnnotationDeclarationPrinter {
 
     private static final String ANNOTATION_MEMBER_LIST_RECOVERY_FAILURE =
         "Unable to recover Java parse error inside annotation declaration member list: ";
-
-    private final FormatterOptions options;
-
-    private final LayoutWidth layoutWidth;
 
     private final SourceText sourceText;
 
@@ -91,8 +86,6 @@ final class AnnotationDeclarationPrinter {
             Function<BodyDeclaration<?>, Doc> memberRenderer,
             BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> memberBlockRenderer
     ) {
-        this.options = context.options;
-        this.layoutWidth = context.layoutWidth;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(
@@ -285,7 +278,7 @@ final class AnnotationDeclarationPrinter {
         docs.add(
             Doc.group(
                 Doc.concat(
-                    annotationMemberSignature(declaration, modifierText),
+                    annotationMemberSignature(declaration),
                     defaultValue,
                     Doc.text(";")
                 )
@@ -297,20 +290,19 @@ final class AnnotationDeclarationPrinter {
     /**
      * Keeps the annotation member type and method name together when only the default-value clause forces a break.
      */
-    private Doc annotationMemberSignature(AnnotationMemberDeclaration declaration, String modifierText) {
+    private Doc annotationMemberSignature(AnnotationMemberDeclaration declaration) {
         String flatSignature = compactTypeLike.apply(declaration.getType())
             + " "
             + declaration.getNameAsString()
             + "()";
-        // Measure the annotation member signature at its true rendered type-body depth
-        // ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
-        if (layoutWidth.nodeLine(declaration, modifierText + flatSignature) <= options.lineWidth()) {
-            return Doc.text(flatSignature);
-        }
-        return Doc.concat(
+        // The renderer picks flat versus the type's own broken shape at the true rendered column (already includes the
+        // modifier text just emitted before it), so both candidates are built once and ranked there.
+        Doc flatCandidate = Doc.text(flatSignature);
+        Doc brokenCandidate = Doc.concat(
             typeBody.apply(declaration.getType()),
             Doc.text(" " + declaration.getNameAsString() + "()")
         );
+        return Doc.conditionalGroup(List.of(flatCandidate, brokenCandidate));
     }
 
     static boolean hasRecoverableAnnotationMemberListProblem(AnnotationDeclaration declaration) {

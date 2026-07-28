@@ -686,10 +686,6 @@ final class ExpressionPrinters {
         return methodCalls.methodCallChainRootIsFieldAccess(expression);
     }
 
-    String methodCallChainFirstLine(MethodCallExpr expression) {
-        return methodCalls.methodCallChainFirstLine(expression);
-    }
-
     boolean shouldPrintScopeAsDoc(Expression expression) {
         return methodCalls.shouldPrintScopeAsDoc(expression);
     }

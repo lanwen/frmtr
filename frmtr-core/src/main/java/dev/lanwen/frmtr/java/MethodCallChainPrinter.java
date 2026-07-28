@@ -1194,7 +1194,13 @@ final class MethodCallChainPrinter {
             if (chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER) {
                 Doc flat = Doc.concat(
                     expressionRenderer.format(methodRoot, LayoutContext.root()),
-                    methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)
+                    methodCallChainSegment(
+                        calls.getFirst(),
+                        Optional.empty(),
+                        finalSegmentSuffix,
+                        attachedRootSegmentWidth(methodRoot, firstLineWidth),
+                        true
+                    )
                 );
                 Doc broken = Doc.concat(
                     this.calls.brokenMethodCall(methodRoot),
@@ -1211,7 +1217,13 @@ final class MethodCallChainPrinter {
                 methodRoot.getArguments().size() > 1
                     && firstLineWidth.applyAsInt(compactSource.compactWithoutOwnComment(methodRoot)) > options.lineWidth()
                 ? methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth)
-                : methodCallChainSegment(calls.getFirst(), finalSegmentSuffix);
+                : methodCallChainSegment(
+                    calls.getFirst(),
+                    Optional.empty(),
+                    finalSegmentSuffix,
+                    attachedRootSegmentWidth(methodRoot, firstLineWidth),
+                    true
+                );
             return Optional.of(Doc.concat(rootDoc, singleSegment));
         }
         // A promoted static-factory root with exactly one post-factory selector whose ONLY comment is a trailing line
@@ -1921,50 +1933,6 @@ final class MethodCallChainPrinter {
         return methodChainPlanner.rootIsFieldAccess(expression);
     }
 
-    String methodCallChainFirstLine(MethodCallExpr expression) {
-        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
-        if (analysis.root() instanceof MethodCallExpr methodRoot && analysis.calls().size() == 1) {
-            Optional<String> rootFirstLine = methodCallRootFirstLine(methodRoot);
-            if (rootFirstLine.isPresent()) {
-                return rootFirstLine.orElseThrow();
-            }
-        }
-        if (analysis.root() instanceof MethodCallExpr && analysis.calls().size() == 1) {
-            return compactSource.compact(expression);
-        }
-        MethodCallChainSourcePlanner.MethodCallChainPlan plan = methodChainPlanner.plan(analysis, true);
-        if (plan.root() instanceof MethodCallExpr methodRoot) {
-            Optional<String> rootFirstLine = methodCallRootFirstLine(methodRoot);
-            if (rootFirstLine.isPresent()) {
-                return rootFirstLine.orElseThrow();
-            }
-        }
-        if (plan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION) {
-            return objectCreationPrefix.apply((ObjectCreationExpr) plan.root()) + "(";
-        }
-        return compactSource.compact(plan.root());
-    }
-
-    private Optional<String> methodCallRootFirstLine(MethodCallExpr methodRoot) {
-        String prefix = calls.methodCallPrefix(methodRoot);
-        if (hasSingleExpressionLambdaArgument(methodRoot)) {
-            return Optional.of(prefix + "(");
-        }
-        // Measure the promoted method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
-        // (promotedRootArgumentsShouldBreak ignores the oracle; the fitsOnOneLine gate reads it.)
-        ToIntFunction<String> methodRootWidth = text -> layoutWidth.nodeLine(methodRoot, text);
-        if (promotedRootArgumentsShouldBreak(methodRoot, methodRootWidth, LayoutContext.root())) {
-            return Optional.of(prefix + "(");
-        }
-        if (!sourceShapePolicy.fitsOnOneLine(methodRoot, methodRootWidth)) {
-            return Optional.of(prefix + "(");
-        }
-        if (methodCallSegmentHasBlockLambdaArgument(methodRoot)) {
-            return huggableBlockLambdaFirstLine.apply(prefix, methodRoot.getArguments());
-        }
-        return Optional.empty();
-    }
-
     /**
      * Breaks an expression-lambda-argument method-call root's argument list and glues the single final segment to its
      * close, the expression-lambda sibling of {@link #brokenRootWithAttachedFinalSegment} on the statement/field
@@ -2135,6 +2103,18 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> lineWidth
     ) {
         return segmentRenderer.methodCallChainSegmentAttachedToRootClose(expression, finalSegmentSuffix, lineWidth);
+    }
+
+    /**
+     * Measures a single segment attached right after a flat, compact method-call root at the root's true rendered
+     * column ({@code firstLineWidth}), rather than the segment's stale source column
+     * ({@link ChainSegmentWidthLayout#methodCallSegmentWidth}'s fallback), which reads a different width depending on
+     * whether the author happened to wrap the call — flipping the argument-break verdict between an authored-flat and
+     * an authored-wrapped pass over the identical AST.
+     */
+    private ToIntFunction<String> attachedRootSegmentWidth(MethodCallExpr methodRoot, ToIntFunction<String> firstLineWidth) {
+        String rootText = compactSource.compactWithoutOwnComment(methodRoot);
+        return segment -> firstLineWidth.applyAsInt(rootText + segment);
     }
 
     private ToIntFunction<String> objectRootSegmentWidth(

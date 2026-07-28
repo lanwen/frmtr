@@ -149,7 +149,6 @@ final class DeclarationPrinters {
             expressions::packedMethodCallChain,
             methodCall -> expressions.expressionWithTail(methodCall, ExpressionTail.SEMICOLON),
             expressions::mixedFieldMethodCallRoot,
-            expressions::methodCallChainFirstLine,
             expressions::methodCallChainRootIsObjectCreation,
             expressions::methodCallChainIsSourceMultiline,
             expressions::methodCallChainInitializerShape,

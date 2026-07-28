@@ -147,9 +147,20 @@ final class BinaryExpressionPrinter {
         if (!(expression instanceof BinaryExpr binaryExpr)) {
             return rendering.render(expression);
         }
-        if (!forceBreak && parenthesizedInnerWidth(compact.apply(binaryExpr)) <= options.lineWidth()) {
-            return binaryExpression(binaryExpr);
+        Doc broken = brokenLines(binaryExpr, nestedContinuation);
+        if (forceBreak) {
+            return broken;
         }
+        // The flat shape wins whenever it fits at its true rendered column; the renderer measures both candidates
+        // directly rather than a fixed-budget parenthesized-continuation probe, so a binary nested deeper or shallower
+        // than that probe assumed now sizes correctly.
+        return Doc.bestFittingFirstLine(List.of(binaryExpression(binaryExpr), broken));
+    }
+
+    /**
+     * Builds the multi-line (or structurally-split) shape {@link #lines} falls back to once flat does not fit.
+     */
+    private Doc brokenLines(BinaryExpr binaryExpr, boolean nestedContinuation) {
         List<Expression> operands = new ArrayList<>();
         flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
         boolean commentAware = hasLineComments(binaryExpr);

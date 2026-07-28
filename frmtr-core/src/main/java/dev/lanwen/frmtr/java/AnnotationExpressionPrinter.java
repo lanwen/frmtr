@@ -142,26 +142,24 @@ final class AnnotationExpressionPrinter {
      * Renders {@code @Name(...)} member pairs, keeping empty normal-annotation parentheses explicit.
      *
      * <p>An empty normal annotation remains {@code @Name()} instead of collapsing to a marker annotation because the
-     * source chose the normal-annotation form. Non-empty pairs first try one compact line; when the full annotation no
-     * longer fits, each pair breaks onto its own indented line.
+     * source chose the normal-annotation form. A pair whose value forces a break (comments, a text block) routes straight
+     * to the broken shape; otherwise the renderer ranks the flat line against the broken shape by true fit.
      */
     private Doc normalAnnotation(NormalAnnotationExpr annotation) {
         String prefix = "@" + compact.apply(annotation.getName());
         if (annotation.getPairs().isEmpty()) {
             return Doc.text(prefix + "()");
         }
-        if (
-            !annotation.getPairs()
-                    .stream()
-                    .map(MemberValuePair::getValue)
-                    .anyMatch(value -> annotationValueHasLineComments(value) || annotationValueMustBreak(value))
-        ) {
-            String flat = prefix + "(" + compactJoinAnnotationPairs(annotation.getPairs()) + ")";
-            if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
-                return Doc.text(flat);
-            }
+        Doc broken = brokenNormalAnnotation(annotation);
+        boolean forcesBreak = annotation.getPairs()
+                .stream()
+                .map(MemberValuePair::getValue)
+                .anyMatch(value -> annotationValueHasLineComments(value) || annotationValueMustBreak(value));
+        if (forcesBreak) {
+            return broken;
         }
-        return brokenNormalAnnotation(annotation);
+        String flat = prefix + "(" + compactJoinAnnotationPairs(annotation.getPairs()) + ")";
+        return Doc.bestFittingFirstLine(List.of(Doc.text(flat), broken));
     }
 
     private Doc brokenNormalAnnotation(NormalAnnotationExpr annotation) {
@@ -183,12 +181,12 @@ final class AnnotationExpressionPrinter {
     }
 
     /**
-     * Renders {@code @Name(value)} while keeping array-value overflow decisions scoped to the enclosing annotation.
+     * Renders {@code @Name(value)}, ranking the flat line against the annotation's broken shapes by true fit.
      *
-     * <p>Array values that are too wide by themselves keep the {@code @Name({ ... })} broken-array shape. When
-     * the array value still fits alone but {@code @Name(...)} does not, the value moves to an indented continuation so
-     * the annotation prefix and suffix cannot make the final line overflow. Binary values use the same indented slot
-     * because their operator lines otherwise collide visually with the annotation prefix.
+     * <p>An array value offers three candidates flattest-first: the whole annotation flat, the array kept flat but moved
+     * onto its own indented line, and the fully broken array. A binary value only offers flat-vs-broken because its
+     * operator lines need the same indented slot the broken shape already gives it. Any other value falls through to
+     * {@link #annotationValue}, which decides its own breaking, so only the enclosing parens are ranked.
      */
     private Doc singleMemberAnnotation(SingleMemberAnnotationExpr annotation) {
         String prefix = "@" + compact.apply(annotation.getName());
@@ -197,20 +195,22 @@ final class AnnotationExpressionPrinter {
             return brokenSingleMemberAnnotation(prefix, annotationValue(memberValue));
         }
         String flatValue = compactAnnotationValue(memberValue);
-        String flat = prefix + "(" + flatValue + ")";
-        if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
-            return Doc.text(flat);
+        Doc flat = Doc.text(prefix + "(" + flatValue + ")");
+        if (memberValue instanceof ArrayInitializerExpr) {
+            return Doc.bestFittingFirstLine(List.of(
+                flat,
+                brokenSingleMemberAnnotation(prefix, Doc.text(flatValue)),
+                Doc.concat(Doc.text(prefix + "("), annotationValue(memberValue), Doc.text(")"))
+            ));
         }
-        if (
-            memberValue instanceof ArrayInitializerExpr
-            && currentIndentedWidth.applyAsInt(flatValue) <= options.lineWidth()
-        ) {
-            return brokenSingleMemberAnnotation(prefix, Doc.text(flatValue));
+        if (memberValue instanceof BinaryExpr) {
+            return Doc.bestFittingFirstLine(
+                List.of(flat, brokenSingleMemberAnnotation(prefix, annotationValue(memberValue)))
+            );
         }
-        if (!(memberValue instanceof BinaryExpr)) {
-            return Doc.concat(Doc.text(prefix + "("), annotationValue(memberValue), Doc.text(")"));
-        }
-        return brokenSingleMemberAnnotation(prefix, annotationValue(memberValue));
+        return Doc.bestFittingFirstLine(
+            List.of(flat, Doc.concat(Doc.text(prefix + "("), annotationValue(memberValue), Doc.text(")")))
+        );
     }
 
     private Doc brokenSingleMemberAnnotation(String prefix, Doc value) {
@@ -223,18 +223,13 @@ final class AnnotationExpressionPrinter {
     }
 
     private Doc annotationPair(MemberValuePair pair) {
-        if (
-            pair.getValue() instanceof ArrayInitializerExpr arrayInitializerExpr
-            && currentIndentedWidth.applyAsInt(
-                pair.getNameAsString()
-                    + " = "
-                    + compactAnnotationArrayInitializer(arrayInitializerExpr)
-            ) > options.lineWidth()
-        ) {
-            return Doc.concat(
+        if (pair.getValue() instanceof ArrayInitializerExpr arrayInitializerExpr) {
+            String flat = pair.getNameAsString() + " = " + compactAnnotationArrayInitializer(arrayInitializerExpr);
+            Doc broken = Doc.concat(
                 Doc.text(pair.getNameAsString() + " = "),
                 annotationArrayInitializer(arrayInitializerExpr)
             );
+            return Doc.bestFittingFirstLine(List.of(Doc.text(flat), broken));
         }
         return Doc.concat(Doc.text(pair.getNameAsString() + " = "), annotationValue(pair.getValue()));
     }
@@ -276,10 +271,9 @@ final class AnnotationExpressionPrinter {
                     yield annotationArrayInitializer(arrayInitializerExpr);
                 }
                 String flat = compactAnnotationArrayInitializer(arrayInitializerExpr);
-                if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
-                    yield Doc.text(flat);
-                }
-                yield annotationArrayInitializer(arrayInitializerExpr);
+                yield Doc.bestFittingFirstLine(
+                    List.of(Doc.text(flat), annotationArrayInitializer(arrayInitializerExpr))
+                );
             }
             case BinaryExpr binaryExpr -> nestedBinaryLines.apply(value, true);
             default -> rendering.render(value);
@@ -347,9 +341,9 @@ final class AnnotationExpressionPrinter {
         return switch (value) {
             case AnnotationExpr annotation when annotationArrayAnnotationLineOverflows(annotation) ->
                 brokenAnnotationArrayValue(annotation);
-            case BinaryExpr binaryExpr
-                when currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth() ->
-                nestedBinaryLines.apply(binaryExpr, true);
+            case BinaryExpr binaryExpr -> Doc.bestFittingFirstLine(
+                List.of(Doc.text(compactAnnotationValue(value)), nestedBinaryLines.apply(binaryExpr, true))
+            );
             default -> rendering.render(value);
         };
     }

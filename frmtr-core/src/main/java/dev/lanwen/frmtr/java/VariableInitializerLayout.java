@@ -380,12 +380,11 @@ final class VariableInitializerLayout {
             Doc variableInitializerTailComment = trailingCommentLayout.initializerTailLineComment(variable, methodCall)
                     .map(comments::comment)
                     .orElse(Doc.EMPTY);
-            Doc declaration = variableWithMethodCallChain(
+            Doc declaration = variableWithMethodCallChainRanked(
                 variable,
                 variableName(variable),
                 declarationPrefix + variable.getNameAsString(),
                 methodCall,
-                methodCallChainFirstLine.apply(methodCall),
                 methodCallWithSemicolon.apply(methodCall)
             );
             return Doc.concat(declaration, trailingLineComment(variableInitializerTailComment));
@@ -2564,10 +2563,11 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Isolated variant of {@link #variableWithMethodCallChain} for the two-selector fan site only: instead of comparing
-     * a string first-line estimate against the width, it builds both statement shapes and ranks them by true rendered
-     * first line ({@link Doc#bestFittingFirstLine}) — the same discriminator the switch-header and block-lambda hug
-     * sites use when both arms can hard-break. Other {@code name = } call sites are unaffected.
+     * Isolated variant of {@link #variableWithMethodCallChain} for the two-selector fan site and the pre-{@code ;}
+     * comment-tail branch of {@link #variableWithStatementTerminator}, ranking both statement shapes by true rendered
+     * first line ({@link Doc#bestFittingFirstLine}) instead of a string first-line estimate. Not used by the sibling
+     * final-trailing-comment branch: that comment rides inside the chain Doc as a {@code lineSuffix}, which this
+     * ranking's first-line measurement would count, letting comment length flip the attach/break decision (#482).
      */
     private Doc variableWithMethodCallChainRanked(
             VariableDeclarator variable,

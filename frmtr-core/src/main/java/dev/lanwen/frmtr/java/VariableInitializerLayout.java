@@ -1190,14 +1190,13 @@ final class VariableInitializerLayout {
         switch (arm) {
             case FLAT:
                 return Doc.concat(Doc.text(name + " = "), expression.apply(initializer));
-            case METHOD_CALL_OWN_BREAK_CHAIN:
-                return variableWithForcedMethodCallChain(
-                        variable,
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        (MethodCallExpr) initializer
-                    )
+            case METHOD_CALL_OWN_BREAK_CHAIN: {
+                String flatName = declarationPrefix + variable.getNameAsString();
+                MethodCallExpr methodCall = (MethodCallExpr) initializer;
+                return forcedMethodCallChain(variable, methodCall, flatName)
+                    .map(chain -> variableWithMethodCallChainRanked(variable, name, flatName, methodCall, chain, new int[] { 1, 0 }))
                     .orElseGet(() -> Doc.concat(Doc.text(name + " = "), expression.apply(initializer)));
+            }
             case METHOD_CALL_BROKEN:
                 return methodCallBrokenInitializer(variable, name, declarationPrefix, (MethodCallExpr) initializer);
             case CAST_METHOD_CALL_BREAK: {
@@ -1279,8 +1278,8 @@ final class VariableInitializerLayout {
         // branches can pick a source-dependent shape. That source-dependence is exactly the oscillation this seam
         // closes: a flat-source `NAME = a.b().c().find(x)` reaches methodCallHasAttachableScope (the outer selector's
         // scope ends on the name line) and renders the argument-break `find(⏎ x ⏎)`, while its already-fanned re-format
-        // fails that same source-line test, falls through to variableWithForcedMethodCallChain, and renders the +8 fan
-        // — so the two passes disagree forever. Routing through variableWithForcedMethodCallChain (which threads the
+        // fails that same source-line test, falls through to forcedMethodCallChain, and renders the +8 fan
+        // — so the two passes disagree forever. Routing through forcedMethodCallChain (which threads the
         // `NAME = ` leftEdgePrefix and reaches MethodCallChainPrinter.chainFanOut, a pure function of the AST) makes
         // both passes rebuild the identical fan. This is the multi-link sibling of the single-call convergence
         // (rankedSimpleRootSingleCallConvergence, above): that ranker withholds the source-sensitive conditionalGroup
@@ -1397,6 +1396,10 @@ final class VariableInitializerLayout {
         // call (whose collapse is a broken-constructor shape rendered by its own branches, not this
         // whole-call collapse); for that shape the predicate keeps the deterministic argument-break decision. It keys
         // purely on AST shape + measured width, never source line breaks, so this path stays idempotent.
+        //
+        // Stays on the width-estimate path here: the forced chain's final argument list renders source-shape-sensitively
+        // (a forced break when source already wrapped it, a fit-checked one when flat), so ranking it by measured line
+        // count would oscillate between passes.
         if (
             initializerChainShape.shouldForceWideInitializerChain()
             && !singleCallConvergesOnArgumentBreak(
@@ -1850,7 +1853,8 @@ final class VariableInitializerLayout {
 
     /**
      * Routes a multi-link fan-threshold initializer chain onto the source-neutral canonical fan
-     * ({@code MethodCallChainPrinter.chainFanOut}, reached through {@link #variableWithForcedMethodCallChain}), the
+     * ({@code MethodCallChainPrinter.chainFanOut}, reached through {@link #forcedMethodCallChain} and ranked
+     * attach-first via {@link #variableWithMethodCallChainRanked}), the
      * multi-link sibling of {@link #rankedSimpleRootSingleCallConvergence}'s single-call convergence. Present only for the
      * exact shape the canonical fan claims: the chain reaches the link-count/root-kind threshold
      * ({@link MethodCallChainSourcePlanner.InitializerChainShape#chainBreaksByRule()} — the one source of truth for the
@@ -1885,7 +1889,8 @@ final class VariableInitializerLayout {
         ) {
             return Optional.empty();
         }
-        return variableWithForcedMethodCallChain(variable, name, flatName, methodCall);
+        return forcedMethodCallChain(variable, methodCall, flatName)
+            .map(chain -> variableWithMethodCallChainRanked(variable, name, flatName, methodCall, chain, new int[] { 1, 0 }));
     }
 
     /**
@@ -2468,10 +2473,9 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Priority-taking variant: an empty {@code priorities} keeps the fewest-lines default the two-selector fan and
-     * pre-{@code ;} comment-tail sites rely on. The final-trailing-comment branch passes {@code {1, 0}} so attach wins
-     * whenever its first line fits, regardless of line count — the shape the unranked path always produced when the
-     * opener fit, before a shorter break-after-{@code =} could steal the win on line count alone.
+     * Priority-taking variant: decides attach-after-{@code =} versus break-after-{@code =} by true rendered first line.
+     * An empty {@code priorities} keeps the fewest-lines default; {@code {1, 0}} makes attach win whenever its first
+     * line fits, regardless of line count.
      */
     private Doc variableWithMethodCallChainRanked(
             VariableDeclarator variable,

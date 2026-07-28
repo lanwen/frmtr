@@ -31,7 +31,7 @@ enum InlineSourceShapeException {
 
     /** "does the method-call scope end on the name line?" ({@code scope.end.line == name.begin.line}). */
     METHOD_CALL_SCOPE_ENDS_ON_NAME_LINE(
-        "VariableInitializerLayout#methodCallScopeEndsOnNameLine",
+        "InitializerMethodCallChainLayout#methodCallScopeEndsOnNameLine",
         Mechanism.LINE_COMPARE,
         "reads whether the author kept the receiver and the call name on one source line",
         "G3: LEFT — decides attach-vs-fan for a sub-threshold chain-scoped initializer; forcing the structural constant "

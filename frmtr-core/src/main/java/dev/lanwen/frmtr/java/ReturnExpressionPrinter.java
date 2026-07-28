@@ -489,12 +489,11 @@ final class ReturnExpressionPrinter {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
         if (sourceMultilineEnclosedBinary.isPresent()) {
             BinaryExpr binaryExpr = sourceMultilineEnclosedBinary.orElseThrow();
-            // The enclosed-binary broken shape is chosen among source-preserved layouts (direct-binary continuation
-            // versus parenthesized break) that the binary printer does not yet expose as ranked candidates, so this
-            // stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
+            // The enclosed-binary shapes — direct-binary continuation versus parenthesized break — are ranked against
+            // each other by the renderer, so this pre-empts the outer flat-versus-broken group with its own ranked list
+            // rather than a second width oracle.
             return Optional.of(
-                binaryReturns.directBinaryReturn(binaryExpr, expression, layout)
-                        .orElseGet(() -> parenthesizedBreak.apply(binaryExpr, true))
+                binaryReturns.enclosedBinaryReturn(binaryExpr, expression, parenthesizedBreak.apply(binaryExpr, true))
             );
         }
         return Optional.empty();
@@ -694,25 +693,16 @@ final class ReturnExpressionPrinter {
     private Optional<Doc> returnWithParenthesizedValueBreak(Expression expression, LayoutContext layout) {
         if (expression instanceof EnclosedExpr enclosedExpr) {
             if (enclosedExpr.getInner() instanceof BinaryExpr binaryExpr) {
-                Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, enclosedExpr, layout);
-                if (directBinary.isPresent()) {
-                    return directBinary;
-                }
+                return Optional.of(
+                    binaryReturns.enclosedBinaryReturn(binaryExpr, enclosedExpr, parenthesizedBreak.apply(binaryExpr, false))
+                );
             }
             return Optional.of(parenthesizedBreak.apply(enclosedExpr.getInner(), false));
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, layout);
-            if (directBinary.isPresent()) {
-                return directBinary;
-            }
-            // A bare (unparenthesized) binary return value that {@code directBinaryReturn} cannot lay out
-            // flat/first-line-fit breaks operand-per-line through {@code binaryLines} WITHOUT adding parentheses — the
-            // author wrote none and the value is not enclosed. {@code directBinaryReturn} returns empty here, so fall back
-            // to the same operand-per-line skeleton the direct-binary branch itself emits
-            // ({@code Doc.indent(binaryLines(expr, true))}) rather than wrapping the value in a spurious
-            // {@code return (}⏎{@code …}⏎{@code )}.
-            return Optional.of(Doc.indent(binaryLines.apply(binaryExpr, true)));
+            // A bare binary return value never gains parentheses the author did not write, so its last resort is the
+            // operand-per-line continuation rather than a {@code return (}⏎{@code …}⏎{@code )} wrapper.
+            return Optional.of(binaryReturns.bareBinaryReturn(binaryExpr));
         }
         return Optional.empty();
     }

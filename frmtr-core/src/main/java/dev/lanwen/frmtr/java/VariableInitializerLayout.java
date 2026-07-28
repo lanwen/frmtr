@@ -420,13 +420,13 @@ final class VariableInitializerLayout {
             if (dotBrokenTail.isPresent()) {
                 return dotBrokenTail.orElseThrow();
             }
-            return variableWithMethodCallChain(
+            return variableWithMethodCallChainRanked(
                 variable,
                 variableName(variable),
                 flatName,
                 methodCall,
-                methodCallChainFirstLine.apply(methodCall),
-                methodCallWithSemicolon.apply(methodCall)
+                methodCallWithSemicolon.apply(methodCall),
+                new int[] { 1, 0 }
             );
         }
         if (
@@ -2563,11 +2563,11 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Isolated variant of {@link #variableWithMethodCallChain} for the two-selector fan site and the pre-{@code ;}
-     * comment-tail branch of {@link #variableWithStatementTerminator}, ranking both statement shapes by true rendered
-     * first line ({@link Doc#bestFittingFirstLine}) instead of a string first-line estimate. Not used by the sibling
-     * final-trailing-comment branch: that comment rides inside the chain Doc as a {@code lineSuffix}, which this
-     * ranking's first-line measurement would count, letting comment length flip the attach/break decision (#482).
+     * Isolated variant of {@link #variableWithMethodCallChain} for the two-selector fan site, the pre-{@code ;}
+     * comment-tail branch, and the final-trailing-comment branch of {@link #variableWithStatementTerminator}, ranking
+     * both statement shapes by true rendered first line ({@link Doc#bestFittingFirstLine}) instead of a string
+     * first-line estimate. The lineSuffix-blind measurement (#487) and an attach-first priority for the
+     * final-trailing-comment caller (below) resolve both blockers #482 identified for that branch.
      */
     private Doc variableWithMethodCallChainRanked(
             VariableDeclarator variable,
@@ -2576,12 +2576,29 @@ final class VariableInitializerLayout {
             MethodCallExpr methodCall,
             Doc chain
     ) {
+        return variableWithMethodCallChainRanked(variable, name, flatName, methodCall, chain, new int[0]);
+    }
+
+    /**
+     * Priority-taking variant: an empty {@code priorities} keeps the fewest-lines default the two-selector fan and
+     * pre-{@code ;} comment-tail sites rely on. The final-trailing-comment branch passes {@code {1, 0}} so attach wins
+     * whenever its first line fits, regardless of line count — the shape the unranked path always produced when the
+     * opener fit, before a shorter break-after-{@code =} could steal the win on line count alone.
+     */
+    private Doc variableWithMethodCallChainRanked(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall,
+            Doc chain,
+            int[] priorities
+    ) {
         if (attachedSingleSegmentChainMustBreakAfterEquals(variable, flatName, methodCall)) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }
         Doc attached = Doc.concat(Doc.text(name + " = "), chain);
         Doc brokenAfterEquals = Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
-        return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals));
+        return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), priorities);
     }
 
     /**

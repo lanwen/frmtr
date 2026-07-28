@@ -529,13 +529,14 @@ final class MethodCallPrinter {
         }
         // Thread the tail into the call render so the generic argument-list group counts the terminator in its flat
         // verdict; a flat form that fits only without its `;` breaks instead of emitting an over-width line. The final
-        // trailing line comment stays outside as a width-free suffix.
+        // trailing line comment rides as a {@link Doc#lineSuffix} so it stays a width-free suffix for any measurement of
+        // this Doc, not just the call's own internal fit check.
         Doc call = methodCall(expression, breakMode, layout, tail.text());
         Doc trailingComment = finalTrailingLineComment(expression);
         if (trailingComment == Doc.EMPTY) {
             return call;
         }
-        return Doc.concat(call, Doc.text(" "), trailingComment);
+        return Doc.concat(call, Doc.lineSuffix(Doc.concat(Doc.text(" "), trailingComment)));
     }
 
     private static Doc withTailText(Doc doc, String tailText) {

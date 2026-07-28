@@ -2707,7 +2707,8 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Keeps expression-lambda initializers attached to {@code =} and {@code ->} while the opener fits.
+     * Decides the arrow seam of {@code NAME = params -> chain} by ranking both statement shapes on true rendered
+     * first line ({@link Doc#bestFittingFirstLine}), rather than a string first-line estimate.
      */
     private Optional<Doc> variableWithExpressionLambdaInitializer(
             VariableDeclarator variable,
@@ -2725,7 +2726,6 @@ final class VariableInitializerLayout {
         ) {
             return Optional.empty();
         }
-        String bodyFirstLine = methodCallChainFirstLine.apply(methodCall);
         String lambdaPrefix = parameters + " ->";
         // The chain here is an expression-lambda body (NAME = params -> chain), a distinct position from the direct
         // initializer chain: its same-line prefix is NAME = params -> , not NAME = . Threading a non-empty leftEdgePrefix
@@ -2739,23 +2739,12 @@ final class VariableInitializerLayout {
                     LayoutContext.root()
                 )
                 .orElseGet(() -> expression.apply(methodCall));
-        // Measure the {@code NAME = params -> body} first line at the declarator's true rendered block/type depth
-        // ({@link LayoutWidth#variableInitializer}) rather than a fixed current-column baseline.
-        if (
-            layoutWidth.variableInitializer(variable, flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
-                <= options.lineWidth()
-        ) {
-            return Optional.of(Doc.concat(Doc.text(name + " = " + lambdaPrefix + " "), body));
-        }
-        if (layoutWidth.variableInitializer(variable, flatName + " = " + lambdaPrefix) <= options.lineWidth()) {
-            return Optional.of(
-                Doc.concat(
-                    Doc.text(name + " = " + lambdaPrefix),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, body))
-                )
-            );
-        }
-        return Optional.empty();
+        Doc attached = Doc.concat(Doc.text(name + " = " + lambdaPrefix + " "), body);
+        Doc brokenAfterArrow = Doc.concat(
+            Doc.text(name + " = " + lambdaPrefix),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, body))
+        );
+        return Optional.of(Doc.bestFittingFirstLine(List.of(attached, brokenAfterArrow)));
     }
 
     private Optional<Doc> forcedMethodCallChain(

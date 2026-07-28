@@ -232,22 +232,27 @@ final class BinaryExpressionPrinter {
             && operand instanceof BinaryExpr binaryOperand
             && binaryOperand.getOperator() == BinaryExpr.Operator.AND
         ) {
+            // A comment-free group holding a fluent chain the canonical rule fans renders its flat form as cleaned text
+            // rather than re-dispatching through {@code rendering.render}, which would force-break the chain. That text
+            // arm cannot break, so it can be ranked against the broken form without the two trading places across passes.
+            if (!sourceShapePolicy.hasContainedComments(binaryOperand) && binaryFansChainOperand.test(binaryOperand)) {
+                return Doc.bestFittingFirstLine(List.of(
+                    Doc.concat(Doc.text("("), Doc.text(compactFlat.apply(binaryOperand)), Doc.text(")")),
+                    Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"))
+                ));
+            }
+            // The remaining groups keep the build-time verdict: their flat arm is {@code rendering.render}, which can
+            // break into a second broken shape, and a comment-bearing group must not have both shapes built at all.
             if (
                 parenthesizedBinaryOperandWidth(binaryLine.operator(), compact.apply(binaryOperand))
                     > options.lineWidth()
             ) {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
             }
-            // The width gate above already judged the parenthesized group fits flat. When the group holds a fluent chain
-            // the canonical rule fans, re-dispatching through {@code rendering.render} force-breaks that chain and
-            // oscillates against the {@code EnclosedExpr} path's compact-fits-flat verdict, so emit the cleaned flat text
-            // instead. A comment-bearing group still routes through the comment-aware renderer so contained comments are
-            // not dropped, and a pure-operator group keeps {@code rendering.render} to normalize its operator spacing.
-            if (!sourceShapePolicy.hasContainedComments(binaryOperand) && binaryFansChainOperand.test(binaryOperand)) {
-                return Doc.concat(Doc.text("("), Doc.text(compactFlat.apply(binaryOperand)), Doc.text(")"));
-            }
             return Doc.concat(Doc.text("("), rendering.render(binaryOperand), Doc.text(")"));
         }
+        // Not offered as a ranked pair: the flat arm would be {@code rendering.render}, which can break internally into a
+        // second broken shape, and the two broken shapes then trade places across passes.
         if (
             operand instanceof EnclosedExpr enclosedOperand
             && enclosedOperand.getInner() instanceof BinaryExpr binaryOperand
@@ -283,19 +288,17 @@ final class BinaryExpressionPrinter {
         ) {
             return Doc.concat(Doc.text("!"), brokenMethodCallChainOperand(complementedCall));
         }
-        if (operand instanceof MethodCallExpr && !sourceShapePolicy.hasContainedComments(operand)) {
-            MethodCallExpr methodCall = (MethodCallExpr) operand;
-            if (methodCallOperandShouldBreak(binaryLine, methodCall, nestedContinuationLine)) {
-                return brokenMethodCallChainOperand(methodCall);
+        if (operand instanceof MethodCallExpr methodCall && !sourceShapePolicy.hasContainedComments(operand)) {
+            Doc flat = Doc.text(compact.apply(operand));
+            // A nested continuation whose call carries breakable structure breaks while still one indent unit short of
+            // the edge. That near-boundary reserve is not a fit question, so it stays a build-time verdict; every other
+            // operand simply offers both shapes and lets the renderer measure at the operand's true column.
+            if (nestedContinuationLine && methodCallHasBreakableStructure(methodCall)) {
+                return methodCallOperandShouldBreak(binaryLine, methodCall, true)
+                    ? brokenMethodCallChainOperand(methodCall)
+                    : flat;
             }
-            String flat = compact.apply(operand);
-            if (binaryLine.width(flat, nestedContinuationLine) <= options.lineWidth()) {
-                return Doc.text(flat);
-            }
-            if (!binaryLine.hasLeadingOperator()) {
-                return rendering.render(operand);
-            }
-            return brokenMethodCallChainOperand(methodCall);
+            return Doc.bestFittingFirstLine(List.of(flat, brokenMethodCallChainOperand(methodCall)));
         }
         return rendering.render(operand);
     }

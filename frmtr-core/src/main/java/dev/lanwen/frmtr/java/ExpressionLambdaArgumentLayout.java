@@ -419,27 +419,22 @@ final class ExpressionLambdaArgumentLayout {
             return negatedLogicalBody;
         }
         if (logicalBinaryBody(bodyExpression).isPresent()) {
-            if (logicalBinaryFirstLineFits(firstLine, bodyExpression)) {
-                // Source-neutral: the enclosing call's {@code )} always dedents onto its own line below a broken logical
-                // lambda body. This matches the sibling {@link #logicalBinaryLambdaBodyOpenerHug}, which builds the same
-                // shape directly and always dedents the close, so the render is a fixpoint.
-                return Optional.of(
-                    Doc.concat(
-                        Doc.text(firstLine + " "),
-                        Doc.indent(bodyDoc),
-                        Doc.HARD_LINE,
-                        Doc.text(")")
-                    )
-                );
-            }
-            return Optional.of(
+            // The first operand hugs the arrow line when it fits there, otherwise the body starts on its own line; both
+            // shapes share one body doc and always dedent the enclosing {@code )}, so either render is a fixpoint.
+            return Optional.of(Doc.bestFittingFirstLine(List.of(
+                Doc.concat(
+                    Doc.text(firstLine + " "),
+                    Doc.indent(bodyDoc),
+                    Doc.HARD_LINE,
+                    Doc.text(")")
+                ),
                 Doc.concat(
                     Doc.text(firstLine),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, bodyDoc)),
                     Doc.HARD_LINE,
                     Doc.text(")")
                 )
-            );
+            )));
         }
         // The lambda-body-position canonical fan. A method-call chain that IS a lambda
         // body and reaches the structural fan threshold ({@code lambdaBodyChainFansByCanonicalRule}) fans one selector per
@@ -692,21 +687,20 @@ final class ExpressionLambdaArgumentLayout {
         if (logicalBody.isPresent()) {
             return logicalBody.orElseThrow();
         }
+        // Eligibility is structural — only a chain whose receiver compacts cleanly, or a bare object creation, has a
+        // broken shape to offer — while whether the flat body still fits at its hugged column is the renderer's verdict.
+        Doc flatBody = expressionRenderer.format(bodyExpression, LayoutContext.root());
         if (
             bodyExpression instanceof MethodCallExpr methodCall
             && methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
-            && bodyCompactChainOverflows(firstLine, methodCall, columnWidth)
             && brokenMethodCallReceiverCompactsCleanly(methodCall)
         ) {
-            return brokenMethodCallRenderer.apply(methodCall);
+            return Doc.bestFittingFirstLine(List.of(flatBody, brokenMethodCallRenderer.apply(methodCall)));
         }
-        if (
-            bodyExpression instanceof ObjectCreationExpr objectCreation
-            && expressionFirstLineWidth(firstLine + " " + compact.apply(objectCreation)) > options.lineWidth()
-        ) {
-            return brokenObjectCreationRenderer.apply(objectCreation);
+        if (bodyExpression instanceof ObjectCreationExpr objectCreation) {
+            return Doc.bestFittingFirstLine(List.of(flatBody, brokenObjectCreationRenderer.apply(objectCreation)));
         }
-        return expressionRenderer.format(bodyExpression, LayoutContext.root());
+        return flatBody;
     }
 
     /**
@@ -1190,21 +1184,6 @@ final class ExpressionLambdaArgumentLayout {
             return expressionFirstLineWidth(line);
         }
         return Math.max(expressionFirstLineWidth(line), layoutWidth.nodeIndentWidth(lambdaExpr) + line.length());
-    }
-
-    private boolean logicalBinaryFirstLineFits(String firstLine, Expression bodyExpression) {
-        return logicalBinaryFirstLine(bodyExpression)
-                .map(bodyFirstLine -> expressionFirstLineWidth(firstLine + " " + bodyFirstLine) <= options.lineWidth())
-                .orElse(false);
-    }
-
-    private Optional<String> logicalBinaryFirstLine(Expression bodyExpression) {
-        if (bodyExpression instanceof EnclosedExpr enclosedExpr) {
-            return logicalBinaryFirstLine(enclosedExpr.getInner()).map(line -> "(" + line);
-        }
-        return logicalBinaryBody(bodyExpression)
-                .map(this::firstBinaryOperand)
-                .map(compact);
     }
 
     private Expression firstBinaryOperand(BinaryExpr binaryExpr) {

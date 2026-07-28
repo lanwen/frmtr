@@ -44,7 +44,9 @@ class BinaryMethodCallOperandSample {
     }
 
     String selectorPrefix(RouteAssemblyStep routeAssemblyStep, RouteTextFormatter routeTextFormatter) {
-        return routeAssemblyStep.context().map(routeContext -> routeTextFormatter.compact(routeContext) + ".").orElse("")
+        return routeAssemblyStep.context()
+                    .map(routeContext -> routeTextFormatter.compact(routeContext) + ".")
+                    .orElse("")
             + routeAssemblyStep.templateTypeArguments()
                     .map(typeArguments -> "<" + routeTextFormatter.compactQualifiedTypes(typeArguments) + ">")
                     .resolveRouteSelector()

@@ -1,11 +1,12 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.expr.BinaryExpr;
-import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -15,8 +16,9 @@ import java.util.function.Function;
  *
  * <p>Return statements have a binary-specific escape hatch: plain overflowing binary returns should use normal binary
  * continuations instead of inventing {@code return (...)} grouping, while explicit source grouping and comment-bearing
- * binaries still fall back to the caller's parenthesized expression policy. This helper keeps that return-binary
- * decision together and leaves {@link ReturnExpressionPrinter} to orchestrate the broader return-expression tree.
+ * binaries still fall back to the caller's parenthesized expression policy. This helper decides which shapes are
+ * eligible and hands the ranked list to the renderer, leaving {@link ReturnExpressionPrinter} to orchestrate the broader
+ * return-expression tree.
  */
 final class ReturnBinaryExpressionLayout {
 
@@ -56,64 +58,59 @@ final class ReturnBinaryExpressionLayout {
         this.methodCallPrefix = methodCallPrefix;
     }
 
-    Optional<Doc> directBinaryReturn(BinaryExpr binaryExpr, LayoutContext layout) {
-        return directBinaryReturn(binaryExpr, binaryExpr, layout, true);
-    }
-
-    Optional<Doc> directBinaryReturn(
-            BinaryExpr binaryExpr,
-            Expression widthAnchor,
-            LayoutContext layout
-    ) {
-        return directBinaryReturn(binaryExpr, widthAnchor, layout, false);
-    }
-
-    private Optional<Doc> directBinaryReturn(
-            BinaryExpr binaryExpr,
-            Expression widthAnchor,
-            LayoutContext layout,
-            boolean allowSourceMultilineOverflowContinuation
-    ) {
+    /**
+     * The shape for a binary return value the author wrote inside parentheses. A comment-bearing binary offers no ranked
+     * shape at all: only the parenthesized fallback keeps comment ownership obvious, so it takes the value whole.
+     */
+    Doc enclosedBinaryReturn(BinaryExpr binaryExpr, Expression widthAnchor, Doc parenthesizedFallback) {
         if (sourceShapePolicy.hasContainedComments(binaryExpr)) {
-            return Optional.empty();
+            return parenthesizedFallback;
         }
-        if (directBinaryReturnLineFits(binaryExpr, widthAnchor, layout)) {
-            return Optional.of(expressionRenderer.apply(binaryExpr));
+        List<Doc> brokenShapes = new ArrayList<>();
+        if (continuationKeepsOperandsFlat(binaryExpr, widthAnchor)) {
+            brokenShapes.add(continuationShape(binaryExpr));
         }
-        Optional<Doc> methodCallLeft = directBinaryReturnWithMethodCallLeft(binaryExpr, layout);
-        if (methodCallLeft.isPresent()) {
-            return methodCallLeft;
-        }
-        if (
-            directBinaryReturnFirstLineFits(binaryExpr, widthAnchor, layout)
-            && directBinaryReturnContinuationFits(binaryExpr, allowSourceMultilineOverflowContinuation)
-        ) {
-            return Optional.of(Doc.indent(binaryLines.apply(binaryExpr, true)));
-        }
-        return Optional.empty();
+        brokenShapes.add(parenthesizedFallback);
+        return rankedBinaryReturn(binaryExpr, brokenShapes);
     }
 
-    private boolean directBinaryReturnLineFits(
-            BinaryExpr expression,
-            Expression widthAnchor,
-            LayoutContext layout
-    ) {
-        String line = "return " + compact.apply(expression) + ";";
-        return returnLineWidth(widthAnchor, line, layout) <= options.lineWidth();
+    /**
+     * The shape for a bare (unparenthesized) binary return value. The operand-per-line continuation is itself the
+     * always-valid last resort here — the author wrote no parentheses, so none are invented — which is also the shape a
+     * comment-bearing binary takes directly.
+     */
+    Doc bareBinaryReturn(BinaryExpr binaryExpr) {
+        if (sourceShapePolicy.hasContainedComments(binaryExpr)) {
+            return continuationShape(binaryExpr);
+        }
+        return rankedBinaryReturn(binaryExpr, List.of(continuationShape(binaryExpr)));
     }
 
-    private Optional<Doc> directBinaryReturnWithMethodCallLeft(
-            BinaryExpr binaryExpr,
-            LayoutContext layout
-    ) {
+    /**
+     * Offers the flat one-liner first and, when it does not fit, ranks the eligible broken shapes: the method-call-left
+     * suffix form ahead of {@code remainingShapes}, whose own order is the caller's preference. Descending priorities
+     * keep that order among the shapes that fit, so the renderer picks the most preferred fitting one.
+     */
+    private Doc rankedBinaryReturn(BinaryExpr binaryExpr, List<Doc> remainingShapes) {
+        List<Doc> brokenShapes = new ArrayList<>();
+        methodCallLeftShape(binaryExpr).ifPresent(brokenShapes::add);
+        brokenShapes.addAll(remainingShapes);
+        return Doc.conditionalGroup(List.of(
+            expressionRenderer.apply(binaryExpr),
+            Doc.bestFitting(brokenShapes, descendingPriorities(brokenShapes.size()))
+        ));
+    }
+
+    /**
+     * The {@code return call(}⏎{@code   args}⏎{@code ) op rhs} shape, offered when the left operand is a
+     * multi-argument, comment-free call. Whether its closing line actually fits is the renderer's verdict.
+     */
+    private Optional<Doc> methodCallLeftShape(BinaryExpr binaryExpr) {
         if (
             !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
-            || methodCall.getArguments().isEmpty()
-            || methodCall.getArguments().size() == 1
+            || methodCall.getArguments().size() < 2
             || sourceShapePolicy.hasContainedComments(methodCall)
             || sourceShapePolicy.hasContainedComments(binaryExpr.getRight())
-            || !directBinaryReturnMethodCallFirstLineFits(methodCall, layout)
-            || !directBinaryReturnMethodCallClosingLineFits(binaryExpr)
         ) {
             return Optional.empty();
         }
@@ -122,45 +119,42 @@ final class ReturnBinaryExpressionLayout {
         );
     }
 
-    private boolean directBinaryReturnMethodCallFirstLineFits(
-            MethodCallExpr methodCall,
-            LayoutContext layout
-    ) {
-        String line = "return " + methodCallPrefix.apply(methodCall) + "(";
-        return returnLineWidth(methodCall, line, layout) <= options.lineWidth();
+    private Doc continuationShape(BinaryExpr binaryExpr) {
+        return Doc.indent(binaryLines.apply(binaryExpr, true));
     }
 
-    private boolean directBinaryReturnMethodCallClosingLineFits(BinaryExpr binaryExpr) {
-        return layoutWidth.continuationStatement(
-            methodCallBinaryReturnClosingLine(binaryExpr) + ";"
-        ) <= options.lineWidth();
+    /**
+     * Whether dropping the author's parentheses for an operand-per-line continuation keeps every operand on its own
+     * flat line. This is a shape-eligibility question, not a fit one: a continuation whose first or last operand must
+     * itself break reads worse than the parenthesized block, so it is not offered at all — the renderer would otherwise
+     * happily break that operand and rank the degenerate shape as fitting.
+     */
+    private boolean continuationKeepsOperandsFlat(BinaryExpr binaryExpr, Expression widthAnchor) {
+        return firstOperandFitsOnReturnLine(binaryExpr, widthAnchor)
+            && lastOperandFitsOnContinuationLine(binaryExpr);
     }
 
-    private String methodCallBinaryReturnClosingLine(BinaryExpr binaryExpr) {
-        return ") " + binaryExpr.getOperator().asString() + " " + compact.apply(binaryExpr.getRight());
-    }
-
-    private boolean directBinaryReturnFirstLineFits(
-            BinaryExpr expression,
-            Expression widthAnchor,
-            LayoutContext layout
-    ) {
+    /**
+     * Measures the {@code return <first operand>} line at the indentation it renders at via
+     * {@link LayoutWidth#nodeLine} (which counts the enclosing block/type nesting), not at the value's source column,
+     * which overshoots when a {@code return} sits after a label prefix.
+     */
+    private boolean firstOperandFitsOnReturnLine(BinaryExpr expression, Expression widthAnchor) {
         String line = "return " + compact.apply(firstBinaryOperand(expression));
-        return returnLineWidth(widthAnchor, line, layout) <= options.lineWidth();
+        return layoutWidth.nodeLine(widthAnchor, line) <= options.lineWidth();
     }
 
-    private boolean directBinaryReturnContinuationFits(
-            BinaryExpr expression,
-            boolean allowSourceMultilineOverflowContinuation
-    ) {
-        String line = directBinaryReturnLastLinePrefix(expression)
-            + compact.apply(lastBinaryOperand(expression))
-            + ";";
+    private boolean lastOperandFitsOnContinuationLine(BinaryExpr expression) {
+        String line = lastLinePrefix(expression) + compact.apply(lastBinaryOperand(expression)) + ";";
         return layoutWidth.continuationStatement(line) <= options.lineWidth()
-            || directBinaryReturnLastMethodCallOperandFits(expression);
+            || lastOperandBreaksAsMethodCall(expression);
     }
 
-    private boolean directBinaryReturnLastMethodCallOperandFits(BinaryExpr expression) {
+    /**
+     * The escape for a final operand that is itself a {@code call(args) op rhs} binary: it may exceed the continuation
+     * line flat, because it breaks into the same call-plus-closing-line shape whose own lines fit.
+     */
+    private boolean lastOperandBreaksAsMethodCall(BinaryExpr expression) {
         Expression lastOperand = lastBinaryOperand(expression);
         if (
             !(lastOperand instanceof BinaryExpr binaryOperand)
@@ -171,23 +165,18 @@ final class ReturnBinaryExpressionLayout {
         ) {
             return false;
         }
-        String firstLine = directBinaryReturnLastLinePrefix(expression) + methodCallPrefix.apply(methodCall) + "(";
+        String firstLine = lastLinePrefix(expression) + methodCallPrefix.apply(methodCall) + "(";
         return layoutWidth.continuationStatement(firstLine) <= options.lineWidth()
-            && directBinaryReturnMethodCallClosingLineFits(binaryOperand);
+            && layoutWidth.continuationStatement(
+                methodCallBinaryReturnClosingLine(binaryOperand) + ";"
+            ) <= options.lineWidth();
     }
 
-    /**
-     * Measures a candidate binary {@code return value;} line at the indentation it renders at — {@code "return "} at the
-     * block indent via {@link LayoutWidth#nodeLine} (which counts the enclosing block/type nesting) — not at the value's
-     * source column, which overshoots when a {@code return} sits after a label prefix. A {@code return} renders at least
-     * two block/type levels deep, so {@code nodeLine} dominates and needs no baseline floor;
-     * {@link #directBinaryReturnMethodCallFirstLineFits} folds its first-line probe into this same measurement.
-     */
-    private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
-        return layoutWidth.nodeLine(expression, line);
+    private String methodCallBinaryReturnClosingLine(BinaryExpr binaryExpr) {
+        return ") " + binaryExpr.getOperator().asString() + " " + compact.apply(binaryExpr.getRight());
     }
 
-    private String directBinaryReturnLastLinePrefix(BinaryExpr expression) {
+    private String lastLinePrefix(BinaryExpr expression) {
         if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
             return expression.getOperator().asString() + " ";
         }
@@ -208,5 +197,13 @@ final class ReturnBinaryExpressionLayout {
             right = rightBinary.getRight();
         }
         return right;
+    }
+
+    private static int[] descendingPriorities(int size) {
+        int[] priorities = new int[size];
+        for (int i = 0; i < size; i++) {
+            priorities[i] = size - 1 - i;
+        }
+        return priorities;
     }
 }

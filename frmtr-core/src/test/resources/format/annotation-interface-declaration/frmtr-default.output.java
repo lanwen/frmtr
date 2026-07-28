@@ -13,4 +13,9 @@ public @interface AnnotationInterfaceDeclaration {
     V[][] annotatedGrid = (V[][]) new Object[rowList.size()][columnList.size()];
 
     record Config(String region, String tier) {}
+
+    Map<
+        String,
+        List<VeryLongGenericArgumentNameThatForcesTheSignatureOntoItsOwnLineByBeingLongEnough>
+    > lookupTableByAccountRegion();
 }

@@ -198,11 +198,8 @@ final class DeclarationPrinters {
             commentText
         );
         this.throwsClauses = new ThrowsClausePrinter(
-            options,
             compactSource::compact,
-            compactSource::compactJoin,
-            this::currentIndentedWidth,
-            context.layoutWidth
+            compactSource::compactJoin
         );
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
             comments,

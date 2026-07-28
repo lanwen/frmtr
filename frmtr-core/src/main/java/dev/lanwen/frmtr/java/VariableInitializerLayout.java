@@ -23,7 +23,6 @@ import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -142,11 +141,7 @@ final class VariableInitializerLayout {
     /** Stateless precedence authority, used to measure the canonical (clarity-parenthesized) width for the routing gate. */
     private final NestedBinaryParenthesesLayout binaryParentheses = new NestedBinaryParenthesesLayout();
 
-    private final Function<Node, String> compactTypeLike;
-
     private final Function<Node, String> compact;
-
-    private final ConditionalExpressionLineProjection conditionalProjection;
 
     private final Function<Node, String> compactWithoutOwnComment;
 
@@ -210,17 +205,7 @@ final class VariableInitializerLayout {
 
     private final Function<Type, Doc> castType;
 
-    private final Function<ConditionalExpr, Doc> brokenConditionalExpression;
-
-    private final Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer;
-
-    private final BiPredicate<ArrayCreationExpr, ToIntFunction<String>> arrayCreationTypeBreaks;
-
-    private final Function<ArrayCreationExpr, String> arrayCreationPrefix;
-
     private final BiFunction<ArrayInitializerExpr, Boolean, Doc> arrayInitializer;
-
-    private final BiFunction<ArrayInitializerExpr, String, String> compactArrayInitializerWithSourceSpacing;
 
     private final Function<ObjectCreationExpr, String> objectCreationPrefix;
 
@@ -253,6 +238,19 @@ final class VariableInitializerLayout {
     // consumed by {@link #variableWithStatementTerminator} to re-place comments around the statement terminator. See
     // {@link InitializerTrailingCommentLayout}.
     private final InitializerTrailingCommentLayout trailingCommentLayout;
+
+    // Extracted arm-emitter cluster: the array-creation broken-shape ladder (opener-hug, compact-continuation
+    // fallback, element-per-line last resort) and the array own-break classification. See {@link InitializerArrayLayout}.
+    private final InitializerArrayLayout arrayLayout;
+
+    // Extracted arm-emitter cluster: the cast-type break that keeps the assignment and cast opener together while a
+    // generic/intersection cast type absorbs the overflow. See {@link InitializerCastLayout}.
+    private final InitializerCastLayout castLayout;
+
+    // Extracted arm-emitter cluster: the ternary-initializer break, its over-width probe, and the binary-initializer
+    // first-operand-with-`=` probe consulted by the comment/source-shape pre-empt tier. See
+    // {@link InitializerConditionalLayout}.
+    private final InitializerConditionalLayout conditionalLayout;
 
     VariableInitializerLayout(
             JavaFormatContext context,
@@ -304,9 +302,7 @@ final class VariableInitializerLayout {
         this.rawSource = context.rawSource;
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
-        this.compactTypeLike = context.compactSource::compactTypeLike;
         this.compact = context.compactSource::compact;
-        this.conditionalProjection = new ConditionalExpressionLineProjection(context.compactSource::compact);
         this.compactWithoutOwnComment = context.compactSource::compactWithoutOwnComment;
         this.compactJoin = context.compactSource::compactJoin;
         this.expression = expression;
@@ -333,12 +329,7 @@ final class VariableInitializerLayout {
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.methodCallChainInitializerShape = methodCallChainInitializerShape;
         this.castType = castType;
-        this.brokenConditionalExpression = brokenConditionalExpression;
-        this.shouldBreakBeforeConditionalInitializer = shouldBreakBeforeConditionalInitializer;
-        this.arrayCreationTypeBreaks = arrayCreationTypeBreaks;
-        this.arrayCreationPrefix = arrayCreationPrefix;
         this.arrayInitializer = arrayInitializer;
-        this.compactArrayInitializerWithSourceSpacing = compactArrayInitializerWithSourceSpacing;
         this.objectCreationPrefix = objectCreationPrefix;
         this.typeNameWithoutArguments = typeNameWithoutArguments;
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
@@ -369,6 +360,31 @@ final class VariableInitializerLayout {
             this.comments,
             this.commentPlacement,
             this.rawSource
+        );
+        this.arrayLayout = new InitializerArrayLayout(
+            context.sourceShapePolicy,
+            this.options,
+            this.layoutWidth,
+            arrayCreationTypeBreaks,
+            arrayCreationPrefix,
+            this.arrayInitializer,
+            compactArrayInitializerWithSourceSpacing,
+            this.compactJoin
+        );
+        this.castLayout = new InitializerCastLayout(
+            this.options,
+            this.layoutWidth,
+            this.expression,
+            context.compactSource::compactTypeLike,
+            this.typeNameWithoutArguments
+        );
+        this.conditionalLayout = new InitializerConditionalLayout(
+            this.options,
+            this.layoutWidth,
+            this.compact,
+            context.compactSource::compact,
+            brokenConditionalExpression,
+            shouldBreakBeforeConditionalInitializer
         );
     }
 
@@ -707,7 +723,7 @@ final class VariableInitializerLayout {
             ));
         }
         if (initializer instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments.test(binaryExpr)) {
-            if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
+            if (conditionalLayout.binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
                 return Optional.of(Doc.concat(
                     Doc.text(name + " = "),
                     Doc.indent(binaryExpressionLinesWithComments.apply(binaryExpr))
@@ -720,11 +736,11 @@ final class VariableInitializerLayout {
         }
         if (
             initializer instanceof ConditionalExpr conditionalExpr
-            && conditionalInitializerLineOverflows(variable, declarationPrefix, conditionalExpr)
+            && conditionalLayout.conditionalInitializerLineOverflows(variable, declarationPrefix, conditionalExpr)
             && !initializerHasOwnBreak(initializer)
         ) {
             return Optional.of(
-                conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
+                conditionalLayout.conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
             );
         }
         if (
@@ -772,7 +788,7 @@ final class VariableInitializerLayout {
             }
             if (initializer instanceof ConditionalExpr conditionalExpr && !initializerHasOwnBreak(initializer)) {
                 return Optional.of(
-                    conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
+                    conditionalLayout.conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
                 );
             }
             if (
@@ -784,7 +800,7 @@ final class VariableInitializerLayout {
                 );
             }
             if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
-                Optional<Doc> arrayCreation = variableWithBrokenArrayCreation(
+                Optional<Doc> arrayCreation = arrayLayout.variableWithBrokenArrayCreation(
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     arrayCreationExpr
@@ -811,7 +827,7 @@ final class VariableInitializerLayout {
                 ));
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
-                if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
+                if (conditionalLayout.binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
                     return Optional.of(Doc.concat(
                         Doc.text(name + " = "),
                         Doc.indent(binaryExpressionLines.apply(initializer, true))
@@ -1142,7 +1158,7 @@ final class VariableInitializerLayout {
             case MethodCallExpr methodCall -> InitializerLayoutArm.METHOD_CALL_BROKEN;
             case CastExpr cast when cast.getExpression() instanceof MethodCallExpr && !initializerHasOwnBreak(cast) ->
                 InitializerLayoutArm.CAST_METHOD_CALL_BREAK;
-            case CastExpr cast when castTypeNeedsBreak(flatName, cast.getType()) && !initializerHasOwnBreak(cast) ->
+            case CastExpr cast when castLayout.castTypeNeedsBreak(flatName, cast.getType()) && !initializerHasOwnBreak(cast) ->
                 InitializerLayoutArm.CAST_TYPE_BREAK;
             case ConditionalExpr conditional when !initializerHasOwnBreak(conditional) ->
                 InitializerLayoutArm.CONDITIONAL;
@@ -1194,13 +1210,13 @@ final class VariableInitializerLayout {
                 );
             }
             case CAST_TYPE_BREAK:
-                return variableWithCastTypeBreak(
+                return castLayout.variableWithCastTypeBreak(
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     (CastExpr) initializer
                 );
             case CONDITIONAL:
-                return conditionalInitializer(
+                return conditionalLayout.conditionalInitializer(
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     (ConditionalExpr) initializer
@@ -1502,65 +1518,6 @@ final class VariableInitializerLayout {
         );
     }
 
-    private boolean conditionalInitializerLineOverflows(
-            VariableDeclarator variable,
-            String declarationPrefix,
-            ConditionalExpr initializer
-    ) {
-        String line = declarationPrefix
-            + variable.getNameAsString()
-            + " = "
-            + conditionalProjection.line(initializer)
-            + ";";
-        return layoutWidth.variableInitializer(variable, line) > options.lineWidth();
-    }
-
-    /**
-     * Keeps a binary initializer from stranding {@code =} when the first operand still fits on the declaration line.
-     */
-    private boolean binaryInitializerCanKeepFirstOperandWithEquals(
-            VariableDeclarator variable,
-            String declarationPrefix,
-            BinaryExpr binaryExpr
-    ) {
-        // A leading comment before the first operand cannot ride the `=` line ({@code = // note} swallows the operand and
-        // re-parses onto its own line), so break after `=` and let the comment lead the first operand.
-        if (binaryInitializerHasLeadingFirstOperandComment(binaryExpr)) {
-            return false;
-        }
-        String firstOperand = binaryInitializerFirstOperandLine(binaryExpr);
-        return layoutWidth.variableInitializer(
-            variable,
-            declarationPrefix + variable.getNameAsString() + " = " + firstOperand
-        ) <= options.lineWidth();
-    }
-
-    private boolean binaryInitializerHasLeadingFirstOperandComment(BinaryExpr binaryExpr) {
-        Expression firstOperand = firstBinaryOperand(binaryExpr);
-        return isLineCommentBefore(binaryExpr.getComment().orElse(null), firstOperand)
-            || isLineCommentBefore(firstOperand.getComment().orElse(null), firstOperand);
-    }
-
-    private boolean isLineCommentBefore(Comment comment, Expression operand) {
-        return comment instanceof LineComment && CommentIndex.startsBefore(comment, operand);
-    }
-
-    private String binaryInitializerFirstOperandLine(BinaryExpr binaryExpr) {
-        Expression firstOperand = firstBinaryOperand(binaryExpr);
-        if (firstOperand instanceof TextBlockLiteralExpr) {
-            return "\"\"\"";
-        }
-        return compact.apply(firstOperand);
-    }
-
-    private Expression firstBinaryOperand(BinaryExpr binaryExpr) {
-        Expression left = binaryExpr.getLeft();
-        while (left instanceof BinaryExpr leftBinary && leftBinary.getOperator() == binaryExpr.getOperator()) {
-            left = leftBinary.getLeft();
-        }
-        return left;
-    }
-
     /**
      * Keeps a compact object-creation method chain on the continuation line when the opener cannot stay with
      * {@code =}, but the whole chain fits after the break.
@@ -1679,75 +1636,6 @@ final class VariableInitializerLayout {
      * the continuation line does this method bail, letting the shared array printer own the genuinely-too-long
      * {@code new Type<...>[]} type-argument break.
      */
-    private Optional<Doc> variableWithBrokenArrayCreation(
-            String name,
-            String flatName,
-            ArrayCreationExpr arrayCreation
-    ) {
-        ToIntFunction<String> continuationPrefixWidth = layoutWidth::continuationStatement;
-        if (
-            arrayCreation.getInitializer().isEmpty()
-            || arrayCreationTypeBreaks.test(arrayCreation, continuationPrefixWidth)
-            || sourceShapePolicy.hasContainedComments(arrayCreation)
-        ) {
-            return Optional.empty();
-        }
-        String prefix = arrayCreationPrefix.apply(arrayCreation);
-        ArrayInitializerExpr initializer = arrayCreation.getInitializer().orElseThrow();
-        // Measure the {@code NAME = new T[] {} opener on the assignment line at the initializer's true rendered
-        // block/type depth ({@link LayoutWidth#nodeLine}) rather than a fixed current-column baseline.
-        if (layoutWidth.nodeLine(arrayCreation, flatName + " = " + prefix + " {") <= options.lineWidth()) {
-            return Optional.of(
-                Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer.apply(initializer, true))
-            );
-        }
-        Optional<String> compactContinuation = compactObjectCreationArrayInitializer(initializer);
-        if (
-            compactContinuation.isPresent()
-            && layoutWidth.currentIndented(prefix + " " + compactContinuation.orElseThrow()) <= options.lineWidth()
-        ) {
-            return Optional.of(
-                Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " " + compactContinuation.orElseThrow())))
-                )
-            );
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), arrayInitializer.apply(initializer, true)))
-            )
-        );
-    }
-
-    /**
-     * Keeps an array initializer compact only for the narrow object-creation list that reads better as one continuation.
-     */
-    private Optional<String> compactObjectCreationArrayInitializer(ArrayInitializerExpr initializer) {
-        if (
-            sourceShapePolicy.hasContainedComments(initializer)
-            || initializer.getValues().isEmpty()
-            || initializer.getValues().stream().anyMatch(value -> !compactObjectCreationArrayValue(value))
-        ) {
-            return Optional.empty();
-        }
-        String values = compactJoin.apply(initializer.getValues());
-        return Optional.of(compactArrayInitializerWithSourceSpacing.apply(initializer, values));
-    }
-
-    /**
-     * Allows the compact array continuation only for empty constructor calls, where each value stays readable without
-     * its own argument or anonymous-body layout.
-     */
-    private boolean compactObjectCreationArrayValue(Expression value) {
-        return value instanceof ObjectCreationExpr objectCreation
-            && objectCreation.getScope().isEmpty()
-            && objectCreation.getTypeArguments().isEmpty()
-            && objectCreation.getArguments().isEmpty()
-            && objectCreation.getAnonymousClassBody().isEmpty();
-    }
-
     /**
      * Breaks a method-call initializer at its arguments when the call prefix still fits on the assignment line.
      */
@@ -2676,54 +2564,6 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Chooses the conditional initializer shape, preferring to break the ternary itself over breaking after {@code =}.
-     *
-     * <p>Break-after-{@code =} is a last resort: when {@code NAME = <whole ternary>} overflows we would
-     * rather keep the condition on the {@code NAME = <condition>} line and let the ternary own its {@code ?}/{@code :}
-     * break than strand {@code =} at end of line. So the condition-stays-on-the-{@code =}-line shapes (a condition that
-     * fits after {@code =}, or a parenthesized condition whose opener fits) are chosen ahead of the break-after-{@code =}
-     * shapes. Only when the condition genuinely cannot start after {@code =} do we break there — preferring the whole
-     * ternary flat on the continuation line when it fits, otherwise the fully-broken ternary under {@code =}. The
-     * structural {@link #shouldBreakBeforeConditionalInitializer} rule (a binary condition combined with a binary branch,
-     * which reads better wholly under the assignment) is honored first and is independent of this width policy.
-     */
-    private Doc conditionalInitializer(String name, String flatName, ConditionalExpr initializer) {
-        String conditionLine = flatName + " = " + compact.apply(initializer.getCondition());
-        String compactInitializer = compact.apply(initializer);
-        if (shouldBreakBeforeConditionalInitializer.test(initializer)) {
-            return Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer)))
-            );
-        }
-        if (layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()) {
-            return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
-        }
-        if (parenthesizedConditionalConditionOpenerFits(flatName, initializer)) {
-            return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
-        }
-        // The condition itself will not start after `=`; break there. Keep the whole ternary flat on the continuation
-        // line when it fits, otherwise fall back to the fully-broken ternary under `=`.
-        if (layoutWidth.continuationStatement(compactInitializer + ";") <= options.lineWidth()) {
-            return Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compactInitializer)))
-            );
-        }
-        return Doc.concat(
-            Doc.text(name + " ="),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer)))
-        );
-    }
-
-    private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
-        return initializer.getCondition() instanceof EnclosedExpr
-            // Measure the {@code NAME = (} opener at the initializer's true rendered block/type depth rather than a fixed
-            // current-column baseline.
-            && layoutWidth.nodeLine(initializer, flatName + " = (") <= options.lineWidth();
-    }
-
-    /**
      * Decides the arrow seam of {@code NAME = params -> chain} by ranking both statement shapes on true rendered
      * first line ({@link Doc#bestFittingFirstLine}), rather than a string first-line estimate.
      */
@@ -2900,51 +2740,6 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Keeps assignment and cast opener together when the cast type itself owns the first useful break.
-     *
-     * <p>Simple casts still use the ordinary wide-initializer fallback because they do not provide an internal type break
-     * that can absorb the overflow after {@code =}.
-     */
-    private Doc variableWithCastTypeBreak(String name, String flatName, CastExpr castExpr) {
-        Doc initializer = expression.apply(castExpr);
-        if (castTypeOpenerFitsOnEqualsLine(flatName, castExpr.getType())) {
-            return Doc.group(Doc.concat(Doc.text(name + " = "), initializer));
-        }
-        return Doc.group(Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.LINE, initializer))));
-    }
-
-    private boolean castTypeNeedsBreak(String flatName, Type type) {
-        // Measure the cast opener at the type's true rendered block/type depth rather than a fixed current-column
-        // baseline. The cast type sits directly under the declarator (no intervening block/type), so it shares the
-        // declarator's rendered depth.
-        return castTypeCanBreak(type)
-            && layoutWidth.nodeLine(type, flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
-    }
-
-    private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {
-        // Measure the {@code NAME = (Type)} opener at the type's true rendered block/type depth, not the current column.
-        return layoutWidth.nodeLine(type, flatName + " = " + castTypeOpener(type)) <= options.lineWidth();
-    }
-
-    private String castTypeOpener(Type type) {
-        if (
-            type instanceof ClassOrInterfaceType classOrInterfaceType
-            && classOrInterfaceType.getTypeArguments().isPresent()
-        ) {
-            return "(" + typeNameWithoutArguments.apply(classOrInterfaceType) + "<";
-        }
-        return "(";
-    }
-
-    private boolean castTypeCanBreak(Type type) {
-        return (
-            type instanceof IntersectionType
-            || (type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent())
-        );
-    }
-
-    /**
      * Uses the shared method-chain break as the last initializer fallback before normal expression rendering.
      */
     private Doc brokenInitializer(VariableDeclarator variable, Expression initializer) {
@@ -2988,7 +2783,7 @@ final class VariableInitializerLayout {
      */
     private boolean initializerHasOwnBreak(Expression initializer) {
         return switch (initializer) {
-            case ArrayCreationExpr arrayCreation -> arrayCreationHasOwnBreak(arrayCreation);
+            case ArrayCreationExpr arrayCreation -> arrayLayout.arrayCreationHasOwnBreak(arrayCreation);
             case ArrayAccessExpr ignored -> true;
             case ObjectCreationExpr objectCreation -> objectCreation.getAnonymousClassBody().isPresent();
             case SwitchExpr ignored -> true;
@@ -2999,7 +2794,7 @@ final class VariableInitializerLayout {
 
     /**
      * A method call owns its break when its receiver does: an array-access receiver always breaks, and an
-     * array-creation receiver breaks when {@link #arrayCreationHasOwnBreak} reports it does.
+     * array-creation receiver breaks when {@link InitializerArrayLayout#arrayCreationHasOwnBreak} reports it does.
      */
     private boolean methodCallScopeHasOwnBreak(MethodCallExpr methodCall) {
         if (methodCall.getScope().filter(ArrayAccessExpr.class::isInstance).isPresent()) {
@@ -3008,24 +2803,8 @@ final class VariableInitializerLayout {
         return methodCall.getScope()
                 .filter(ArrayCreationExpr.class::isInstance)
                 .map(ArrayCreationExpr.class::cast)
-                .map(this::arrayCreationHasOwnBreak)
+                .map(arrayLayout::arrayCreationHasOwnBreak)
                 .orElse(false);
-    }
-
-    /**
-     * Treats array initializers and genuinely-overflowing generic array types as already owning the assignment
-     * continuation shape.
-     *
-     * <p>An array with an initializer always owns its break (the initializer drives the layout). An array without an
-     * initializer only owns a break when its generic type arguments overflow at the continuation baseline and therefore
-     * take the width-driven last-resort break; a short generic array type whose compact prefix fits its continuation line
-     * does not claim an own-break and lets the surrounding assignment decide where to break. The continuation baseline is
-     * used so this stays consistent with {@link #variableWithBrokenArrayCreation}: a generic array type only reports an
-     * own-break when it would still overflow after the assignment cleanly broke at {@code =}.
-     */
-    private boolean arrayCreationHasOwnBreak(ArrayCreationExpr expression) {
-        return expression.getInitializer().isPresent()
-            || arrayCreationTypeBreaks.test(expression, layoutWidth::continuationStatement);
     }
 
     private String commentText(Doc comment) {

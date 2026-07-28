@@ -1446,13 +1446,13 @@ final class VariableInitializerLayout {
         }
         Optional<Doc> mixedChain = mixedFieldMethodCallChain.apply(methodCall);
         if (mixedChain.isPresent()) {
-            return variableWithMethodCallChain(
+            return variableWithMethodCallChainRanked(
                 variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
                 methodCall,
-                mixedFieldMethodCallFirstLine(methodCall),
-                mixedChain.orElseThrow()
+                mixedChain.orElseThrow(),
+                new int[] { 1, 0 }
             );
         }
         Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
@@ -2554,13 +2554,6 @@ final class VariableInitializerLayout {
             }
         }
         return Optional.empty();
-    }
-
-    private String mixedFieldMethodCallFirstLine(MethodCallExpr methodCall) {
-        return mixedFieldMethodCallRoot.apply(methodCall)
-                .filter(root -> !(root instanceof ObjectCreationExpr))
-                .map(compact)
-                .orElseGet(() -> methodCallChainFirstLine.apply(methodCall));
     }
 
     /**

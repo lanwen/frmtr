@@ -291,13 +291,11 @@ final class ReturnExpressionPrinter {
         // the conditional group only moves the flat-versus-broken verdict to the renderer.
         Doc flatReturn = Doc.concat(
             Doc.text("return "),
-            rendering.render(expression),
-            Doc.text(";")
+            Doc.followedBy(rendering.render(expression), Doc.text(";"))
         );
         Doc brokenReturn = Doc.concat(
             Doc.text("return "),
-            brokenReturnValue(expression, layout),
-            Doc.text(";")
+            Doc.followedBy(brokenReturnValue(expression, layout), Doc.text(";"))
         );
         return Doc.conditionalGroup(List.of(flatReturn, brokenReturn));
     }

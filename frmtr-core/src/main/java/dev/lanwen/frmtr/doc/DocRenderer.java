@@ -42,6 +42,13 @@ public final class DocRenderer {
 
     private int column;
 
+    /**
+     * Columns of caller content that will follow the enclosing {@link Doc.Reserve}'s single decision node on the same
+     * line. The decision subtracts it and then clears it, so exactly one ranking is judged against the reduced budget
+     * and nothing inside the winner inherits the reservation.
+     */
+    private int reservedColumns;
+
     public DocRenderer(FormatterOptions options) {
         this.options = options;
     }
@@ -72,6 +79,7 @@ public final class DocRenderer {
         lineSuffixes.clear();
         groupModes.clear();
         lineIndents.clear();
+        reservedColumns = 0;
         trackLineIndents = tracking;
         // The first output line starts before any newline fires; its indentation (the document's root column) is
         // structural at level 0, matching how render() begins at indent 0 / column 0.
@@ -133,6 +141,12 @@ public final class DocRenderer {
                 );
             }
             case Doc.Label label -> render(label.doc(), indent, mode, widths);
+            case Doc.Reserve reserve -> {
+                int enclosing = reservedColumns;
+                reservedColumns = reserve.columns();
+                render(reserve.doc(), indent, mode, widths);
+                reservedColumns = enclosing;
+            }
             case Doc.LineSuffix lineSuffix -> {
                 requireSingleLineSuffix(lineSuffix.content());
                 lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode));
@@ -173,14 +187,25 @@ public final class DocRenderer {
      * factory rejects an empty list, so there is always a fallback.
      */
     private void renderConditionalGroup(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
+        int reserved = takeReservedColumns();
         for (Doc alternative : alternatives) {
-            if (widths.fits(alternative, options.lineWidth() - column)) {
+            if (widths.fits(alternative, options.lineWidth() - column - reserved)) {
                 render(alternative, indent, Mode.FLAT, widths);
                 return;
             }
         }
         // No alternative fits flat, so render the last one in break mode as the unconditional fallback.
         render(alternatives.getLast(), indent, Mode.BREAK, widths);
+    }
+
+    /**
+     * Reads and clears the pending reservation: the enclosing {@link Doc.Reserve} funds exactly one decision, and the
+     * chosen candidate's own inner decisions must be judged at the plain width.
+     */
+    private int takeReservedColumns() {
+        int reserved = reservedColumns;
+        reservedColumns = 0;
+        return reserved;
     }
 
     /**
@@ -193,7 +218,7 @@ public final class DocRenderer {
      * column through the same shared, memoized decision.
      */
     private void renderBestFitting(Doc.BestFitting bestFitting, int indent, DocWidths.Measurement widths) {
-        int chosen = widths.chooseBestFitting(bestFitting, indent, column, options.lineWidth());
+        int chosen = widths.chooseBestFitting(bestFitting, indent, column, options.lineWidth(), takeReservedColumns());
         render(bestFitting.alternatives().get(chosen), indent, Mode.BREAK, widths);
     }
 
@@ -279,6 +304,7 @@ public final class DocRenderer {
             case Doc.Indent indented -> containsHardLine(indented.doc());
             case Doc.Group group -> containsHardLine(group.doc());
             case Doc.Label label -> containsHardLine(label.doc());
+            case Doc.Reserve reserve -> containsHardLine(reserve.doc());
             case Doc.IfBreak conditional ->
                 containsHardLine(conditional.breakDoc()) || containsHardLine(conditional.flatDoc());
             case Doc.LineSuffix lineSuffix -> containsHardLine(lineSuffix.content());

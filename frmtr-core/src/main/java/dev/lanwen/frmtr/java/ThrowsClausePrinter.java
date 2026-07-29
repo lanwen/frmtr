@@ -46,10 +46,14 @@ final class ThrowsClausePrinter {
         String throwsText = "throws " + exceptions;
         // The renderer decides same-line versus broken at the true rendered column: both candidates are built once and
         // ranked there (fits-flat wins, else the broken form), instead of re-deriving the line's width from a
-        // source-shaped probe string against a fixed indentation baseline.
+        // source-shaped probe string against a fixed indentation baseline. The caller's same-line trailer — the body's
+        // `{` or an abstract declaration's `;` — is reserved so the flat clause is judged with it on the line.
         Doc flatCandidate = Doc.text(" " + throwsText);
         Doc brokenCandidate = brokenThrowsClause(thrownExceptions);
-        return Doc.conditionalGroup(List.of(flatCandidate, brokenCandidate));
+        return Doc.reserving(
+            Doc.conditionalGroup(List.of(flatCandidate, brokenCandidate)),
+            layout.trailingContent().length()
+        );
     }
 
     /**

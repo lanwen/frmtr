@@ -57,7 +57,8 @@ final class DocWidths {
          * pure function of node identity plus measurement context within one render; created fresh per {@link
          * Measurement} (one per render) so choices never leak across renders.
          */
-        private final IdentityHashMap<Doc.BestFitting, Map<Long, Integer>> bestFittingChoices = new IdentityHashMap<>();
+        private final IdentityHashMap<Doc.BestFitting, Map<RankContext, Integer>> bestFittingChoices =
+            new IdentityHashMap<>();
 
         /**
          * Width of one indentation unit in columns, used only by the {@link #measureLineCount} simulation to reset the
@@ -125,12 +126,21 @@ final class DocWidths {
          * across a render, so identity plus (indent, start column) fully determines the choice.
          */
         int chooseBestFitting(Doc.BestFitting bestFitting, int indent, int startColumn, int lineWidth) {
+            return chooseBestFitting(bestFitting, indent, startColumn, lineWidth, 0);
+        }
+
+        /**
+         * As {@link #chooseBestFitting(Doc.BestFitting, int, int, int)}, with {@code reserved} columns of the caller's
+         * same-line content charged against each candidate's last line (see {@link Doc#reserving(Doc, int)}).
+         */
+        int chooseBestFitting(Doc.BestFitting bestFitting, int indent, int startColumn, int lineWidth, int reserved) {
             List<Doc> alternatives = bestFitting.alternatives();
             if (alternatives.size() == 1) {
                 return 0;
             }
-            Map<Long, Integer> byContext = bestFittingChoices.computeIfAbsent(bestFitting, ignored -> new HashMap<>());
-            long contextKey = (((long) indent & 0xFFFFFFFFL) << 32) | (startColumn & 0xFFFFFFFFL);
+            Map<RankContext, Integer> byContext =
+                bestFittingChoices.computeIfAbsent(bestFitting, ignored -> new HashMap<>());
+            RankContext contextKey = new RankContext(indent, startColumn, reserved);
             Integer cached = byContext.get(contextKey);
             if (cached != null) {
                 return cached;
@@ -143,7 +153,7 @@ final class DocWidths {
             for (int i = 0; i < limit; i++) {
                 // Rank each candidate as it would render at this column, resolving any nested best-fitting nodes at their
                 // own column so the metric matches what the winner will actually emit.
-                LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth);
+                LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth, reserved);
                 if (best == null || betterThan(candidate, priorities[i], best, priorities[bestIndex], rankFirstLineFirst)) {
                     best = candidate;
                     bestIndex = i;
@@ -222,8 +232,18 @@ final class DocWidths {
          *     at end of the document
          */
         LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth) {
+            return measureLineCount(doc, indent, startColumn, lineWidth, 0);
+        }
+
+        /**
+         * As {@link #measureLineCount(Doc, int, int, int)}, with {@code reserved} columns of the caller's content charged
+         * against the document's last line — the {@code ;} or {@code {} that follows a ranked candidate on the same line.
+         */
+        LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth, int reserved) {
             LineCountWalk walk = new LineCountWalk(lineWidth);
             walk.column = startColumn;
+            walk.reserved = reserved;
+            walk.trailingReserved = reserved;
             walk.walk(doc, indent, LineMode.BREAK);
             walk.flushLineSuffixes();
             walk.accountOverflowAtEnd();
@@ -251,6 +271,8 @@ final class DocWidths {
                 // an enclosing group deciding its own flat/break mode only needs the flattest candidate's width.
                 case Doc.BestFitting bestFitting ->
                     measure(bestFitting.alternatives().getFirst(), remaining);
+                // A reservation is a context fact about what follows, not content, so it adds nothing to a flat width.
+                case Doc.Reserve reserve -> measure(reserve.doc(), remaining);
                 case Doc.Line ignored -> 1;
                 case Doc.SoftLine ignored -> 0;
                 case Doc.HardLine ignored -> NO_FIT;
@@ -328,6 +350,12 @@ final class DocWidths {
             /** Overflow contributed by line 0 only, captured the first time a line closes; the whole-doc overflow when it never breaks. */
             private int firstLineOverflow;
 
+            /** Mirrors {@link DocRenderer}'s reserved-columns cursor: consumed by one decision, then cleared. */
+            private int reserved;
+
+            /** The reservation the whole walk closes on, charged to its last line by {@link #accountOverflowAtEnd}. */
+            private int trailingReserved;
+
             private LineCountWalk(int lineWidth) {
                 this.lineWidth = lineWidth;
             }
@@ -363,8 +391,14 @@ final class DocWidths {
                     case Doc.Fill fill -> walkFill(fill.parts(), indent);
                     case Doc.ConditionalGroup conditionalGroup -> walkConditionalGroup(conditionalGroup.alternatives(), indent);
                     case Doc.BestFitting bestFitting -> {
-                        int chosen = chooseBestFitting(bestFitting, indent, column, lineWidth);
+                        int chosen = chooseBestFitting(bestFitting, indent, column, lineWidth, takeReserved());
                         walk(bestFitting.alternatives().get(chosen), indent, LineMode.BREAK);
+                    }
+                    case Doc.Reserve reserve -> {
+                        int enclosing = reserved;
+                        reserved = reserve.columns();
+                        walk(reserve.doc(), indent, mode);
+                        reserved = enclosing;
                     }
                     case Doc.IfBreak conditional -> {
                         LineMode effective = conditional.groupId() == null
@@ -397,13 +431,21 @@ final class DocWidths {
 
             /** Mirrors {@link DocRenderer#renderConditionalGroup}: first flat fit wins, else the last in break mode. */
             private void walkConditionalGroup(List<Doc> alternatives, int indent) {
+                int available = lineWidth - column - takeReserved();
                 for (Doc alternative : alternatives) {
-                    if (fits(alternative, lineWidth - column)) {
+                    if (fits(alternative, available)) {
                         walk(alternative, indent, LineMode.FLAT);
                         return;
                     }
                 }
                 walk(alternatives.getLast(), indent, LineMode.BREAK);
+            }
+
+            /** Mirrors {@link DocRenderer}'s take-once reservation: one decision spends it, inner ones see none. */
+            private int takeReserved() {
+                int spent = reserved;
+                reserved = 0;
+                return spent;
             }
 
             private void advance(String value) {
@@ -458,12 +500,24 @@ final class DocWidths {
                 }
             }
 
+            /**
+             * Closes the last line, charging the reserved columns of caller content that lands on it. This is the only
+             * line the reservation touches: interior lines close before the tail exists.
+             */
             private void accountOverflowAtEnd() {
+                column += trailingReserved;
                 accountOverflow();
             }
         }
 
         private record BufferedSuffix(Doc content, int indent, LineMode mode) {}
+
+        /**
+         * The measurement context a {@link Doc.BestFitting} ranking is memoized under: its indent, the column it starts
+         * at, and the columns reserved for caller content on its last line. All three change the verdict, so all three
+         * key the cache.
+         */
+        private record RankContext(int indent, int startColumn, int reserved) {}
     }
 
     /**

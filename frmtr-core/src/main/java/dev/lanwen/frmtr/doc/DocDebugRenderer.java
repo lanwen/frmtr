@@ -84,6 +84,10 @@ public final class DocDebugRenderer {
                 appendLine(out, depth, "LineSuffix");
                 render(lineSuffix.content(), out, depth + 1);
             }
+            case Doc.Reserve reserve -> {
+                appendLine(out, depth, "Reserve(" + reserve.columns() + ")");
+                render(reserve.doc(), out, depth + 1);
+            }
         }
     }
 

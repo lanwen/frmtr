@@ -94,6 +94,15 @@ public final class DocExplainRenderer {
 
         private int column;
 
+        /** Mirrors {@link DocRenderer}'s take-once reserved-columns cursor so a decision is traced at the same budget. */
+        private int reservedColumns;
+
+        private int takeReservedColumns() {
+            int spent = reservedColumns;
+            reservedColumns = 0;
+            return spent;
+        }
+
         /**
          * Builds this trace's width authority with the same indent-unit width the renderer uses, so ranking a
          * best-fitting node resets the simulated column after a newline exactly as {@link DocRenderer} does and the
@@ -160,7 +169,7 @@ public final class DocExplainRenderer {
                     Builder structural = Builder.structural();
                     List<Doc> alternatives = conditionalGroup.alternatives();
                     if (!alternatives.isEmpty()) {
-                        int available = lineWidth - column;
+                        int available = lineWidth - column - takeReservedColumns();
                         int startColumn = column;
                         int chosen = alternatives.size() - 1;
                         Mode chosenMode = Mode.BREAK;
@@ -201,16 +210,23 @@ public final class DocExplainRenderer {
                     Builder structural = Builder.structural();
                     List<Doc> alternatives = bestFitting.alternatives();
                     int[] priorities = bestFitting.priorities();
-                    int available = lineWidth - column;
+                    int reserved = takeReservedColumns();
+                    int available = lineWidth - column - reserved;
                     int startColumn = column;
-                    int chosen = widths.chooseBestFitting(bestFitting, indent, startColumn, lineWidth);
+                    int chosen = widths.chooseBestFitting(bestFitting, indent, startColumn, lineWidth, reserved);
                     // Only the alternatives the ranking measured (the first MAX_BEST_FITTING_ALTERNATIVES) are recorded,
                     // matching the winner selection exactly.
                     int measured = Math.min(alternatives.size(), DocWidths.MAX_BEST_FITTING_ALTERNATIVES);
                     List<BestFittingDecision.Alternative> ranked = new ArrayList<>();
                     for (int i = 0; i < measured; i++) {
                         DocWidths.LineCount count =
-                            widths.measureLineCount(alternatives.get(i), indent, startColumn, lineWidth);
+                            widths.measureLineCount(
+                                alternatives.get(i),
+                                indent,
+                                startColumn,
+                                lineWidth,
+                                reserved
+                            );
                         // Record priority and first-line overflow alongside the line count so --explain can show why a
                         // higher-line alternative won: a higher-priority arm, or a first-line-fit node keeping the arm
                         // whose header fits over the fewest-lines arm whose opener spills.
@@ -309,6 +325,13 @@ public final class DocExplainRenderer {
                 case Doc.LineSuffix lineSuffix -> {
                     lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode, enclosingLabel));
                     return Builder.leaf();
+                }
+                case Doc.Reserve reserve -> {
+                    int enclosing = reservedColumns;
+                    reservedColumns = reserve.columns();
+                    Builder node = render(reserve.doc(), indent, mode, enclosingLabel);
+                    reservedColumns = enclosing;
+                    return node;
                 }
             }
         }

@@ -118,9 +118,9 @@ final class AnnotationExpressionPrinter {
         }
         return switch (annotation) {
             case NormalAnnotationExpr normalAnnotation -> brokenNormalAnnotation(normalAnnotation);
-            case SingleMemberAnnotationExpr singleMemberAnnotation -> brokenSingleMemberAnnotation(
+            case SingleMemberAnnotationExpr singleMemberAnnotation -> brokenSingleMemberValue(
                 "@" + compact.apply(singleMemberAnnotation.getName()),
-                annotationValue(singleMemberAnnotation.getMemberValue())
+                singleMemberAnnotation.getMemberValue()
             );
             default -> annotation(annotation);
         };
@@ -227,7 +227,7 @@ final class AnnotationExpressionPrinter {
         String prefix = "@" + compact.apply(annotation.getName());
         Expression memberValue = annotation.getMemberValue();
         if (annotationValueHasLineComments(memberValue) || annotationValueMustBreak(memberValue)) {
-            return brokenSingleMemberAnnotation(prefix, annotationValue(memberValue));
+            return brokenSingleMemberValue(prefix, memberValue);
         }
         String flatValue = compactAnnotationValue(memberValue);
         Doc flat = Doc.text(prefix + "(" + flatValue + ")");
@@ -246,6 +246,22 @@ final class AnnotationExpressionPrinter {
         return Doc.bestFittingFirstLine(
             List.of(flat, Doc.concat(Doc.text(prefix + "("), annotationValue(memberValue), Doc.text(")")))
         );
+    }
+
+    /**
+     * The broken shape for {@code @Name(value)}. A non-empty array value hugs — {@code @Name({} stays on the annotation
+     * line, the elements break one per indented line, and {@code })} closes — matching the lone-array-pair rule for
+     * {@code @Name(pair = {…})}. Any other value drops to its own indented line, where it needs the room.
+     */
+    private Doc brokenSingleMemberValue(String prefix, Expression value) {
+        if (value instanceof ArrayInitializerExpr arrayInitializerExpr && !arrayInitializerExpr.getValues().isEmpty()) {
+            return Doc.concat(
+                Doc.text(prefix + "("),
+                annotationArrayInitializer(arrayInitializerExpr),
+                Doc.text(")")
+            );
+        }
+        return brokenSingleMemberAnnotation(prefix, annotationValue(value));
     }
 
     private Doc brokenSingleMemberAnnotation(String prefix, Doc value) {
@@ -388,9 +404,9 @@ final class AnnotationExpressionPrinter {
     private Doc brokenAnnotationArrayValue(AnnotationExpr annotation) {
         return switch (annotation) {
             case NormalAnnotationExpr normalAnnotation -> brokenNormalAnnotation(normalAnnotation);
-            case SingleMemberAnnotationExpr singleMemberAnnotation -> brokenSingleMemberAnnotation(
+            case SingleMemberAnnotationExpr singleMemberAnnotation -> brokenSingleMemberValue(
                 "@" + compact.apply(singleMemberAnnotation.getName()),
-                annotationValue(singleMemberAnnotation.getMemberValue())
+                singleMemberAnnotation.getMemberValue()
             );
             default -> rendering.render(annotation);
         };

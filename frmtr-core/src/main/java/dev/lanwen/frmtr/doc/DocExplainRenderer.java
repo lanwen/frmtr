@@ -48,7 +48,7 @@ public final class DocExplainRenderer {
      */
     public DocExplanation explain(Doc doc, List<dev.lanwen.frmtr.doc.PrinterWrap> printerWraps) {
         Trace trace = new Trace();
-        Builder root = trace.render(doc, 0, Mode.BREAK, null);
+        Builder root = trace.render(doc, 0, GroupMode.BREAK, null);
         trace.flushLineSuffixes();
         return new DocExplanation(
             lineWidth,
@@ -87,10 +87,10 @@ public final class DocExplainRenderer {
         private final List<BufferedSuffix> lineSuffixes = new ArrayList<>();
 
         /**
-         * Mirrors {@link DocRenderer}'s per-render group-mode map so a named {@link Doc.IfBreak} resolves the same arm
-         * here as in the real render; otherwise the replayed column cursor would drift from what the renderer emits.
+         * Mirrors {@link DocRenderer}'s per-render verdict map — groups and ranked decisions alike — so a named
+         * {@link Doc.IfBreak} resolves the same arm here as in the real render and the replayed cursor cannot drift.
          */
-        private final Map<String, Mode> groupModes = new HashMap<>();
+        private final Map<String, GroupMode> groupModes = new HashMap<>();
 
         private int column;
 
@@ -114,7 +114,7 @@ public final class DocExplainRenderer {
             return measurement;
         }
 
-        private Builder render(Doc doc, int indent, Mode mode, Builder enclosingLabel) {
+        private Builder render(Doc doc, int indent, GroupMode mode, Builder enclosingLabel) {
             switch (doc) {
                 case Doc.Text text -> {
                     advance(text.value());
@@ -132,7 +132,7 @@ public final class DocExplainRenderer {
                     List<Doc> parts = fill.parts();
                     List<FillDecision.Separator> separatorDecisions = new ArrayList<>();
                     if (!parts.isEmpty()) {
-                        structural.add(render(parts.getFirst(), indent, Mode.FLAT, enclosingLabel));
+                        structural.add(render(parts.getFirst(), indent, GroupMode.FLAT, enclosingLabel));
                         for (int i = 1; i + 1 < parts.size(); i += 2) {
                             Doc separator = parts.get(i);
                             Doc nextContent = parts.get(i + 1);
@@ -143,7 +143,7 @@ public final class DocExplainRenderer {
                             int available = lineWidth - column;
                             int separatorFlatWidth = widths.flatWidth(Doc.concat(separator, nextContent));
                             boolean fitsFlat = widths.separatorFitsFlat(separator, nextContent, available);
-                            Mode separatorMode = fitsFlat ? Mode.FLAT : Mode.BREAK;
+                            GroupMode separatorMode = fitsFlat ? GroupMode.FLAT : GroupMode.BREAK;
                             separatorDecisions.add(new FillDecision.Separator(
                                 i,
                                 fitsFlat ? Decision.FLAT : Decision.BREAK,
@@ -152,7 +152,7 @@ public final class DocExplainRenderer {
                                 column
                             ));
                             structural.add(render(separator, indent, separatorMode, enclosingLabel));
-                            structural.add(render(nextContent, indent, Mode.FLAT, enclosingLabel));
+                            structural.add(render(nextContent, indent, GroupMode.FLAT, enclosingLabel));
                         }
                     }
                     if (!separatorDecisions.isEmpty()) {
@@ -172,7 +172,7 @@ public final class DocExplainRenderer {
                         int available = lineWidth - column - takeReservedColumns();
                         int startColumn = column;
                         int chosen = alternatives.size() - 1;
-                        Mode chosenMode = Mode.BREAK;
+                        GroupMode chosenMode = GroupMode.BREAK;
                         // Probe alternatives in order, recording each one's flat width and whether it fit, so the trace
                         // can show why earlier (narrower) alternatives were skipped. Probing stops at the first fit, so
                         // alternatives after the chosen one are never measured and are intentionally absent.
@@ -186,14 +186,14 @@ public final class DocExplainRenderer {
                             ));
                             if (fits) {
                                 chosen = i;
-                                chosenMode = Mode.FLAT;
+                                chosenMode = GroupMode.FLAT;
                                 break;
                             }
                         }
                         conditionalGroupDecisions.add(new ConditionalGroupDecision(
                             enclosingLabel == null ? Optional.empty() : enclosingLabel.label,
                             chosen,
-                            chosenMode == Mode.BREAK,
+                            chosenMode == GroupMode.BREAK,
                             available,
                             startColumn,
                             probed
@@ -213,7 +213,11 @@ public final class DocExplainRenderer {
                     int reserved = takeReservedColumns();
                     int available = lineWidth - column - reserved;
                     int startColumn = column;
-                    int chosen = widths.chooseBestFitting(bestFitting, indent, startColumn, lineWidth, reserved);
+                    int chosen =
+                        widths.chooseBestFitting(bestFitting, indent, startColumn, lineWidth, reserved, groupModes);
+                    if (bestFitting.groupId() != null) {
+                        groupModes.put(bestFitting.groupId(), DocWidths.Measurement.verdictOf(chosen));
+                    }
                     // Only the alternatives the ranking measured (the first MAX_BEST_FITTING_ALTERNATIVES) are recorded,
                     // matching the winner selection exactly.
                     int measured = Math.min(alternatives.size(), DocWidths.MAX_BEST_FITTING_ALTERNATIVES);
@@ -225,7 +229,8 @@ public final class DocExplainRenderer {
                                 indent,
                                 startColumn,
                                 lineWidth,
-                                reserved
+                                reserved,
+                                groupModes
                             );
                         // Record priority and first-line overflow alongside the line count so --explain can show why a
                         // higher-line alternative won: a higher-priority arm, or a first-line-fit node keeping the arm
@@ -244,13 +249,14 @@ public final class DocExplainRenderer {
                         chosen,
                         available,
                         startColumn,
+                        Optional.ofNullable(bestFitting.groupId()),
                         ranked
                     ));
-                    structural.add(render(alternatives.get(chosen), indent, Mode.BREAK, enclosingLabel));
+                    structural.add(render(alternatives.get(chosen), indent, GroupMode.BREAK, enclosingLabel));
                     return structural;
                 }
                 case Doc.Line ignored -> {
-                    if (mode == Mode.FLAT) {
+                    if (mode == GroupMode.FLAT) {
                         advance(" ");
                     } else {
                         newline(indent);
@@ -258,7 +264,7 @@ public final class DocExplainRenderer {
                     return Builder.leaf();
                 }
                 case Doc.SoftLine ignored -> {
-                    if (mode == Mode.BREAK) {
+                    if (mode == GroupMode.BREAK) {
                         newline(indent);
                     }
                     return Builder.leaf();
@@ -283,7 +289,7 @@ public final class DocExplainRenderer {
                     int available = lineWidth - column;
                     boolean fits = widths.fits(group.doc(), available);
                     int flatWidth = widths.flatWidth(group.doc());
-                    Mode next = fits ? Mode.FLAT : Mode.BREAK;
+                    GroupMode next = fits ? GroupMode.FLAT : GroupMode.BREAK;
                     if (group.groupId() != null) {
                         groupModes.put(group.groupId(), next);
                     }
@@ -304,11 +310,11 @@ public final class DocExplainRenderer {
                 case Doc.IfBreak conditional -> {
                     // Resolve the arm exactly as DocRenderer does: by the named group's recorded mode when identified,
                     // otherwise by the ambient mode, so the replayed column advances identically.
-                    Mode effective = conditional.groupId() == null
+                    GroupMode effective = conditional.groupId() == null
                         ? mode
-                        : groupModes.getOrDefault(conditional.groupId(), Mode.FLAT);
+                        : groupModes.getOrDefault(conditional.groupId(), GroupMode.FLAT);
                     return render(
-                        effective == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
+                        effective == GroupMode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
                         indent,
                         mode,
                         enclosingLabel
@@ -368,12 +374,7 @@ public final class DocExplainRenderer {
         }
     }
 
-    private enum Mode {
-        FLAT,
-        BREAK,
-    }
-
-    private record BufferedSuffix(Doc content, int indent, Mode mode, Builder enclosingLabel) {}
+    private record BufferedSuffix(Doc content, int indent, GroupMode mode, Builder enclosingLabel) {}
 
     /**
      * Mutable scratch node used while walking, so a label can accrue forced line breaks emitted under it before the

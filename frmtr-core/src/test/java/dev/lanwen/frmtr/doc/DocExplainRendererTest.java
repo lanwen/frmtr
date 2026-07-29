@@ -285,6 +285,36 @@ final class DocExplainRendererTest {
     }
 
     @Test
+    void recordsThePublishedVerdictOfAnIdentifiedBestFittingAndResolvesDependentContentWithIt() {
+        // The attached arm's first line is 32 columns, so at 20 columns the break-after-= arm wins and the ranked node
+        // publishes BREAK under "assign". The trace names the id, reports the verdict, and the dependent body it walks
+        // takes the indented arm — the same resolution the renderer performs.
+        Doc ranked = Doc.bestFittingFirstLine(
+            List.of(
+                Doc.text("var runningTotal = computeTotals("),
+                Doc.concat(
+                    Doc.text("var runningTotal ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("computeTotals(")))
+                )
+            ),
+            new int[] { 1, 0 },
+            "assign"
+        );
+        Doc body = Doc.indentIfGroupBreaks(
+            Doc.concat(Doc.HARD_LINE, Doc.text("accumulate();"), Doc.HARD_LINE, Doc.text(")")),
+            "assign"
+        );
+
+        DocExplanation explanation = explain(20, Doc.concat(ranked, body));
+
+        assertThat(explanation.bestFittingDecisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.groupId()).contains("assign");
+            assertThat(decision.chosenIndex()).isEqualTo(1);
+            assertThat(decision.verdict()).isEqualTo(Decision.BREAK);
+        });
+    }
+
+    @Test
     void bestFittingExplainTraceChoosesTheSameAlternativeTheRendererEmits() {
         // The --explain trace is an observer that must never diverge from the render: the alternative it records as
         // chosen must be exactly the one DocRenderer emits. This is the best-fitting analog of "explain().formatted()

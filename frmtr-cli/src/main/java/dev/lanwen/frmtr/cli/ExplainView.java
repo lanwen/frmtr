@@ -349,6 +349,12 @@ final class ExplainView {
                     )
                 )
                 .append(":\n");
+        // A ranked decision that carries a group id publishes its verdict to dependent content, so name both.
+        bestFitting.groupId().ifPresent(groupId -> out.append("    publishes ")
+                .append(styler.style(Role.LABEL, groupId))
+                .append(" as ")
+                .append(styler.style(Role.NUMBER, bestFitting.verdict().name()))
+                .append('\n'));
         for (BestFittingDecision.Alternative alternative : bestFitting.alternatives()) {
             out.append("    alternative ")
                     .append(styler.style(Role.NUMBER, alternative.index() + ""))

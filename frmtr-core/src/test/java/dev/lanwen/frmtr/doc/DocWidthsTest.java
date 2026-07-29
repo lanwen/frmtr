@@ -88,10 +88,10 @@ final class DocWidthsTest {
         // whatever the depth, then rank it directly and confirm the verdict is stable across depth, repeat, and cold runs.
         int reference = -1;
         for (int wrappers : new int[] {0, 1, 4, 16}) {
-            Doc.BestFitting inner = new Doc.BestFitting(List.of(innerFlat, innerBroken), new int[0], false);
+            Doc.BestFitting inner = new Doc.BestFitting(List.of(innerFlat, innerBroken), new int[0], false, null);
             Doc nested = inner;
             for (int i = 0; i < wrappers; i++) {
-                nested = new Doc.BestFitting(List.of(nested), new int[0], false);
+                nested = new Doc.BestFitting(List.of(nested), new int[0], false, null);
             }
 
             DocWidths.Measurement warm = measurement();
@@ -122,7 +122,7 @@ final class DocWidthsTest {
     void chooseBestFittingKeysPerContextNotPerNode() {
         Doc flatArm = Doc.text("resolveHandle().annotateSource().dedupe()"); // 41 wide
         Doc brokenArm = Doc.concat(Doc.text("resolveHandle()"), Doc.HARD_LINE, Doc.text(".annotateSource()"));
-        Doc.BestFitting node = new Doc.BestFitting(List.of(flatArm, brokenArm), new int[0], false);
+        Doc.BestFitting node = new Doc.BestFitting(List.of(flatArm, brokenArm), new int[0], false, null);
         int lineWidth = 60;
 
         // Independently: near column 0 the 41-wide flat arm fits (0 lines, 0 overflow) and beats the 1-line broken arm;
@@ -236,6 +236,57 @@ final class DocWidthsTest {
     }
 
     /**
+     * A ranking sees the verdicts its caller already published: the same arm measured with an outer decision flat and
+     * with it broken yields different line counts, because the conditional content inside it resolves differently.
+     */
+    @Test
+    void measureLineCountResolvesAnIdentifiedIfBreakFromTheSeededVerdict() {
+        Doc arm = Doc.concat(
+            Doc.text("emitRow()"),
+            Doc.ifBreak(Doc.concat(Doc.HARD_LINE, Doc.text("closeRow()")), Doc.EMPTY, "header")
+        );
+
+        assertThat(measurement().measureLineCount(arm, 0, 0, 40, 0, java.util.Map.of()).lines())
+            .as("an undecided id reads the FLAT default")
+            .isZero();
+        assertThat(
+            measurement()
+                .measureLineCount(arm, 0, 0, 40, 0, java.util.Map.of("header", GroupMode.BREAK))
+                .lines()
+        ).as("the seeded BREAK verdict opens the dependent line").isEqualTo(1);
+    }
+
+    /**
+     * The ranking memo cannot serve a verdict decided under different outer group modes. The same node, at the same
+     * indent/column/reservation, ranked twice in ONE measurement under opposite seeds produces each seed's own winner —
+     * the memo key carries the verdicts the node's subtree reads.
+     */
+    @Test
+    void chooseBestFittingMemoSeparatesRankingsDecidedUnderDifferentOuterVerdicts() {
+        int lineWidth = 20;
+        // The flat arm carries conditional content: harmless while "header" is flat, 23 columns wide once it breaks.
+        Doc flatArm = Doc.concat(
+            Doc.text("renderCell()"),
+            Doc.ifBreak(Doc.text("withTrailingSeparator()"), Doc.EMPTY, "header")
+        );
+        Doc brokenArm = Doc.concat(Doc.text("renderCell()"), Doc.HARD_LINE, Doc.text("close()"));
+        Doc.BestFitting node = new Doc.BestFitting(List.of(flatArm, brokenArm), new int[0], false, null);
+
+        DocWidths.Measurement shared = measurement();
+        int underFlatHeader = shared.chooseBestFitting(node, 0, 0, lineWidth, 0, java.util.Map.of());
+        int underBrokenHeader =
+            shared.chooseBestFitting(node, 0, 0, lineWidth, 0, java.util.Map.of("header", GroupMode.BREAK));
+
+        assertThat(underFlatHeader).as("the flat arm fits while the dependent content is absent").isZero();
+        assertThat(underBrokenHeader).as("the dependent content spills, so the broken arm wins").isEqualTo(1);
+        // Repeat calls hit the memo and must keep each seed's own winner.
+        assertThat(shared.chooseBestFitting(node, 0, 0, lineWidth, 0, java.util.Map.of()))
+            .isEqualTo(underFlatHeader);
+        assertThat(shared.chooseBestFitting(node, 0, 0, lineWidth, 0, java.util.Map.of("header", GroupMode.BREAK)))
+            .isEqualTo(underBrokenHeader);
+    }
+
+    /**
      * The anti-drift guard for #205: the line-count simulation and the real renderer are separate walks, so this pins
      * that they cannot diverge — {@code measureLineCount(doc).lines()} must equal the number of newlines the renderer
      * actually emits for the same document at the same line width. If a future edit changes one walk's newline, mode,
@@ -305,6 +356,25 @@ final class DocWidthsTest {
                 ))
             )
         ));
+        // A ranked decision that publishes its verdict, with dependent content that indents behind it: the walk must
+        // reproduce the renderer's verdict, or the reader's arm — and the line count — diverge.
+        Doc publishedVerdict = Doc.concat(
+            Doc.bestFittingFirstLine(
+                List.of(
+                    Doc.text("var runningTotal = computeTotals("),
+                    Doc.concat(
+                        Doc.text("var runningTotal ="),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("computeTotals(")))
+                    )
+                ),
+                new int[] { 1, 0 },
+                "assign"
+            ),
+            Doc.indentIfGroupBreaks(
+                Doc.concat(Doc.HARD_LINE, Doc.text("accumulate();"), Doc.HARD_LINE, Doc.text(")")),
+                "assign"
+            )
+        );
         Doc conditional = Doc.conditionalGroup(List.of(
             Doc.text("compactcompactcompact"),
             Doc.concat(Doc.text("wide("), Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("payloadpayload"))), Doc.SOFT_LINE, Doc.text(")"))
@@ -317,6 +387,7 @@ final class DocWidthsTest {
             ifBreakDoc,
             bestFitting,
             nestedBestFitting,
+            publishedVerdict,
             conditional
         );
         List<org.junit.jupiter.params.provider.Arguments> cases = new java.util.ArrayList<>();

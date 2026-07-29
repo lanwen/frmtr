@@ -222,15 +222,11 @@ final class AnnotationExpressionPrinter {
         );
     }
 
+    /**
+     * Renders one {@code name = value} pair. The value's own renderer owns its flat-versus-broken ranking, so an array
+     * value keeps its comment guard: a compacted flat array text cannot carry a {@code //}, and only that renderer knows.
+     */
     private Doc annotationPair(MemberValuePair pair) {
-        if (pair.getValue() instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            String flat = pair.getNameAsString() + " = " + compactAnnotationArrayInitializer(arrayInitializerExpr);
-            Doc broken = Doc.concat(
-                Doc.text(pair.getNameAsString() + " = "),
-                annotationArrayInitializer(arrayInitializerExpr)
-            );
-            return Doc.bestFittingFirstLine(List.of(Doc.text(flat), broken));
-        }
         return Doc.concat(Doc.text(pair.getNameAsString() + " = "), annotationValue(pair.getValue()));
     }
 

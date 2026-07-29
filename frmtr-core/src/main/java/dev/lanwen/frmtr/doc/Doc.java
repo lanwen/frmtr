@@ -92,6 +92,9 @@ public sealed interface Doc
      * {@code ifBreak(..., groupId)} renders according to whether <em>this</em> group rendered flat or broken. The
      * identified group must render before any {@code IfBreak} that targets it (the renderer reads the mode the group
      * already recorded), which printers arrange by emitting the opener group ahead of its dependent closer.
+     *
+     * <p>A reader that consults an id no decision has published yet resolves as FLAT: document order, not the tree
+     * shape, decides what a reader sees, so a forward reference silently reads the default instead of failing.
      */
     static Doc group(Doc doc, String groupId) {
         return new Group(doc, groupId);
@@ -113,6 +116,16 @@ public sealed interface Doc
      */
     static Doc ifBreak(Doc breakDoc, Doc flatDoc, String groupId) {
         return new IfBreak(breakDoc, flatDoc, groupId);
+    }
+
+    /**
+     * Indents {@code doc} by one level only when the named decision came out broken, leaving it at the current level
+     * otherwise. Lets content that sits <em>after</em> a ranked or grouped decision follow it — a body whose enclosing
+     * assignment moved onto its own continuation line indents with it. Both arms hold the same instance, so a comment
+     * inside {@code doc} is claimed once and rendered by whichever arm wins.
+     */
+    static Doc indentIfGroupBreaks(Doc doc, String groupId) {
+        return new IfBreak(indent(doc), doc, groupId);
     }
 
     /**
@@ -284,7 +297,15 @@ public sealed interface Doc
      * @throws IllegalArgumentException if {@code alternatives} is empty
      */
     static Doc bestFitting(List<Doc> alternatives) {
-        return new BestFitting(alternatives, new int[0], false);
+        return new BestFitting(alternatives, new int[0], false, null);
+    }
+
+    /**
+     * As {@link #bestFitting(List)}, publishing the winner under {@code groupId} so a later
+     * {@link #ifBreak(Doc, Doc, String)} or {@link #indentIfGroupBreaks(Doc, String)} can read the verdict.
+     */
+    static Doc bestFitting(List<Doc> alternatives, String groupId) {
+        return new BestFitting(alternatives, new int[0], false, groupId);
     }
 
     /**
@@ -301,7 +322,14 @@ public sealed interface Doc
      * @throws IllegalArgumentException if {@code alternatives} is empty
      */
     static Doc bestFittingFirstLine(List<Doc> alternatives) {
-        return new BestFitting(alternatives, new int[0], true);
+        return new BestFitting(alternatives, new int[0], true, null);
+    }
+
+    /**
+     * As {@link #bestFittingFirstLine(List)}, publishing the winner under {@code groupId} for dependent readers.
+     */
+    static Doc bestFittingFirstLine(List<Doc> alternatives, String groupId) {
+        return new BestFitting(alternatives, new int[0], true, groupId);
     }
 
     /**
@@ -313,7 +341,14 @@ public sealed interface Doc
      *     length does not equal the number of alternatives
      */
     static Doc bestFittingFirstLine(List<Doc> alternatives, int[] priorities) {
-        return new BestFitting(alternatives, priorities, true);
+        return new BestFitting(alternatives, priorities, true, null);
+    }
+
+    /**
+     * As {@link #bestFittingFirstLine(List, int[])}, publishing the winner under {@code groupId} for dependent readers.
+     */
+    static Doc bestFittingFirstLine(List<Doc> alternatives, int[] priorities, String groupId) {
+        return new BestFitting(alternatives, priorities, true, groupId);
     }
 
     /**
@@ -339,7 +374,14 @@ public sealed interface Doc
      *     length does not equal the number of alternatives
      */
     static Doc bestFitting(List<Doc> alternatives, int[] priorities) {
-        return new BestFitting(alternatives, priorities, false);
+        return new BestFitting(alternatives, priorities, false, null);
+    }
+
+    /**
+     * As {@link #bestFitting(List, int[])}, publishing the winner under {@code groupId} for dependent readers.
+     */
+    static Doc bestFitting(List<Doc> alternatives, int[] priorities, String groupId) {
+        return new BestFitting(alternatives, priorities, false, groupId);
     }
 
     /**
@@ -460,8 +502,13 @@ public sealed interface Doc
      * (see {@link #bestFittingFirstLine(List)}): a candidate whose first line fits beats one whose first line overruns.
      * Like {@code priorities} it is a static per-node ranking-mode fact, not a width; default {@code false} leaves the
      * ranking exactly as it was for callers that do not opt in.
+     *
+     * <p>{@code groupId} is an optional identity (nullable): when set, the walkers publish the verdict FLAT when the
+     * first (flattest) alternative wins and BREAK otherwise, so a later {@link IfBreak} reading that id follows this
+     * ranking. A null id is the common, anonymous case and has no rendering effect.
      */
-    record BestFitting(List<Doc> alternatives, int[] priorities, boolean rankFirstLineFirst) implements Doc {
+    record BestFitting(List<Doc> alternatives, int[] priorities, boolean rankFirstLineFirst, String groupId)
+        implements Doc {
         /**
          * Rejects an empty alternative list, defensively copies the alternatives, and normalizes {@code priorities} so
          * the "at least one alternative" and "one priority per alternative" invariants hold for every {@code BestFitting}

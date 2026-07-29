@@ -196,10 +196,19 @@ public record DocExplanation(
         int chosenIndex,
         int available,
         int startColumn,
+        Optional<String> groupId,
         List<Alternative> alternatives
     ) {
         public BestFittingDecision {
             alternatives = List.copyOf(alternatives);
+        }
+
+        /**
+         * The verdict this ranking publishes when it carries a {@code groupId}: FLAT when the flattest alternative won,
+         * BREAK otherwise. Dependent content reading that id follows this verdict, so the trace reports it.
+         */
+        public Decision verdict() {
+            return chosenIndex == 0 ? Decision.FLAT : Decision.BREAK;
         }
 
         /**

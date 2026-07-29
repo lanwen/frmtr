@@ -668,6 +668,73 @@ final class DocRendererTest {
     }
 
     @Test
+    void dependentBodyStaysUnindentedWhenTheRankedAssignmentKeepsItsAttachedArm() {
+        // The ranked pair publishes its verdict under "assign": the attached arm (32 columns) fits the 40-column width
+        // and has the higher priority, so it wins and the verdict is FLAT. The body that follows the ranked node reads
+        // that verdict through indentIfGroupBreaks and stays at the assignment's own indent.
+        Doc doc = Doc.concat(assignmentRankedByFirstLine(), huggedBodyFollowing());
+
+        assertThat(renderer(40).render(doc)).isEqualTo(
+            """
+                var runningTotal = computeTotals(
+                accumulate();
+                )"""
+        );
+    }
+
+    @Test
+    void dependentBodyIndentsWithTheAssignmentWhenTheRankedDecisionBreaksAfterEquals() {
+        // At 20 columns the attached arm's first line overruns, so the break-after-= arm wins and the ranked node
+        // publishes BREAK. The body sits outside the ranked node yet follows it: it indents one level, landing under the
+        // value on its continuation line instead of at the declaration's own indent.
+        Doc doc = Doc.concat(assignmentRankedByFirstLine(), huggedBodyFollowing());
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                var runningTotal =
+                  computeTotals(
+                  accumulate();
+                  )"""
+        );
+    }
+
+    @Test
+    void bodyReadingAnUnpublishedVerdictTakesTheFlatArm() {
+        // The ranked decision is anonymous, so nothing is published under "assign" and the reader that follows resolves
+        // the default FLAT arm — the documented behavior for an id no decision has decided.
+        Doc ranked = Doc.bestFittingFirstLine(
+            List.of(Doc.text("var runningTotal = computeTotals("), Doc.text("var runningTotal =")),
+            new int[] { 1, 0 }
+        );
+        Doc doc = Doc.concat(ranked, huggedBodyFollowing());
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                var runningTotal =
+                accumulate();
+                )"""
+        );
+    }
+
+    /** The attach-versus-break-after-{@code =} pair, ranked by first-line fit and publishing under "assign". */
+    private static Doc assignmentRankedByFirstLine() {
+        Doc attached = Doc.text("var runningTotal = computeTotals(");
+        Doc brokenAfterEquals = Doc.concat(
+            Doc.text("var runningTotal ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("computeTotals(")))
+        );
+        return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), new int[] { 1, 0 }, "assign");
+    }
+
+    /** The call body, built once outside the ranked node and indented only when the assignment broke. */
+    private static Doc huggedBodyFollowing() {
+        return Doc.indentIfGroupBreaks(
+            Doc.concat(Doc.HARD_LINE, Doc.text("accumulate();"), Doc.HARD_LINE, Doc.text(")")),
+            "assign"
+        );
+    }
+
+    @Test
     void anonymousIfBreakStillFollowsTheAmbientModeWhenGroupsAreIdentified() {
         // A null-groupId ifBreak keeps today's ambient behavior even though identified groups exist elsewhere in the
         // document: here the enclosing group breaks (its 24-wide content exceeds 20), so the anonymous ifBreak renders

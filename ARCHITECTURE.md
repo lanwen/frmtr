@@ -165,7 +165,7 @@ The combinator vocabulary groups into a handful of concerns:
 | Break opportunities | `Line`, `SoftLine`, `HardLine`, `BreakParent` | Optional vs. required line breaks; `BreakParent` forces the nearest enclosing group to break without printing a newline. |
 | Indentation | `Indent` | Increase indent after breaks. |
 | Width decisions | `Group`, `Fill`, `ConditionalGroup`, `BestFitting` | How a subtree chooses flat vs. broken (see below). |
-| Conditional content | `IfBreak` | Different output for flat vs. broken layout, optionally keyed to a named group. |
+| Conditional content | `IfBreak` (`Doc.indentIfGroupBreaks`) | Different output for flat vs. broken layout, optionally keyed to a named decision. |
 | Deferred content | `LineSuffix` | Trailing comments that lay out after the code on their line. |
 | Diagnostics | `Label` | Debug-only provenance; transparent to rendering and width. |
 | Pinned layout | `Doc.flat` / `Doc.flatCandidate` | Rewrite a subtree with every break decision resolved flat, so a ranked set can offer a genuinely single-line arm. |
@@ -185,7 +185,15 @@ The four **width-deciding** primitives are the heart of the model:
   affordable at any depth without a nesting cap — native-image-safe and near-linear on real code. `bestFittingFirstLine`
   opts a node into a first-line-fit ranking mode (a static per-node fact, not a width): when every alternative carries
   the same over-width body so none fits, it ranks first-line fit first, then less overflow before fewer lines — the arm
-  whose header fits wins over the fewest-lines arm whose opener spills.
+  whose header fits wins over the fewest-lines arm whose opener spills. A node may also carry a `groupId`, which
+  publishes the ranking's verdict — FLAT when the flattest alternative wins, BREAK otherwise.
+
+**Named verdicts** let content follow a decision it does not enclose. A `Group` or a `BestFitting` carrying a `groupId`
+publishes its flat/break verdict under that name; an `IfBreak` (or `Doc.indentIfGroupBreaks`, whose two arms hold the
+same instance so a comment inside is claimed once) reads it by name instead of the ambient mode. Document order decides
+what a reader sees: the deciding node must render before the reader, and an id nothing has published yet reads FLAT.
+Flat-width measurement is verdict-blind on purpose — it asks "can this render on one line?", where every decision is
+flat and the flat arm is the consistent answer.
 
 `Reserve` is how a printer tells one of those decisions what follows it. A ranked candidate is measured as if it ended
 the line, so an arm sitting at exactly the width renders one column over once the caller appends its `;` or `{`.
@@ -221,7 +229,12 @@ at build time is offered to both arms of a ranked pair without being claimed twi
 - **`DocWidths`** is the single width authority: it owns flat-width measurement and the fit test (so a fit decision can
   never diverge from the width reported for it) and `measureLineCount`, the side-effect-free replay used to rank
   `BestFitting` alternatives. A congruence test pins the replay's line count to the newlines `render` emits so the two
-  walks cannot drift.
+  walks cannot drift. The replay is seeded with the verdicts the deciding walk already published, so conditional content
+  inside a candidate measures the way it will render; its own verdicts stay local to the probe, and a node being ranked
+  measures each arm under that arm's provisional verdict, so an arm reading its own decision stays self-consistent.
+  Because a seeded verdict changes a ranking, the per-node ranking memo is keyed by the verdicts the node's subtree
+  actually reads, alongside (identity, indent, start column, reservation) — a subtree that reads none keeps the same
+  widely shared key it always had.
 - **`DocDebugRenderer`** produces a stable structural dump of the IR (break opportunities, groups, indent scopes, rule
   labels) for maintainers; exposed via `Frmtr.debugDoc(...)`.
 - **`DocExplainRenderer`** re-walks the document with the same fit logic to produce a presentation-free explanation of

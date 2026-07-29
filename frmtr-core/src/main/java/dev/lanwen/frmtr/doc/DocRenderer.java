@@ -20,12 +20,12 @@ public final class DocRenderer {
     private final List<BufferedSuffix> lineSuffixes = new ArrayList<>();
 
     /**
-     * Mode chosen by each identified {@link Doc.Group}, keyed by its {@code groupId}. A dependent {@link Doc.IfBreak}
+     * GroupMode chosen by each identified {@link Doc.Group}, keyed by its {@code groupId}. A dependent {@link Doc.IfBreak}
      * with a matching id reads this map instead of the ambient mode, so a closing delimiter can follow the break/flat
      * decision of an opener group it does not enclose. Populated as each identified group renders and reset per render,
      * which requires the identified group to render before the {@code IfBreak} that targets it.
      */
-    private final Map<String, Mode> groupModes = new HashMap<>();
+    private final Map<String, GroupMode> groupModes = new HashMap<>();
 
     /**
      * Structural indentation fact for each output line, in order, recorded only when a caller renders through
@@ -86,7 +86,7 @@ public final class DocRenderer {
         recordLineStart(true, 0);
         DocWidths.Measurement widths = DocWidths.measurement();
         widths.indentWidth(options.indentUnit().length());
-        render(doc, 0, Mode.BREAK, widths);
+        render(doc, 0, GroupMode.BREAK, widths);
         flushLineSuffixes(widths);
         String rendered = out.toString();
         if (options.trailingNewline() && !rendered.endsWith(options.lineEnding().value())) {
@@ -95,19 +95,19 @@ public final class DocRenderer {
         return new RenderedSource(rendered, tracking ? List.copyOf(lineIndents) : List.of());
     }
 
-    private void render(Doc doc, int indent, Mode mode, DocWidths.Measurement widths) {
+    private void render(Doc doc, int indent, GroupMode mode, DocWidths.Measurement widths) {
         switch (doc) {
             case Doc.Text text -> append(text.value());
             case Doc.Concat concat -> concat.docs().forEach(child -> render(child, indent, mode, widths));
             case Doc.Line ignored -> {
-                if (mode == Mode.FLAT) {
+                if (mode == GroupMode.FLAT) {
                     append(" ");
                 } else {
                     newline(indent, widths);
                 }
             }
             case Doc.SoftLine ignored -> {
-                if (mode == Mode.BREAK) {
+                if (mode == GroupMode.BREAK) {
                     newline(indent, widths);
                 }
             }
@@ -118,7 +118,7 @@ public final class DocRenderer {
             }
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
             case Doc.Group group -> {
-                Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+                GroupMode next = widths.fits(group.doc(), options.lineWidth() - column) ? GroupMode.FLAT : GroupMode.BREAK;
                 if (group.groupId() != null) {
                     groupModes.put(group.groupId(), next);
                 }
@@ -130,11 +130,11 @@ public final class DocRenderer {
             case Doc.IfBreak conditional -> {
                 // An identified IfBreak follows the recorded mode of its target group (which must have rendered first);
                 // an anonymous IfBreak follows the ambient mode. A target that has not rendered yet is treated as flat.
-                Mode effective = conditional.groupId() == null
+                GroupMode effective = conditional.groupId() == null
                     ? mode
-                    : groupModes.getOrDefault(conditional.groupId(), Mode.FLAT);
+                    : groupModes.getOrDefault(conditional.groupId(), GroupMode.FLAT);
                 render(
-                    effective == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
+                    effective == GroupMode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
                     indent,
                     mode,
                     widths
@@ -164,17 +164,17 @@ public final class DocRenderer {
         if (parts.isEmpty()) {
             return;
         }
-        render(parts.getFirst(), indent, Mode.FLAT, widths);
+        render(parts.getFirst(), indent, GroupMode.FLAT, widths);
         for (int i = 1; i + 1 < parts.size(); i += 2) {
             Doc separator = parts.get(i);
             Doc nextContent = parts.get(i + 1);
             // Decide this separator from the column reached after the preceding content via the shared fit helper, so
             // the renderer and the --explain trace make the identical per-separator flat/break choice.
-            Mode separatorMode = widths.separatorFitsFlat(separator, nextContent, options.lineWidth() - column)
-                ? Mode.FLAT
-                : Mode.BREAK;
+            GroupMode separatorMode = widths.separatorFitsFlat(separator, nextContent, options.lineWidth() - column)
+                ? GroupMode.FLAT
+                : GroupMode.BREAK;
             render(separator, indent, separatorMode, widths);
-            render(nextContent, indent, Mode.FLAT, widths);
+            render(nextContent, indent, GroupMode.FLAT, widths);
         }
     }
 
@@ -190,12 +190,12 @@ public final class DocRenderer {
         int reserved = takeReservedColumns();
         for (Doc alternative : alternatives) {
             if (widths.fits(alternative, options.lineWidth() - column - reserved)) {
-                render(alternative, indent, Mode.FLAT, widths);
+                render(alternative, indent, GroupMode.FLAT, widths);
                 return;
             }
         }
         // No alternative fits flat, so render the last one in break mode as the unconditional fallback.
-        render(alternatives.getLast(), indent, Mode.BREAK, widths);
+        render(alternatives.getLast(), indent, GroupMode.BREAK, widths);
     }
 
     /**
@@ -212,14 +212,28 @@ public final class DocRenderer {
      * Renders a {@link Doc.BestFitting} by keeping the alternative that minimizes rendered line count at the live output
      * column (rule B8 + D16). Selection is delegated to {@link DocWidths.Measurement#chooseBestFitting} — the same
      * decision the line-count simulation uses, so the alternative rendered here cannot drift from the one the ranking
-     * measured. The probes are side-effect-free (they never touch {@code out}, {@code column}, {@code groupModes}, or
-     * {@code lineSuffixes}), so the winner is rendered <em>once</em>, in break mode, letting its own inner groups decide
-     * flat-vs-broken from the column they reach. A nested best-fitting node inside the winner is ranked at its own
-     * column through the same shared, memoized decision.
+     * measured. The probes are side-effect-free (they never touch {@code out}, {@code column}, or {@code lineSuffixes}),
+     * so the winner is rendered <em>once</em>, in break mode, letting its own inner groups decide flat-vs-broken from the
+     * column they reach. A nested best-fitting node inside the winner is ranked at its own column through the same
+     * shared, memoized decision.
+     *
+     * <p>The verdicts already published are handed to the ranking so conditional content inside an arm measures the way
+     * it will render, and an identified node publishes its own verdict — FLAT for the flattest arm — before the winner
+     * renders, so dependent content that follows can read it.
      */
     private void renderBestFitting(Doc.BestFitting bestFitting, int indent, DocWidths.Measurement widths) {
-        int chosen = widths.chooseBestFitting(bestFitting, indent, column, options.lineWidth(), takeReservedColumns());
-        render(bestFitting.alternatives().get(chosen), indent, Mode.BREAK, widths);
+        int chosen = widths.chooseBestFitting(
+            bestFitting,
+            indent,
+            column,
+            options.lineWidth(),
+            takeReservedColumns(),
+            groupModes
+        );
+        if (bestFitting.groupId() != null) {
+            groupModes.put(bestFitting.groupId(), DocWidths.Measurement.verdictOf(chosen));
+        }
+        render(bestFitting.alternatives().get(chosen), indent, GroupMode.BREAK, widths);
     }
 
     private void append(String value) {
@@ -326,12 +340,7 @@ public final class DocRenderer {
         }
     }
 
-    private enum Mode {
-        FLAT,
-        BREAK,
-    }
-
-    private record BufferedSuffix(Doc content, int indent, Mode mode) {}
+    private record BufferedSuffix(Doc content, int indent, GroupMode mode) {}
 
     /**
      * The rendered source paired with a per-line structural indentation signal, produced by {@link #renderIndented(Doc)}.

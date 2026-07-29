@@ -85,7 +85,12 @@ final class ChainSegmentPaddingLayout {
                 // Rebuild through the canonical constructor so the padded copy keeps the node's full ranking shape —
                 // both the priority vector and the first-line-fit mode — rather than collapsing to the default metric.
                 yield new PaddedDoc(
-                    new Doc.BestFitting(alternatives, bestFitting.priorities(), bestFitting.rankFirstLineFirst()),
+                    new Doc.BestFitting(
+                        alternatives,
+                        bestFitting.priorities(),
+                        bestFitting.rankFirstLineFirst(),
+                        bestFitting.groupId()
+                    ),
                     false
                 );
             }

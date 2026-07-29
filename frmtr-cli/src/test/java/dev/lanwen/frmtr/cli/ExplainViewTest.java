@@ -111,6 +111,7 @@ final class ExplainViewTest {
             1,
             20,
             0,
+            Optional.empty(),
             List.of(
                 new BestFittingDecision.Alternative(0, 4, 3, 0, 0, false),
                 new BestFittingDecision.Alternative(1, 2, 0, 0, 0, true)
@@ -128,6 +129,27 @@ final class ExplainViewTest {
     }
 
     @Test
+    void namesTheGroupAndVerdictWhenARankedDecisionPublishesOne() {
+        // A ranked decision that dependent content reads: the report names the id and the verdict, so a developer can
+        // see which decision moved the content that follows it.
+        BestFittingDecision bestFitting = new BestFittingDecision(
+            Optional.of("java.expression:MethodCallExpr"),
+            1,
+            80,
+            0,
+            Optional.of("initializer-assign"),
+            List.of(
+                new BestFittingDecision.Alternative(0, 2, 4, 4, 1, false),
+                new BestFittingDecision.Alternative(1, 3, 0, 0, 0, true)
+            )
+        );
+
+        String why = renderWhy(explanationWith(List.of(), List.of(), List.of(bestFitting)));
+
+        assertThat(why).contains("publishes initializer-assign as BREAK");
+    }
+
+    @Test
     void rendersThePriorityWhenAHigherPriorityAlternativeWonOverAFewerLinesOne() {
         // A caller set a preference: alternative 1 uses one more line than alternative 0 yet was chosen because its
         // priority is higher. The report prints the priority so the win does not look like it contradicts line count.
@@ -136,6 +158,7 @@ final class ExplainViewTest {
             1,
             80,
             0,
+            Optional.empty(),
             List.of(
                 new BestFittingDecision.Alternative(0, 2, 0, 0, 0, false),
                 new BestFittingDecision.Alternative(1, 3, 0, 0, 1, true)
@@ -159,6 +182,7 @@ final class ExplainViewTest {
             1,
             70,
             0,
+            Optional.empty(),
             List.of(
                 new BestFittingDecision.Alternative(0, 3, 5, 5, 0, false),
                 new BestFittingDecision.Alternative(1, 4, 0, 0, 0, true)
@@ -181,6 +205,7 @@ final class ExplainViewTest {
             0,
             80,
             0,
+            Optional.empty(),
             List.of(
                 new BestFittingDecision.Alternative(0, 0, 0, 0, 0, true),
                 new BestFittingDecision.Alternative(1, 2, 0, 0, 0, false)

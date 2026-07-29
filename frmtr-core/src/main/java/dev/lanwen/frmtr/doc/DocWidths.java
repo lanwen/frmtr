@@ -43,8 +43,9 @@ final class DocWidths {
      * Per-render width measurement state.
      *
      * <p>The cache stores only complete flat widths, never the result of a bounded fit that stopped after overflow.
-     * {@link Doc.IfBreak} is measured by its flat branch only, matching the renderer's group-fit question: "can this
-     * group render on one line?"
+     * {@link Doc.IfBreak} is measured by its flat branch only — group ids play no part in flat width, because a flat
+     * measurement asks "can this render on one line?", where every enclosing decision is flat and the flat arm is the
+     * consistent answer.
      */
     static final class Measurement {
 
@@ -59,6 +60,13 @@ final class DocWidths {
          */
         private final IdentityHashMap<Doc.BestFitting, Map<RankContext, Integer>> bestFittingChoices =
             new IdentityHashMap<>();
+
+        /**
+         * The group ids a subtree reads through an identified {@link Doc.IfBreak}, memoized by node identity. Only these
+         * ids can change a ranking, so only their seeded verdicts enter the memo key — a subtree that reads none keeps
+         * the plain (indent, column, reserved) key it always had.
+         */
+        private final IdentityHashMap<Doc, List<String>> readGroupIds = new IdentityHashMap<>();
 
         /**
          * Width of one indentation unit in columns, used only by the {@link #measureLineCount} simulation to reset the
@@ -126,7 +134,7 @@ final class DocWidths {
          * across a render, so identity plus (indent, start column) fully determines the choice.
          */
         int chooseBestFitting(Doc.BestFitting bestFitting, int indent, int startColumn, int lineWidth) {
-            return chooseBestFitting(bestFitting, indent, startColumn, lineWidth, 0);
+            return chooseBestFitting(bestFitting, indent, startColumn, lineWidth, 0, Map.of());
         }
 
         /**
@@ -134,13 +142,34 @@ final class DocWidths {
          * same-line content charged against each candidate's last line (see {@link Doc#reserving(Doc, int)}).
          */
         int chooseBestFitting(Doc.BestFitting bestFitting, int indent, int startColumn, int lineWidth, int reserved) {
+            return chooseBestFitting(bestFitting, indent, startColumn, lineWidth, reserved, Map.of());
+        }
+
+        /**
+         * As {@link #chooseBestFitting(Doc.BestFitting, int, int, int, int)}, with the group verdicts {@code outerModes}
+         * the deciding walk has already published. Each candidate is measured under those verdicts, so conditional
+         * content inside an arm resolves the same way it will when the winner renders.
+         *
+         * <p>When this node carries a group id, each arm is additionally measured under its own provisional verdict
+         * (FLAT for the first arm, BREAK for the rest), so an arm that reads the very decision it belongs to stays
+         * self-consistent. An arm re-deciding a group that lives inside it is likewise per-arm and correct.
+         */
+        int chooseBestFitting(
+                Doc.BestFitting bestFitting,
+                int indent,
+                int startColumn,
+                int lineWidth,
+                int reserved,
+                Map<String, GroupMode> outerModes
+        ) {
             List<Doc> alternatives = bestFitting.alternatives();
             if (alternatives.size() == 1) {
                 return 0;
             }
             Map<RankContext, Integer> byContext =
                 bestFittingChoices.computeIfAbsent(bestFitting, ignored -> new HashMap<>());
-            RankContext contextKey = new RankContext(indent, startColumn, reserved);
+            RankContext contextKey =
+                new RankContext(indent, startColumn, reserved, observedModes(bestFitting, outerModes));
             Integer cached = byContext.get(contextKey);
             if (cached != null) {
                 return cached;
@@ -153,7 +182,14 @@ final class DocWidths {
             for (int i = 0; i < limit; i++) {
                 // Rank each candidate as it would render at this column, resolving any nested best-fitting nodes at their
                 // own column so the metric matches what the winner will actually emit.
-                LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth, reserved);
+                LineCount candidate = measureLineCount(
+                    alternatives.get(i),
+                    indent,
+                    startColumn,
+                    lineWidth,
+                    reserved,
+                    armModes(bestFitting, outerModes, i)
+                );
                 if (best == null || betterThan(candidate, priorities[i], best, priorities[bestIndex], rankFirstLineFirst)) {
                     best = candidate;
                     bestIndex = i;
@@ -161,6 +197,81 @@ final class DocWidths {
             }
             byContext.put(contextKey, bestIndex);
             return bestIndex;
+        }
+
+        /** The verdict FLAT/BREAK a ranked decision publishes: FLAT exactly when the flattest alternative wins. */
+        static GroupMode verdictOf(int chosenIndex) {
+            return chosenIndex == 0 ? GroupMode.FLAT : GroupMode.BREAK;
+        }
+
+        /** The seed an arm is measured under: the outer verdicts plus this node's own provisional per-arm verdict. */
+        private Map<String, GroupMode> armModes(
+                Doc.BestFitting bestFitting,
+                Map<String, GroupMode> outerModes,
+                int index
+        ) {
+            if (bestFitting.groupId() == null) {
+                return outerModes;
+            }
+            Map<String, GroupMode> seeded = new HashMap<>(outerModes);
+            seeded.put(bestFitting.groupId(), verdictOf(index));
+            return seeded;
+        }
+
+        /**
+         * The part of {@code outerModes} this node's subtree can actually observe, rendered as a compact key. Empty for
+         * a subtree that reads no group id, which keeps the memo as sharable as it was before verdicts were threaded.
+         */
+        private String observedModes(Doc.BestFitting bestFitting, Map<String, GroupMode> outerModes) {
+            if (outerModes.isEmpty()) {
+                return "";
+            }
+            StringBuilder key = new StringBuilder();
+            for (String id : groupIdsRead(bestFitting)) {
+                GroupMode mode = outerModes.get(id);
+                if (mode != null) {
+                    key.append(id).append('=').append(mode == GroupMode.FLAT ? 'F' : 'B').append(';');
+                }
+            }
+            return key.toString();
+        }
+
+        /** The identified {@link Doc.IfBreak} ids anywhere under {@code doc}, in a stable order, memoized per node. */
+        private List<String> groupIdsRead(Doc doc) {
+            List<String> cached = readGroupIds.get(doc);
+            if (cached != null) {
+                return cached;
+            }
+            java.util.TreeSet<String> ids = new java.util.TreeSet<>();
+            collectGroupIdsRead(doc, ids);
+            List<String> collected = List.copyOf(ids);
+            readGroupIds.put(doc, collected);
+            return collected;
+        }
+
+        private void collectGroupIdsRead(Doc doc, java.util.Set<String> ids) {
+            switch (doc) {
+                case Doc.IfBreak conditional -> {
+                    if (conditional.groupId() != null) {
+                        ids.add(conditional.groupId());
+                    }
+                    collectGroupIdsRead(conditional.breakDoc(), ids);
+                    collectGroupIdsRead(conditional.flatDoc(), ids);
+                }
+                case Doc.Concat concat -> concat.docs().forEach(child -> collectGroupIdsRead(child, ids));
+                case Doc.Fill fill -> fill.parts().forEach(child -> collectGroupIdsRead(child, ids));
+                case Doc.ConditionalGroup conditionalGroup ->
+                    conditionalGroup.alternatives().forEach(child -> collectGroupIdsRead(child, ids));
+                case Doc.BestFitting nested -> nested.alternatives().forEach(child -> collectGroupIdsRead(child, ids));
+                case Doc.Group group -> collectGroupIdsRead(group.doc(), ids);
+                case Doc.Indent indented -> collectGroupIdsRead(indented.doc(), ids);
+                case Doc.Label label -> collectGroupIdsRead(label.doc(), ids);
+                case Doc.Reserve reserve -> collectGroupIdsRead(reserve.doc(), ids);
+                case Doc.LineSuffix lineSuffix -> collectGroupIdsRead(lineSuffix.content(), ids);
+                default -> {
+                    // Leaves read no group id.
+                }
+            }
         }
 
         /**
@@ -224,7 +335,8 @@ final class DocWidths {
          * sink abstraction this foundation leaves intact).
          *
          * <p>The walk keeps its own scratch column, group-mode map, and line-suffix buffer — never the renderer's — so a
-         * ranking probe cannot perturb an in-progress render. Inner {@link Doc.Group} fit and nested best-fitting nodes
+         * ranking probe cannot perturb an in-progress render. Its group-mode map starts as a copy of the deciding walk's
+         * verdicts, so a verdict published before the probe crosses into it while the probe's own verdicts stay local. Inner {@link Doc.Group} fit and nested best-fitting nodes
          * are resolved through the same shared {@link #fits} cache and {@link #chooseBestFitting} the renderer uses, under
          * the same depth bound.
          *
@@ -232,7 +344,7 @@ final class DocWidths {
          *     at end of the document
          */
         LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth) {
-            return measureLineCount(doc, indent, startColumn, lineWidth, 0);
+            return measureLineCount(doc, indent, startColumn, lineWidth, 0, Map.of());
         }
 
         /**
@@ -240,11 +352,26 @@ final class DocWidths {
          * against the document's last line — the {@code ;} or {@code {} that follows a ranked candidate on the same line.
          */
         LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth, int reserved) {
-            LineCountWalk walk = new LineCountWalk(lineWidth);
+            return measureLineCount(doc, indent, startColumn, lineWidth, reserved, Map.of());
+        }
+
+        /**
+         * As {@link #measureLineCount(Doc, int, int, int, int)}, seeded with the group verdicts the deciding walk has
+         * already published so an identified {@link Doc.IfBreak} inside {@code doc} resolves as it will when rendered.
+         */
+        LineCount measureLineCount(
+                Doc doc,
+                int indent,
+                int startColumn,
+                int lineWidth,
+                int reserved,
+                Map<String, GroupMode> outerModes
+        ) {
+            LineCountWalk walk = new LineCountWalk(lineWidth, outerModes);
             walk.column = startColumn;
             walk.reserved = reserved;
             walk.trailingReserved = reserved;
-            walk.walk(doc, indent, LineMode.BREAK);
+            walk.walk(doc, indent, GroupMode.BREAK);
             walk.flushLineSuffixes();
             walk.accountOverflowAtEnd();
             return new LineCount(walk.lines, walk.overflow, walk.firstLineOverflow);
@@ -337,7 +464,7 @@ final class DocWidths {
 
             private final int lineWidth;
 
-            private final Map<String, LineMode> groupModes = new HashMap<>();
+            private final Map<String, GroupMode> groupModes;
 
             private final List<BufferedSuffix> lineSuffixes = new java.util.ArrayList<>();
 
@@ -356,23 +483,24 @@ final class DocWidths {
             /** The reservation the whole walk closes on, charged to its last line by {@link #accountOverflowAtEnd}. */
             private int trailingReserved;
 
-            private LineCountWalk(int lineWidth) {
+            private LineCountWalk(int lineWidth, Map<String, GroupMode> outerModes) {
                 this.lineWidth = lineWidth;
+                this.groupModes = new HashMap<>(outerModes);
             }
 
-            private void walk(Doc doc, int indent, LineMode mode) {
+            private void walk(Doc doc, int indent, GroupMode mode) {
                 switch (doc) {
                     case Doc.Text text -> advance(text.value());
                     case Doc.Concat concat -> concat.docs().forEach(child -> walk(child, indent, mode));
                     case Doc.Line ignored -> {
-                        if (mode == LineMode.FLAT) {
+                        if (mode == GroupMode.FLAT) {
                             advance(" ");
                         } else {
                             newline(indent);
                         }
                     }
                     case Doc.SoftLine ignored -> {
-                        if (mode == LineMode.BREAK) {
+                        if (mode == GroupMode.BREAK) {
                             newline(indent);
                         }
                     }
@@ -382,7 +510,7 @@ final class DocWidths {
                     }
                     case Doc.Indent indented -> walk(indented.doc(), indent + 1, mode);
                     case Doc.Group group -> {
-                        LineMode next = fits(group.doc(), lineWidth - column) ? LineMode.FLAT : LineMode.BREAK;
+                        GroupMode next = fits(group.doc(), lineWidth - column) ? GroupMode.FLAT : GroupMode.BREAK;
                         if (group.groupId() != null) {
                             groupModes.put(group.groupId(), next);
                         }
@@ -391,8 +519,12 @@ final class DocWidths {
                     case Doc.Fill fill -> walkFill(fill.parts(), indent);
                     case Doc.ConditionalGroup conditionalGroup -> walkConditionalGroup(conditionalGroup.alternatives(), indent);
                     case Doc.BestFitting bestFitting -> {
-                        int chosen = chooseBestFitting(bestFitting, indent, column, lineWidth, takeReserved());
-                        walk(bestFitting.alternatives().get(chosen), indent, LineMode.BREAK);
+                        int chosen =
+                            chooseBestFitting(bestFitting, indent, column, lineWidth, takeReserved(), groupModes);
+                        if (bestFitting.groupId() != null) {
+                            groupModes.put(bestFitting.groupId(), verdictOf(chosen));
+                        }
+                        walk(bestFitting.alternatives().get(chosen), indent, GroupMode.BREAK);
                     }
                     case Doc.Reserve reserve -> {
                         int enclosing = reserved;
@@ -401,10 +533,10 @@ final class DocWidths {
                         reserved = enclosing;
                     }
                     case Doc.IfBreak conditional -> {
-                        LineMode effective = conditional.groupId() == null
+                        GroupMode effective = conditional.groupId() == null
                             ? mode
-                            : groupModes.getOrDefault(conditional.groupId(), LineMode.FLAT);
-                        walk(effective == LineMode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, mode);
+                            : groupModes.getOrDefault(conditional.groupId(), GroupMode.FLAT);
+                        walk(effective == GroupMode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, mode);
                     }
                     case Doc.Label label -> walk(label.doc(), indent, mode);
                     case Doc.LineSuffix lineSuffix ->
@@ -417,15 +549,15 @@ final class DocWidths {
                 if (parts.isEmpty()) {
                     return;
                 }
-                walk(parts.getFirst(), indent, LineMode.FLAT);
+                walk(parts.getFirst(), indent, GroupMode.FLAT);
                 for (int i = 1; i + 1 < parts.size(); i += 2) {
                     Doc separator = parts.get(i);
                     Doc nextContent = parts.get(i + 1);
-                    LineMode separatorMode = separatorFitsFlat(separator, nextContent, lineWidth - column)
-                        ? LineMode.FLAT
-                        : LineMode.BREAK;
+                    GroupMode separatorMode = separatorFitsFlat(separator, nextContent, lineWidth - column)
+                        ? GroupMode.FLAT
+                        : GroupMode.BREAK;
                     walk(separator, indent, separatorMode);
-                    walk(nextContent, indent, LineMode.FLAT);
+                    walk(nextContent, indent, GroupMode.FLAT);
                 }
             }
 
@@ -434,11 +566,11 @@ final class DocWidths {
                 int available = lineWidth - column - takeReserved();
                 for (Doc alternative : alternatives) {
                     if (fits(alternative, available)) {
-                        walk(alternative, indent, LineMode.FLAT);
+                        walk(alternative, indent, GroupMode.FLAT);
                         return;
                     }
                 }
-                walk(alternatives.getLast(), indent, LineMode.BREAK);
+                walk(alternatives.getLast(), indent, GroupMode.BREAK);
             }
 
             /** Mirrors {@link DocRenderer}'s take-once reservation: one decision spends it, inner ones see none. */
@@ -510,14 +642,15 @@ final class DocWidths {
             }
         }
 
-        private record BufferedSuffix(Doc content, int indent, LineMode mode) {}
+        private record BufferedSuffix(Doc content, int indent, GroupMode mode) {}
 
         /**
          * The measurement context a {@link Doc.BestFitting} ranking is memoized under: its indent, the column it starts
-         * at, and the columns reserved for caller content on its last line. All three change the verdict, so all three
-         * key the cache.
+         * at, the columns reserved for caller content on its last line, and the seeded verdicts its subtree reads. All
+         * four change the ranking, so all four key the cache; {@code observedModes} is empty for the common node that
+         * reads no group id, so those rankings stay as widely shared as before.
          */
-        private record RankContext(int indent, int startColumn, int reserved) {}
+        private record RankContext(int indent, int startColumn, int reserved, String observedModes) {}
     }
 
     /**
@@ -573,10 +706,5 @@ final class DocWidths {
             }
             return overflow < other.overflow;
         }
-    }
-
-    private enum LineMode {
-        FLAT,
-        BREAK,
     }
 }

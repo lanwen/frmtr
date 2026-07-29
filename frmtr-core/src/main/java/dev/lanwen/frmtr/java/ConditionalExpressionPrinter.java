@@ -38,6 +38,12 @@ import java.util.function.Predicate;
  */
 final class ConditionalExpressionPrinter {
 
+    /** Semantic label for the ternary condition part of a broken conditional; a seam reads it with {@code Doc.findLabelled}. */
+    static final String TERNARY_CONDITION_LABEL = "part:ternary-condition";
+
+    /** Semantic label for the indented {@code ?}/{@code :} branch block of a broken conditional. */
+    static final String TERNARY_BRANCHES_LABEL = "part:ternary-branches";
+
     private final ConditionalCommentLayout conditionalComments;
 
     private final FormatterOptions options;
@@ -310,16 +316,19 @@ final class ConditionalExpressionPrinter {
 
     private Doc brokenConditionalExpression(ConditionalExpr expression) {
         return Doc.concat(
-            conditionalCondition(expression),
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    Doc.text("? "),
-                    conditionalBranch(expression.getThenExpr()),
-                    conditionalComments.branchTailTrailingComment(expression.getThenExpr()),
-                    Doc.HARD_LINE,
-                    Doc.text(": "),
-                    conditionalBranch(expression.getElseExpr())
+            Doc.label(TERNARY_CONDITION_LABEL, conditionalCondition(expression)),
+            Doc.label(
+                TERNARY_BRANCHES_LABEL,
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.text("? "),
+                        conditionalBranch(expression.getThenExpr()),
+                        conditionalComments.branchTailTrailingComment(expression.getThenExpr()),
+                        Doc.HARD_LINE,
+                        Doc.text(": "),
+                        conditionalBranch(expression.getElseExpr())
+                    )
                 )
             )
         );

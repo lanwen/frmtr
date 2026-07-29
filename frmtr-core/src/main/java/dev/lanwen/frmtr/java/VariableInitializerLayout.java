@@ -384,7 +384,6 @@ final class VariableInitializerLayout {
         this.conditionalLayout = new InitializerConditionalLayout(
             this.options,
             this.layoutWidth,
-            this.compact,
             context.compactSource::compact,
             brokenConditionalExpression,
             shouldBreakBeforeConditionalInitializer

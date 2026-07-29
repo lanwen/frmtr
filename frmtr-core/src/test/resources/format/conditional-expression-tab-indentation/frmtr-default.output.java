@@ -19,10 +19,9 @@ class ConditionalExpression {
     }
 
     void ternaryOperationThatShouldBreak3() {
-        var result =
-            featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
-                ? primaryResult
-                : backupResult;
+        var result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+            ? primaryResult
+            : backupResult;
         result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
             ? primaryResult
             : backupResult;
@@ -78,10 +77,9 @@ class ConditionalExpression {
             ? primaryResult
             : backupResult;
 
-        RoutingChoice featureEnabled =
-            quotaAvailable(expandedRegionAvailable, planReady, fallbackReady) != policyReady
-                ? primaryResult
-                : backupResult;
+        RoutingChoice featureEnabled = quotaAvailable(expandedRegionAvailable, planReady, fallbackReady) != policyReady
+            ? primaryResult
+            : backupResult;
 
         RoutingChoice featureEnabled =
             quotaAvailable(expandedRegionAvailable, migrationPlanReady, fallbackReady) != policyReady

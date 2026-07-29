@@ -756,6 +756,32 @@ final class DocRendererTest {
     }
 
     @Test
+    void findLabelledReturnsTheContentOfTheFirstMatchInDocumentOrder() {
+        Doc doc = Doc.concat(
+            Doc.label("part:condition", Doc.text("ready")),
+            Doc.text(" ? "),
+            Doc.label("part:branch", Doc.text("go"))
+        );
+
+        assertThat(Doc.findLabelled(doc, "part:condition")).contains(Doc.text("ready"));
+        assertThat(Doc.findLabelled(doc, "part:branch")).contains(Doc.text("go"));
+        assertThat(Doc.findLabelled(doc, "part:missing")).isEmpty();
+    }
+
+    @Test
+    void findLabelledDoesNotDescendIntoBestFittingOrConditionalGroupAlternatives() {
+        Doc bestFitting = Doc.bestFitting(
+            List.of(Doc.label("part:condition", Doc.text("flat")), Doc.label("part:condition", Doc.text("broken")))
+        );
+        Doc conditionalGroup = Doc.conditionalGroup(
+            List.of(Doc.label("part:condition", Doc.text("flat")), Doc.text("broken"))
+        );
+
+        assertThat(Doc.findLabelled(bestFitting, "part:condition")).isEmpty();
+        assertThat(Doc.findLabelled(conditionalGroup, "part:condition")).isEmpty();
+    }
+
+    @Test
     void selectsBreakOnlyAndFlatOnlyBranches() {
         Doc doc = Doc.group(
             Doc.concat(

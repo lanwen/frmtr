@@ -1,10 +1,9 @@
 class ConditionalExpression {
 
   int ternaryOperationThatShouldBreak() {
-    int shortInteger =
-      thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
-        ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
-        : thisIsAShortInteger;
+    int shortInteger = thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+      ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+      : thisIsAShortInteger;
     return thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
       ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
       : thisIsAShortInteger;
@@ -20,24 +19,22 @@ class ConditionalExpression {
   }
 
   RoutingChoice ternaryOperationThatShouldBreak3() {
-    var expressionResult =
-      featureEnabled
-      && quotaAvailable
-      && regionAvailable
-      && planReady
-      && fallbackReady
-      && policyReady
-        ? primaryResult
-        : backupResult;
-    var result =
-      featureEnabled
-      && quotaAvailable
-      && regionAvailable
-      && planReady
-      && fallbackReady
-      && policyReady
-        ? primaryResult
-        : backupResult;
+    var expressionResult = featureEnabled
+    && quotaAvailable
+    && regionAvailable
+    && planReady
+    && fallbackReady
+    && policyReady
+      ? primaryResult
+      : backupResult;
+    var result = featureEnabled
+    && quotaAvailable
+    && regionAvailable
+    && planReady
+    && fallbackReady
+    && policyReady
+      ? primaryResult
+      : backupResult;
     result = featureEnabled
     && quotaAvailable
     && regionAvailable
@@ -113,22 +110,31 @@ class ConditionalExpression {
   }
 
   void assignment() {
-    RoutingChoice featureEnabled =
-      quotaAvailable(regionAvailable, planReady, fallbackReady) != policyReady
-        ? primaryResult
-        : backupResult;
+    RoutingChoice featureEnabled = quotaAvailable(
+      regionAvailable,
+      planReady,
+      fallbackReady
+    ) != policyReady
+      ? primaryResult
+      : backupResult;
 
-    RoutingChoice featureEnabled =
-      quotaAvailable(expandedRegionAvailable, planReady, fallbackReady)
-      != policyReady
-        ? primaryResult
-        : backupResult;
+    RoutingChoice featureEnabled = quotaAvailable(
+      expandedRegionAvailable,
+      planReady,
+      fallbackReady
+    )
+    != policyReady
+      ? primaryResult
+      : backupResult;
 
-    RoutingChoice featureEnabled =
-      quotaAvailable(expandedRegionAvailable, migrationPlanReady, fallbackReady)
-      != policyReady
-        ? primaryResult
-        : backupResult;
+    RoutingChoice featureEnabled = quotaAvailable(
+      expandedRegionAvailable,
+      migrationPlanReady,
+      fallbackReady
+    )
+    != policyReady
+      ? primaryResult
+      : backupResult;
 
     featureEnabled =
       quotaAvailable(regionAvailable, planReady, fallbackReady) != policyReady

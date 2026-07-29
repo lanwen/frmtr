@@ -5,6 +5,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * The layout intermediate representation between Java syntax rules and rendered text.
+ *
+ * <p>{@link Label} names are shared between two callers: rule envelopes stamp a provenance name (e.g.
+ * {@code java.expression:ConditionalExpr}) for debugging, and printers stamp a semantic part name a later seam queries
+ * with {@link #findLabelled(Doc, String)}. To keep the two from colliding, semantic names use the reserved
+ * {@code part:} prefix; a rule name never starts with it.
+ */
 public sealed interface Doc
     permits
         Doc.BestFitting,
@@ -184,6 +192,44 @@ public sealed interface Doc
 
     static Doc label(String label, Doc doc) {
         return new Label(label, doc);
+    }
+
+    /**
+     * Finds the content of the first {@link Label} named {@code label}, walked in document order, so a printer can
+     * read a part it built earlier without re-deriving it as a string. The walk stops at {@link BestFitting} and
+     * {@link ConditionalGroup}: a label inside an undecided alternative is ambiguous before the renderer picks one, so
+     * this returns empty rather than guessing which alternative's copy is "the" answer.
+     *
+     * <p>Rule-envelope labels ({@code java.expression:}, {@code java.statement:}, and friends) and semantic query labels
+     * share this one node type, so a semantic label name must not collide with a rule name. Semantic labels use the
+     * reserved {@code part:} prefix (e.g. {@code part:ternary-condition}); callers must not query a bare rule name.
+     */
+    static Optional<Doc> findLabelled(Doc doc, String label) {
+        return switch (doc) {
+            case Label found when found.label().equals(label) -> Optional.of(found.doc());
+            case Label other -> findLabelled(other.doc(), label);
+            case Concat concat -> concat.docs().stream()
+                .map(child -> findLabelled(child, label))
+                .flatMap(Optional::stream)
+                .findFirst();
+            case Fill fill -> fill.parts().stream()
+                .map(part -> findLabelled(part, label))
+                .flatMap(Optional::stream)
+                .findFirst();
+            case Indent indented -> findLabelled(indented.doc(), label);
+            case Group group -> findLabelled(group.doc(), label);
+            case Reserve reserve -> findLabelled(reserve.doc(), label);
+            case LineSuffix lineSuffix -> findLabelled(lineSuffix.content(), label);
+            case IfBreak conditional -> findLabelled(conditional.breakDoc(), label)
+                .or(() -> findLabelled(conditional.flatDoc(), label));
+            case BestFitting ignored -> Optional.empty();
+            case ConditionalGroup ignored -> Optional.empty();
+            case Text ignored -> Optional.empty();
+            case Line ignored -> Optional.empty();
+            case SoftLine ignored -> Optional.empty();
+            case HardLine ignored -> Optional.empty();
+            case BreakParent ignored -> Optional.empty();
+        };
     }
 
     /**

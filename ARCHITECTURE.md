@@ -167,7 +167,7 @@ The combinator vocabulary groups into a handful of concerns:
 | Width decisions | `Group`, `Fill`, `ConditionalGroup`, `BestFitting` | How a subtree chooses flat vs. broken (see below). |
 | Conditional content | `IfBreak` | Different output for flat vs. broken layout, optionally keyed to a named group. |
 | Deferred content | `LineSuffix` | Trailing comments that lay out after the code on their line. |
-| Diagnostics | `Label` | Debug-only provenance; transparent to rendering and width. |
+| Diagnostics & queries | `Label` | Names a subtree; transparent to rendering and width. Explain reads rule-envelope names for provenance; a printer reads its own `part:`-prefixed names back with `Doc.findLabelled`. |
 | Pinned layout | `Doc.flat` / `Doc.flatCandidate` | Rewrite a subtree with every break decision resolved flat, so a ranked set can offer a genuinely single-line arm. |
 | Same-line tail | `Reserve` (`Doc.reserving` / `Doc.followedBy`) | Charge the caller's following same-line content — a statement's `;`, a signature's `{` — to the trailing layout decision. |
 

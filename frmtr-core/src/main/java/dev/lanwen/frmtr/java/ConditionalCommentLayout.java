@@ -119,25 +119,31 @@ final class ConditionalCommentLayout {
         }
         return Optional.of(
             Doc.concat(
-                conditionalConditionWithTrailingComment(
-                    expression.getCondition(),
-                    regionComment(byRegion, Region.CONDITION_TRAILING)
+                Doc.label(
+                    ConditionalExpressionPrinter.TERNARY_CONDITION_LABEL,
+                    conditionalConditionWithTrailingComment(
+                        expression.getCondition(),
+                        regionComment(byRegion, Region.CONDITION_TRAILING)
+                    )
                 ),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        conditionalCommentedBranch(
-                            "?",
-                            expression.getThenExpr(),
-                            regionComment(byRegion, Region.QUESTION_LEADING),
-                            regionComment(byRegion, Region.THEN_TRAILING)
-                        ),
-                        Doc.HARD_LINE,
-                        conditionalCommentedBranch(
-                            ":",
-                            expression.getElseExpr(),
-                            regionComment(byRegion, Region.COLON_LEADING),
-                            regionComment(byRegion, Region.ELSE_TRAILING)
+                Doc.label(
+                    ConditionalExpressionPrinter.TERNARY_BRANCHES_LABEL,
+                    Doc.indent(
+                        Doc.concat(
+                            Doc.HARD_LINE,
+                            conditionalCommentedBranch(
+                                "?",
+                                expression.getThenExpr(),
+                                regionComment(byRegion, Region.QUESTION_LEADING),
+                                regionComment(byRegion, Region.THEN_TRAILING)
+                            ),
+                            Doc.HARD_LINE,
+                            conditionalCommentedBranch(
+                                ":",
+                                expression.getElseExpr(),
+                                regionComment(byRegion, Region.COLON_LEADING),
+                                regionComment(byRegion, Region.ELSE_TRAILING)
+                            )
                         )
                     )
                 )

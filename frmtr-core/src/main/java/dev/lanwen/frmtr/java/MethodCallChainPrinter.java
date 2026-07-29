@@ -1300,11 +1300,46 @@ final class MethodCallChainPrinter {
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
         List<Doc> segments = methodCallChainSegments(calls, finalSegmentSuffix);
+        Doc fanned = Doc.concat(rootDoc, chainContinuation(root, segments));
+        Optional<Doc> blockLambdaHug =
+            attachedBlockLambdaSelectorHug(analysis, root, calls, finalSegmentSuffix, lineWidth, layout);
         return Optional.of(
-            Doc.concat(
-                rootDoc,
-                chainContinuation(root, segments)
-            )
+            blockLambdaHug
+                    .map(hug -> Doc.bestFittingFirstLine(List.of(hug, fanned)))
+                    .orElse(fanned)
+        );
+    }
+
+    /**
+     * The hug shape for a chain whose sole selector carries a block-lambda argument: the selector rides the root line and
+     * the lambda body opens under it. Its rival fan drops that selector one line lower, which indents the same body one
+     * level deeper, so ranking the two prices the body's real width instead of a compact projection a comment inflates.
+     *
+     * <p>Withheld for a chain-level comment or a comment inside the root, whose compact reconstruction here would mangle
+     * it. A comment in the lambda body is safe: the hug renders that body through the block printer.
+     */
+    private Optional<Doc> attachedBlockLambdaSelectorHug(
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis,
+            Expression root,
+            List<MethodCallExpr> calls,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> lineWidth,
+            LayoutContext layout
+    ) {
+        if (
+            calls.size() != 1
+            || !methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
+            || analysis.hasComments()
+            || sourceShapePolicy.hasContainedComments(root)
+        ) {
+            return Optional.empty();
+        }
+        return compactRootWithBrokenFinalSegment(
+            root,
+            calls.getFirst(),
+            finalSegmentSuffix,
+            lineWidth,
+            layout
         );
     }
 

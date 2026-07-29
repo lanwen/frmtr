@@ -341,27 +341,4 @@ final class CompactRootBrokenSegmentLayout {
                 .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + firstLine.length());
     }
 
-    private boolean expressionLambdaBodyOpenerOverflows(
-            Expression root,
-            String callPrefix,
-            NodeList<Expression> arguments,
-            LayoutContext layout
-    ) {
-        return expressionLambdaArgumentPlan.plan(callPrefix, arguments, layout)
-                .filter(plan -> plan.bodyOpenerFitsOnContinuation(layoutWidth::continuationStatement, options.lineWidth()))
-                .filter(plan -> plan.bodyOpenerOverflows(
-                        line -> compactRootLineWidth(root, line, layout),
-                        options.lineWidth()
-                ))
-                .isPresent();
-    }
-
-    private String compactRootCallPrefix(Expression root, MethodCallExpr expression) {
-        return compactSource.compact(root)
-            + "."
-            + expression.getTypeArguments()
-                    .map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">")
-                    .orElse("")
-            + expression.getNameAsString();
-    }
-}
+        }

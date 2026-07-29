@@ -153,7 +153,7 @@ final class DeclarationPrinters {
             expressions::methodCallChainIsSourceMultiline,
             expressions::methodCallChainInitializerShape,
             expressions::castType,
-            conditional -> expressions.conditionalExpression(conditional, true),
+            expressions::forcedConditionalExpression,
             expressions::shouldBreakBeforeConditionalInitializer,
             expressions::arrayCreationTypeBreaks,
             expressions::arrayCreationPrefix,
@@ -276,7 +276,6 @@ final class DeclarationPrinters {
             compactSource::compactTypeLike,
             types::typeBody,
             (annotation, layout) -> expressions.annotationPreservingSourceBreaks(annotation, layout),
-            expressions::annotationFlatText,
             this::currentIndentedWidth,
             declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body)
         );

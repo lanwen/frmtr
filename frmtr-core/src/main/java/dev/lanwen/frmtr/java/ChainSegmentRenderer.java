@@ -158,22 +158,7 @@ final class ChainSegmentRenderer {
         );
     }
 
-    private Doc brokenMethodCallChainSegment(
-            MethodCallExpr expression,
-            MethodCallChainTail finalSegmentSuffix
-    ) {
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        return brokenMethodCallSegment(
-            expression,
-            "." + typeArguments + expression.getNameAsString(),
-            Doc.EMPTY,
-            finalSegmentSuffix
-        );
-    }
-
-    private Doc methodCallChainSegment(
+        private Doc methodCallChainSegment(
             MethodCallExpr expression,
             boolean reserveStatementTerminator,
             ToIntFunction<String> compactSegmentWidth

@@ -79,7 +79,7 @@ final class ReturnExpressionPrinter {
 
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
 
-    private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
+    private final Function<ConditionalExpr, Doc> forcedConditionalExpression;
 
     private final BiFunction<Expression, Boolean, Doc> binaryLines;
 
@@ -123,7 +123,7 @@ final class ReturnExpressionPrinter {
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
-            BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
+            Function<ConditionalExpr, Doc> forcedConditionalExpression,
             BiFunction<Expression, Boolean, Doc> binaryLines,
             BiFunction<Expression, Boolean, Doc> parenthesizedBreak,
             BiFunction<Node, Expression, List<Doc>> trailingValueCommentsBeforeSemicolon,
@@ -152,7 +152,7 @@ final class ReturnExpressionPrinter {
         this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
-        this.conditionalExpression = conditionalExpression;
+        this.forcedConditionalExpression = forcedConditionalExpression;
         this.binaryLines = binaryLines;
         this.parenthesizedBreak = parenthesizedBreak;
         this.trailingValueCommentsBeforeSemicolon = trailingValueCommentsBeforeSemicolon;
@@ -645,7 +645,7 @@ final class ReturnExpressionPrinter {
         if (!(expression instanceof ConditionalExpr conditionalExpr)) {
             return Optional.empty();
         }
-        return Optional.of(conditionalExpression.apply(conditionalExpr, true));
+        return Optional.of(forcedConditionalExpression.apply(conditionalExpr));
     }
 
     private Optional<Doc> returnWithForcedLambdaBreak(Expression expression) {

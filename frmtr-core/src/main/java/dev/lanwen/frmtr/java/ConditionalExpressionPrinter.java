@@ -79,10 +79,6 @@ final class ConditionalExpressionPrinter {
         /** Print the broken ternary shape because a caller has already selected a multiline conditional context. */
         FORCED;
 
-        static ConditionalBreakMode fromForced(boolean forced) {
-            return forced ? FORCED : AUTO;
-        }
-
         boolean isForced() {
             return this == FORCED;
         }
@@ -133,47 +129,40 @@ final class ConditionalExpressionPrinter {
     /**
      * Chooses the shape for an assignment whose value is a conditional expression.
      *
-     * <p>When the condition itself is structurally complex, the whole conditional moves under the assignment operator so
-     * the reader sees the assignment first and then the ternary tree. If only the full expression is too wide, but the
-     * target, operator, and condition still fit, the condition stays after {@code =} and only the {@code ?} and
-     * {@code :} branches break below it.
+     * <p>A structurally complex condition moves the whole conditional under the assignment operator, so the reader sees
+     * the assignment first and then the ternary tree. Otherwise the condition-after-operator shape is ranked against
+     * break-after-operator by true rendered first line, so a condition that only <em>starts</em> on the operator line
+     * still attaches.
      */
     Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
+        // Target and broken value are each built once and shared by the candidates below; rebuilding either per
+        // candidate would claim its comments a second time.
+        Doc target = rendering.render(assignExpr.getTarget());
+        String operator = " " + assignExpr.getOperator().asString();
+        Doc broken = conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
         if (
             shouldBreakBeforeConditionalInitializer(conditionalExpr)
             || shouldBreakBeforeConditionalAssignment(conditionalExpr)
         ) {
             return Optional.of(
-                Doc.concat(
-                    rendering.render(assignExpr.getTarget()),
-                    Doc.text(" " + assignExpr.getOperator().asString()),
-                    Doc.indent(
-                        Doc.concat(
-                            Doc.HARD_LINE,
-                            conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)
-                        )
-                    )
-                )
+                Doc.concat(target, Doc.text(operator), Doc.indent(Doc.concat(Doc.HARD_LINE, broken)))
             );
         }
-        String conditionLine = compactSource.compact(assignExpr.getTarget())
-            + " "
-            + assignExpr.getOperator().asString()
-            + " "
-            + compactSource.compact(conditionalExpr.getCondition())
-            + ";";
-        // Measure the {@code target op condition;} line at the conditional's true rendered block/type depth
-        // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-        if (layoutWidth.nodeLine(conditionalExpr, conditionLine) <= options.lineWidth()) {
-            return Optional.of(
-                Doc.concat(
-                    rendering.render(assignExpr.getTarget()),
-                    Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)
-                )
-            );
-        }
-        return Optional.empty();
+        Doc condition = labelledPart(broken, TERNARY_CONDITION_LABEL);
+        Doc branches = labelledPart(broken, TERNARY_BRANCHES_LABEL);
+        Doc attach = Doc.concat(target, Doc.text(operator + " "), condition, branches);
+        Doc breakAfterOperator = Doc.concat(
+            target,
+            Doc.text(operator),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, condition, branches))
+        );
+        return Optional.of(Doc.bestFittingFirstLine(List.of(attach, breakAfterOperator), new int[] {1, 0}));
+    }
+
+    /** Reads a part this printer labeled when it built the broken ternary, so no caller re-derives it as text. */
+    private static Doc labelledPart(Doc broken, String label) {
+        return Doc.findLabelled(broken, label)
+                .orElseThrow(() -> new IllegalStateException("broken conditional is missing its " + label + " part"));
     }
 
     /**
@@ -212,11 +201,11 @@ final class ConditionalExpressionPrinter {
     }
 
     /**
-     * Prints a conditional expression, preserving flat output until width, nesting, comments, or caller context require
-     * the broken ternary shape.
+     * Prints the broken ternary shape for a caller that has already committed to a multiline conditional context, so the
+     * choice rides the entry point rather than a flag argument.
      */
-    Doc conditionalExpression(ConditionalExpr expression, boolean forceBreak) {
-        return conditionalExpression(expression, ConditionalBreakMode.fromForced(forceBreak));
+    Doc forcedConditionalExpression(ConditionalExpr expression) {
+        return conditionalExpression(expression, ConditionalBreakMode.FORCED);
     }
 
     private Doc conditionalExpression(ConditionalExpr expression, ConditionalBreakMode breakMode) {

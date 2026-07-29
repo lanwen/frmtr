@@ -198,7 +198,7 @@ final class ExpressionPrinters {
             context.layoutWidth::continuationStatement,
             casts::nestedCastDepth,
             lambdas::parenthesizedLambdaBreak,
-            conditionals::conditionalExpression,
+            conditionals::forcedConditionalExpression,
             conditionals::shouldBreakForFanningBranchChain
         );
         this.unaries = new UnaryExpressionPrinter(
@@ -213,7 +213,6 @@ final class ExpressionPrinters {
             lambdas::huggableBlockLambdaArguments,
             bodyRenderer,
             compactSource::compact,
-            compactSource::compactJoin,
             compactSource::compactTypeLike,
             compactSource::compactTypeLikeWithoutOwnComment,
             // Instance-method reference (lazy field read) because {@code methodCalls} is assigned later in this
@@ -332,7 +331,7 @@ final class ExpressionPrinters {
             methodCalls::methodCallChainHasFinalTrailingLineComment,
             objectCreations::brokenObjectCreation,
             objectCreations::objectCreationWithSuffix,
-            conditionals::conditionalExpression,
+            conditionals::forcedConditionalExpression,
             binaries::lines,
             enclosedExpressions::parenthesizedBreak,
             comments::trailingInitializerCommentsBeforeSemicolon,
@@ -491,7 +490,7 @@ final class ExpressionPrinters {
             return Optional.of(binaries.nestedLines(binaryExpr, true));
         }
         if (expression instanceof ConditionalExpr conditionalExpr) {
-            return Optional.of(conditionals.conditionalExpression(conditionalExpr, true));
+            return Optional.of(conditionals.forcedConditionalExpression(conditionalExpr));
         }
         return Optional.empty();
     }
@@ -762,8 +761,8 @@ final class ExpressionPrinters {
         return casts.castType(type);
     }
 
-    Doc conditionalExpression(ConditionalExpr expression, boolean forceBreak) {
-        return conditionals.conditionalExpression(expression, forceBreak);
+    Doc forcedConditionalExpression(ConditionalExpr expression) {
+        return conditionals.forcedConditionalExpression(expression);
     }
 
     boolean shouldBreakBeforeConditionalInitializer(ConditionalExpr expression) {

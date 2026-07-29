@@ -1469,37 +1469,6 @@ final class MethodCallPrinter {
         return singleCallArgumentOpenerHug.hug(prefix, expression);
     }
 
-    /**
-     * Reports whether attaching ("hugging") a single inner call/object-creation argument to this call's opener would push
-     * the shared first line ({@code outer(inner(}) past the line width, measured at the call's <em>real</em> rendered
-     * column rather than the bare block indent.
-     *
-     * <p>Probing the {@code CURRENT} line budget on {@code prefix + "(" + innerPrefix +
-     * "("} alone is prefix-blind: when the call is the value of an initializer or assignment
-     * ({@code NAME = outer(inner(…))}) the {@code NAME = } prefix sharing the line is not counted, so a naive probe
-     * attaches the hug even when the opener visibly overflows. Measuring at the real rendered column — attach only when
-     * the hugged opener fits — mirrors the prefix-aware first-line probe
-     * threaded into method-chain layout for the assignment column and the chain arm's stay-flat rule: the
-     * column where the value begins, not just its indentation, decides whether the flat shape is legal.
-     *
-     * <p>The value prefix that shares the call's first line is reconstructed from the source range: the call's start
-     * column minus its enclosing statement's start column is exactly the width of whatever precedes the call on that line
-     * (the {@code NAME = }, {@code target op }, {@code return }, …), and that delta is invariant under reindentation. The
-     * real first-line width is therefore the statement's rendered indentation plus that prefix delta plus the opener text,
-     * which is measured against the enclosing statement's nesting depth rather than the bare-call indent a prefix-blind
-     * probe assumes. The delta is taken only when the call and its statement begin on the same source line; a call that
-     * already starts its own line has no shared prefix, so the probe falls back to the plain indented width for those
-     * callers.
-     */
-    private boolean attachedOpenerOverflows(MethodCallExpr expression, String openerLine) {
-        return sharedFirstLineWidth(expression)
-                .map(prefixedIndent -> prefixedIndent + openerLine.length())
-                // The own-line fallback (a call that starts its own line, no shared prefix) measures at the call's
-                // true rendered block/type depth ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
-                .orElseGet(() -> layoutWidth.nodeLine(expression, openerLine))
-            > options.lineWidth();
-    }
-
     private Optional<Integer> sharedFirstLineWidth(MethodCallExpr expression) {
         return expression.getRange()
                 .flatMap(callRange -> enclosingStatement(expression)
@@ -1553,8 +1522,7 @@ final class MethodCallPrinter {
      * considers the call's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type
      * and block) and takes the <em>wider</em> of the two, mirroring the chain-printer root gates
      * ({@code MethodCallChainPrinter.compactRootLineWidth}/{@code rootLineWidth}), the sibling
-     * {@link ExpressionLambdaArgumentLayout} first-line gate, and the single-argument hug gate
-     * {@link #attachedOpenerOverflows}.
+     * {@link ExpressionLambdaArgumentLayout} first-line gate.
      *
      * <p>The source column is kept as the <em>floor</em> rather than replaced: this call can be an initializer/return
      * value whose {@code = }/{@code return } leading prefix shares the measured line, and {@code nodeIndentWidth}

@@ -103,8 +103,6 @@ final class ChainFanLayout {
 
     private final RootLineWidth rootLineWidth;
 
-    private final Function<Expression, Optional<String>> compactSingleLineRoot;
-
     /**
      * The fan-position break rules, resolved first-match-wins — the break-position tier, which hosts exactly one rule, the
      * canonical fan. This registry answers the same question {@link #canonicalFanChain} asked inline: fan the chain when
@@ -150,8 +148,7 @@ final class ChainFanLayout {
             Function<Doc, Doc> lambdaBodyChainContinuation,
             BiFunction<Expression, List<Doc>, Doc> lambdaBodyRootChainContinuation,
             BiFunction<List<MethodCallExpr>, MethodCallChainTail, List<Doc>> methodCallChainSegments,
-            RootLineWidth rootLineWidth,
-            Function<Expression, Optional<String>> compactSingleLineRoot
+            RootLineWidth rootLineWidth
     ) {
         this.options = options;
         this.sourceShapePolicy = sourceShapePolicy;
@@ -178,7 +175,6 @@ final class ChainFanLayout {
         this.lambdaBodyRootChainContinuation = lambdaBodyRootChainContinuation;
         this.methodCallChainSegments = methodCallChainSegments;
         this.rootLineWidth = rootLineWidth;
-        this.compactSingleLineRoot = compactSingleLineRoot;
         this.chainFanRules = BreakRuleRegistry.of(List.of(
             BreakRule.of(
                 "canonical-fan",

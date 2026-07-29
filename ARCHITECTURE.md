@@ -169,6 +169,7 @@ The combinator vocabulary groups into a handful of concerns:
 | Deferred content | `LineSuffix` | Trailing comments that lay out after the code on their line. |
 | Diagnostics | `Label` | Debug-only provenance; transparent to rendering and width. |
 | Pinned layout | `Doc.flat` / `Doc.flatCandidate` | Rewrite a subtree with every break decision resolved flat, so a ranked set can offer a genuinely single-line arm. |
+| Same-line tail | `Reserve` (`Doc.reserving` / `Doc.followedBy`) | Charge the caller's following same-line content — a statement's `;`, a signature's `{` — to the trailing layout decision. |
 
 The four **width-deciding** primitives are the heart of the model:
 
@@ -185,6 +186,12 @@ The four **width-deciding** primitives are the heart of the model:
   opts a node into a first-line-fit ranking mode (a static per-node fact, not a width): when every alternative carries
   the same over-width body so none fits, it ranks first-line fit first, then less overflow before fewer lines — the arm
   whose header fits wins over the fewest-lines arm whose opener spills.
+
+`Reserve` is how a printer tells one of those decisions what follows it. A ranked candidate is measured as if it ended
+the line, so an arm sitting at exactly the width renders one column over once the caller appends its `;` or `{`.
+`Doc.reserving` places the reservation on the *trailing* `ConditionalGroup`/`BestFitting` — the one node whose last line
+is the line the tail lands on — and that single decision spends it, so the reservation can never re-break content the
+tail does not actually follow. `Doc.followedBy` is the paired form for a tail the caller already holds as a doc.
 
 `Doc.flat` is the ranking counterpart to those primitives rather than a node of its own: a pure `Doc` → `Doc` rewrite
 that denies every break *request* (a group loses its choice, `Line` becomes a space, `SoftLine`/`BreakParent` vanish,

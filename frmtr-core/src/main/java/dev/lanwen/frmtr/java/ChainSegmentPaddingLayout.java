@@ -119,6 +119,12 @@ final class ChainSegmentPaddingLayout {
                 PaddedDoc padded = linePadded(label.doc(), padding, lineStart);
                 yield new PaddedDoc(Doc.label(label.label(), padded.doc()), padded.lineStart());
             }
+            // A reservation is a measurement fact about following content, so padding threads through it untouched and
+            // the reserved column count carries over to the padded copy.
+            case Doc.Reserve reserve -> {
+                PaddedDoc padded = linePadded(reserve.doc(), padding, lineStart);
+                yield new PaddedDoc(Doc.reserving(padded.doc(), reserve.columns()), padded.lineStart());
+            }
             // A line suffix renders nothing at its position and flushes at the line break, so it neither consumes the
             // line-start padding slot nor needs continuation padding inside its deferred content.
             case Doc.LineSuffix lineSuffix -> new PaddedDoc(lineSuffix, lineStart);

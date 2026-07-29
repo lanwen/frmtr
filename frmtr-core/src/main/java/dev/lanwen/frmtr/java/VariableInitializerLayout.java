@@ -617,19 +617,18 @@ final class VariableInitializerLayout {
             flat
         );
         if (commentOrPreempt.isPresent()) {
-            return Doc.concat(commentOrPreempt.orElseThrow(), groupTerminator);
+            return Doc.followedBy(commentOrPreempt.orElseThrow(), groupTerminator);
         }
         // Master over-width gate at the real rendered column: a single Doc.conditionalGroup lets the renderer decide
         // flat-versus-broken at the true running column. The flat arm is ordinary expression dispatch; the broken arm is
         // the construct-kind broken-shape dispatch, reached when the renderer judges the flat form too wide. Measuring at
         // the real column makes the decision a fixpoint by construction rather than by tuning a reconstructed baseline.
         if (canMeasureInitializerAtRenderedColumn(initializer, groupTerminator)) {
-            Doc flatInitializer = Doc.concat(
-                Doc.text(name + " = "),
-                expression.apply(initializer),
+            Doc flatInitializer = Doc.followedBy(
+                Doc.concat(Doc.text(name + " = "), expression.apply(initializer)),
                 groupTerminator
             );
-            Doc brokenInitializer = Doc.concat(
+            Doc brokenInitializer = Doc.followedBy(
                 variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, true),
                 groupTerminator
             );
@@ -646,7 +645,7 @@ final class VariableInitializerLayout {
             }
             return Doc.conditionalGroup(List.of(flatInitializer, brokenInitializer));
         }
-        return Doc.concat(
+        return Doc.followedBy(
             variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, false),
             groupTerminator
         );

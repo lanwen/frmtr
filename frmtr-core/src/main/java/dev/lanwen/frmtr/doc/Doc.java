@@ -19,6 +19,7 @@ public sealed interface Doc
         Doc.Label,
         Doc.Line,
         Doc.LineSuffix,
+        Doc.Reserve,
         Doc.SoftLine,
         Doc.Text {
     Doc EMPTY = new Text("");
@@ -142,6 +143,7 @@ public sealed interface Doc
             case ConditionalGroup conditionalGroup -> flat(conditionalGroup.alternatives().getFirst());
             case BestFitting bestFitting -> flat(bestFitting.alternatives().getFirst());
             case Label label -> label(label.label(), flat(label.doc()));
+            case Reserve reserve -> reserving(flat(reserve.doc()), reserve.columns());
             case Text ignored -> doc;
             case HardLine ignored -> doc;
             case LineSuffix ignored -> doc;
@@ -352,6 +354,62 @@ public sealed interface Doc
         return new LineSuffix(content);
     }
 
+    /**
+     * Tells the layout decision at the tail of {@code doc} that {@code columns} more columns of the caller's content
+     * follow on the same line, so a candidate measured at exactly the line width is judged against the space that will
+     * actually be left. Without it a statement's {@code ;}, or a signature's {@code {}, is invisible to the ranking and
+     * an arm that measures 120 renders at 121.
+     *
+     * <p>The reservation is placed on the trailing {@link ConditionalGroup}/{@link BestFitting} — the one node whose last
+     * line is the line the caller's tail lands on — and is consumed there, so it can never re-break content the tail does
+     * not actually follow. Content with no such trailing decision (a doc closing on its own {@code )} line, say) is
+     * returned unchanged.
+     */
+    static Doc reserving(Doc doc, int columns) {
+        if (columns <= 0) {
+            return doc;
+        }
+        return switch (doc) {
+            case ConditionalGroup ignored -> new Reserve(doc, columns);
+            case BestFitting ignored -> new Reserve(doc, columns);
+            case Concat concat -> concatWithReservedTail(concat.docs(), columns);
+            case Group group -> group(reserving(group.doc(), columns), group.groupId());
+            case Indent indented -> indent(reserving(indented.doc(), columns));
+            case Label label -> label(label.label(), reserving(label.doc(), columns));
+            case Reserve reserve -> new Reserve(reserve.doc(), reserve.columns() + columns);
+            default -> doc;
+        };
+    }
+
+    /** Rebuilds a concat with the reservation pushed into its last child, where the caller's tail lands. */
+    private static Doc concatWithReservedTail(List<Doc> docs, int columns) {
+        List<Doc> reserved = new ArrayList<>(docs);
+        reserved.set(reserved.size() - 1, reserving(reserved.getLast(), columns));
+        return concat(reserved);
+    }
+
+    /**
+     * Emits {@code tail} right after {@code doc} and reserves the columns it occupies while {@code doc}'s ranked layouts
+     * are chosen. The same-line-tail form of {@link #reserving(Doc, int)} for a tail the caller already holds as a doc.
+     */
+    static Doc followedBy(Doc doc, Doc tail) {
+        return concat(reserving(doc, flatTextColumns(tail)), tail);
+    }
+
+    /**
+     * The columns a break-free {@code doc} occupies, counting only its text leaves. Reports 0 for anything carrying a
+     * newline, so an unmeasurable tail simply reserves nothing rather than guessing.
+     */
+    private static int flatTextColumns(Doc doc) {
+        return switch (doc) {
+            case Text text -> text.value().indexOf('\n') >= 0 ? 0 : text.value().length();
+            case Concat concat -> concat.docs().stream().mapToInt(Doc::flatTextColumns).sum();
+            case Indent indented -> flatTextColumns(indented.doc());
+            case Label label -> flatTextColumns(label.doc());
+            default -> 0;
+        };
+    }
+
     private static void flattenConcat(List<Doc> docs, List<Doc> out) {
         for (Doc doc : docs) {
             if (doc == EMPTY) {
@@ -457,6 +515,12 @@ public sealed interface Doc
     record IfBreak(Doc breakDoc, Doc flatDoc, String groupId) implements Doc {}
 
     record Label(String label, Doc doc) implements Doc {}
+
+    /**
+     * Renders {@code doc} unchanged while reserving {@code columns} of the current line for the caller's following
+     * same-line content, so ranked decisions inside see the true remaining space. See {@link #reserving(Doc, int)}.
+     */
+    record Reserve(Doc doc, int columns) implements Doc {}
 
     record LineSuffix(Doc content) implements Doc {}
 }

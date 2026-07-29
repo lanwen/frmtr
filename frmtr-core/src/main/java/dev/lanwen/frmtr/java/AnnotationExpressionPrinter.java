@@ -14,6 +14,7 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
@@ -162,8 +163,17 @@ final class AnnotationExpressionPrinter {
         return Doc.bestFittingFirstLine(List.of(Doc.text(flat), broken));
     }
 
+    /**
+     * Breaks {@code @Name(...)} onto one indented line per pair, except that a lone array-valued pair hugs: the
+     * annotation keeps {@code @Name(pair = {} on its own line and closes with {@code })}, so only the array elements
+     * break. Two indent levels of pure punctuation buy nothing when there is a single pair to place.
+     */
     private Doc brokenNormalAnnotation(NormalAnnotationExpr annotation) {
         String prefix = "@" + compact.apply(annotation.getName());
+        Optional<Doc> hugged = loneArrayPairHug(annotation, prefix);
+        if (hugged.isPresent()) {
+            return hugged.orElseThrow();
+        }
         return Doc.concat(
             Doc.text(prefix + "("),
             Doc.indent(
@@ -178,6 +188,31 @@ final class AnnotationExpressionPrinter {
             Doc.HARD_LINE,
             Doc.text(")")
         );
+    }
+
+    /**
+     * The hugged shape for an annotation whose single pair is an array value: {@code @Name(pair = {}, the elements one
+     * per indented line, then {@code })}. Empty for anything else, so multi-pair annotations keep the exploded form.
+     *
+     * <p>An empty array is left out too: {@code {}} carries no elements to break onto lines, so hugging it would only
+     * move the braces without relieving the width that asked for a break.
+     */
+    private Optional<Doc> loneArrayPairHug(NormalAnnotationExpr annotation, String prefix) {
+        if (annotation.getPairs().size() != 1) {
+            return Optional.empty();
+        }
+        MemberValuePair pair = annotation.getPairs().get(0);
+        if (
+            !(pair.getValue() instanceof ArrayInitializerExpr arrayInitializerExpr)
+            || arrayInitializerExpr.getValues().isEmpty()
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+            Doc.text(prefix + "(" + pair.getNameAsString() + " = "),
+            annotationArrayInitializer(arrayInitializerExpr),
+            Doc.text(")")
+        ));
     }
 
     /**

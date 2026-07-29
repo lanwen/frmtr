@@ -52,7 +52,7 @@ final class EnclosedExpressionPrinter {
 
     private final Function<LambdaExpr, Doc> parenthesizedLambdaBreak;
 
-    private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
+    private final Function<ConditionalExpr, Doc> forcedConditionalExpression;
 
     private final Predicate<ConditionalExpr> conditionalBranchChainFansByRule;
 
@@ -68,7 +68,7 @@ final class EnclosedExpressionPrinter {
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<Expression> nestedCastDepth,
             Function<LambdaExpr, Doc> parenthesizedLambdaBreak,
-            BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
+            Function<ConditionalExpr, Doc> forcedConditionalExpression,
             Predicate<ConditionalExpr> conditionalBranchChainFansByRule
     ) {
         this.options = options;
@@ -82,7 +82,7 @@ final class EnclosedExpressionPrinter {
         this.continuationStatementWidth = continuationStatementWidth;
         this.nestedCastDepth = nestedCastDepth;
         this.parenthesizedLambdaBreak = parenthesizedLambdaBreak;
-        this.conditionalExpression = conditionalExpression;
+        this.forcedConditionalExpression = forcedConditionalExpression;
         this.conditionalBranchChainFansByRule = conditionalBranchChainFansByRule;
     }
 
@@ -118,7 +118,7 @@ final class EnclosedExpressionPrinter {
         ) {
             return Doc.concat(
                 Doc.text("("),
-                conditionalExpression.apply(conditionalExpr, true),
+                forcedConditionalExpression.apply(conditionalExpr),
                 Doc.text(")")
             );
         }

@@ -50,8 +50,6 @@ final class ObjectCreationPrinter {
 
     private final Function<Node, String> compact;
 
-    private final Function<List<? extends Node>, String> compactJoin;
-
     private final Function<Node, String> compactTypeLike;
 
     private final Function<Node, String> compactTypeLikeWithoutOwnComment;
@@ -68,7 +66,6 @@ final class ObjectCreationPrinter {
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             Function<Node, String> compact,
-            Function<List<? extends Node>, String> compactJoin,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compactTypeLikeWithoutOwnComment,
             Predicate<Expression> binaryFansChainOperand,
@@ -89,7 +86,6 @@ final class ObjectCreationPrinter {
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.bodyRenderer = bodyRenderer;
         this.compact = compact;
-        this.compactJoin = compactJoin;
         this.compactTypeLike = compactTypeLike;
         this.compactTypeLikeWithoutOwnComment = compactTypeLikeWithoutOwnComment;
         this.commentText = commentText;

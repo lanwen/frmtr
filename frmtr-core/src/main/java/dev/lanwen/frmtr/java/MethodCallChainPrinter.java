@@ -291,8 +291,7 @@ final class MethodCallChainPrinter {
             this::lambdaBodyChainContinuation,
             this::lambdaBodyChainContinuation,
             this::methodCallChainSegments,
-            this::rootLineWidth,
-            this::compactSingleLineRoot
+            this::rootLineWidth
         );
         this.chainSegmentPadding = new ChainSegmentPaddingLayout();
     }
@@ -2039,7 +2038,7 @@ final class MethodCallChainPrinter {
 
     /**
      * Measures a chain root's compact form at the column where the root renders, feeding the compact-root break
-     * decisions ({@link #canBreakAfterCompactExpressionLambdaRoot}, {@link #promotedRootArgumentsShouldBreak}).
+     * decision ({@link #canBreakAfterCompactExpressionLambdaRoot}).
      *
      * <p>Like {@link #compactRootLineWidth} it takes the wider of the source-column reconstruction and the root's
      * rendered indentation ({@link LayoutWidth#nodeIndentWidth}), so a root reindented shallower than its true
@@ -2050,10 +2049,9 @@ final class MethodCallChainPrinter {
      * <p>{@code layout} is read here: when a caller threads a same-line prefix through
      * {@link LayoutContext#leftEdgePrefix()} the rendered column is known exactly
      * ({@code nodeIndentWidth(root) + leftEdgePrefix.length() + text.length()}) and the source-column floor is dropped,
-     * exactly as {@link #compactRootLineWidth} does. Its consumer {@link #promotedRootArgumentsShouldBreak} is reached by
-     * the <em>initializer</em> chain carrying a real {@code "NAME = "} prefix, so the arg-break verdict is measured at
-     * that chain's true rendered column rather than the value's stale source column. Callers with no prefix ({@code root()}) keep the wider-of
-     * source-column floor, which still stands in for their unmodelled leading prefix.
+     * exactly as {@link #compactRootLineWidth} does. The initializer chain carries a real {@code "NAME = "} prefix, so its
+     * verdict is measured at that chain's true rendered column rather than the value's stale source column. Callers with
+     * no prefix ({@code root()}) keep the wider-of source-column floor, which stands in for their unmodelled prefix.
      */
     private int rootLineWidth(Expression root, String text, LayoutContext layout) {
         // With the same-line prefix threaded, measure at the exact rendered column and drop the source-column floor,
@@ -2070,26 +2068,14 @@ final class MethodCallChainPrinter {
                 .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + text.length());
     }
 
-    private Doc inlineMethodCall(MethodCallExpr expression) {
-        return rootPromotion.inlineMethodCall(expression);
-    }
-
-    private boolean promotedNoArgRootScopeOverflows(
+        private boolean promotedNoArgRootScopeOverflows(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth
     ) {
         return rootPromotion.promotedNoArgRootScopeOverflows(expression, firstLineWidth);
     }
 
-    private boolean promotedRootArgumentsShouldBreak(
-            MethodCallExpr expression,
-            ToIntFunction<String> firstLineWidth,
-            LayoutContext layout
-    ) {
-        return rootPromotion.promotedRootArgumentsShouldBreak(expression, firstLineWidth, layout);
-    }
-
-    private ToIntFunction<String> fannedSelectorColumnWidth(MethodCallExpr expression, ToIntFunction<String> fallback) {
+        private ToIntFunction<String> fannedSelectorColumnWidth(MethodCallExpr expression, ToIntFunction<String> fallback) {
         return rootPromotion.fannedSelectorColumnWidth(expression, fallback);
     }
 
@@ -2294,15 +2280,7 @@ final class MethodCallChainPrinter {
         return segmentRenderer.brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
     }
 
-    private boolean segmentArgumentOpenerHugApplies(MethodCallExpr expression) {
-        return segmentRenderer.segmentArgumentOpenerHugApplies(expression);
-    }
-
-    private boolean segmentArgumentOverflowsExplodedLine(MethodCallExpr expression) {
-        return segmentRenderer.segmentArgumentOverflowsExplodedLine(expression);
-    }
-
-    private boolean finalSegmentAttachesShortBreakingCallArgument(MethodCallExpr call) {
+            private boolean finalSegmentAttachesShortBreakingCallArgument(MethodCallExpr call) {
         return segmentRenderer.finalSegmentAttachesShortBreakingCallArgument(call);
     }
 

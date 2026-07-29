@@ -178,32 +178,7 @@ final class SourceShapePolicy {
         return new TryResourcesShape(spansMultipleLines, trailingSemicolon);
     }
 
-    private boolean argumentsSpanMultipleLines(
-            Node prefix,
-            NodeList<? extends Node> arguments,
-            Optional<Range> containingRange
-    ) {
-        if (arguments.isEmpty()) {
-            return false;
-        }
-        Optional<Range> prefixRange = prefix.getRange();
-        Optional<Range> firstArgumentRange = firstRange(arguments);
-        Optional<Range> lastArgumentRange = lastRange(arguments);
-        if (prefixRange.isEmpty() || firstArgumentRange.isEmpty() || lastArgumentRange.isEmpty()) {
-            return false;
-        }
-        if (firstArgumentRange.orElseThrow().begin.line > prefixRange.orElseThrow().end.line) {
-            return true;
-        }
-        if (entriesStartOnMultipleLines(arguments)) {
-            return true;
-        }
-        return containingRange
-                .map(range -> sourceText.sliceAfterWithin(lastArgumentRange.orElseThrow(), range).contains("\n"))
-                .orElse(false);
-    }
-
-    private boolean nodesSpanMultipleLines(NodeList<? extends Node> nodes) {
+        private boolean nodesSpanMultipleLines(NodeList<? extends Node> nodes) {
         Optional<Range> first = firstRange(nodes);
         Optional<Range> last = lastRange(nodes);
         return first.isPresent() && last.isPresent() && first.orElseThrow().begin.line < last.orElseThrow().end.line;

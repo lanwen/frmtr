@@ -66,8 +66,6 @@ final class RecordDeclarationPrinter {
 
     private final JavaFormatRule<AnnotationExpr> annotation;
 
-    private final Function<AnnotationExpr, String> annotationFlatText;
-
     private final ToIntFunction<String> currentIndentedWidth;
 
     private final Function<RecordDeclaration, Doc> memberBlock;
@@ -87,7 +85,6 @@ final class RecordDeclarationPrinter {
             Function<Node, String> compactTypeLike,
             Function<Type, Doc> typeBody,
             JavaFormatRule<AnnotationExpr> annotation,
-            Function<AnnotationExpr, String> annotationFlatText,
             ToIntFunction<String> currentIndentedWidth,
             Function<RecordDeclaration, Doc> memberBlock
     ) {
@@ -105,7 +102,6 @@ final class RecordDeclarationPrinter {
         this.compactTypeLike = compactTypeLike;
         this.typeBody = typeBody;
         this.annotation = annotation;
-        this.annotationFlatText = annotationFlatText;
         this.currentIndentedWidth = currentIndentedWidth;
         this.memberBlock = memberBlock;
     }

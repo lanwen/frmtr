@@ -271,6 +271,7 @@ final class StatementPrinter {
             comments,
             commentPlacement,
             rawSource,
+            sourceShapePolicy,
             options,
             layoutWidth,
             controlConditions,

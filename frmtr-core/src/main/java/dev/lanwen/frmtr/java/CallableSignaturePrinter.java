@@ -166,6 +166,51 @@ final class CallableSignaturePrinter {
     }
 
     /**
+     * Ranks the parameter list's flat, compact-continuation, and one-per-line shapes at the true rendered column,
+     * reserving {@code suffixLength} columns of trailing same-line content (a throws clause or the body/semicolon
+     * opener) so a list that only fits alone still yields to a broken shape when that content needs the room.
+     *
+     * <p>A parameter leading-line-comment keeps forcing the one-per-line shape build-time, unranked, because
+     * {@link #parameters(CallableDeclaration, boolean)} always breaks once any parameter has one regardless of the
+     * flag passed — flattening that shape would flatten its comma separators while the comment's own hard line
+     * survives, mangling it. {@link Doc#flatCandidate} guards the same hazard for a parameter whose own content (an
+     * annotation preserving a source multi-line shape) carries a hard line of its own: it drops the flat shape from
+     * the ranking instead of forcing a mangled hybrid. {@code compactContinuationEligible} lets a caller such as a
+     * broken-return-type method opt the continuation shape out entirely.
+     */
+    Doc rankedParameters(CallableDeclaration<?> declaration, boolean compactContinuationEligible, int suffixLength) {
+        if (declaration.getParameters().isEmpty() && declaration.getReceiverParameter().isEmpty()) {
+            // An empty `()` has no break group and no flat-vs-broken choice, so ranking it would only wrap an
+            // unconditionally identical pair of alternatives in a pointless BestFitting node.
+            return Doc.text("()");
+        }
+        if (parametersHaveLeadingLineComment(declaration)) {
+            return parameters(declaration, false);
+        }
+        Optional<Doc> flat = Doc.flatCandidate(parameters(declaration, false));
+        Doc broken = parameters(declaration, true);
+        Optional<Doc> continuation = compactContinuationEligible && parametersFitOnContinuation(declaration)
+            ? Optional.of(compactContinuationParameters(declaration))
+            : Optional.empty();
+        List<Doc> alternatives = new ArrayList<>();
+        List<Integer> priorities = new ArrayList<>();
+        flat.ifPresent(doc -> {
+            alternatives.add(doc);
+            priorities.add(2);
+        });
+        continuation.ifPresent(doc -> {
+            alternatives.add(doc);
+            priorities.add(1);
+        });
+        alternatives.add(broken);
+        priorities.add(0);
+        Doc ranked = alternatives.size() == 1
+            ? broken
+            : Doc.bestFittingFirstLine(alternatives, priorities.stream().mapToInt(Integer::intValue).toArray());
+        return Doc.reserving(ranked, suffixLength);
+    }
+
+    /**
      * Prints a receiver parameter as one compact signature item.
      */
     Doc receiverParameter(ReceiverParameter parameter) {
@@ -226,20 +271,6 @@ final class CallableSignaturePrinter {
     boolean returnTypeOverflows(String returnTypeNamePrefix) {
         String openerLine = returnTypeNamePrefix + "(";
         return currentIndentedWidth(openerLine) > options.lineWidth();
-    }
-
-    /**
-     * Reports whether the callable parameter list can actually break onto continuation lines — distinct from
-     * {@link #parametersBreak(String, CallableDeclaration, String)}, which only asks whether the flat signature overflows.
-     *
-     * <p>An empty {@code ()} has no break group, so an overflowing signature cannot move a following clause onto a lower
-     * column by breaking it. The throws-clause width decision consults this before treating the parameters as broken:
-     * when {@code ()} cannot break, the throws clause is measured against the full flat signature and wraps onto its own
-     * line rather than sitting next to a {@code )} that never moved. Decisions independent of an actual break keep using
-     * {@link #parametersBreak(String, CallableDeclaration, String)} directly.
-     */
-    boolean parametersCanBreak(CallableDeclaration<?> declaration) {
-        return !declaration.getParameters().isEmpty() || declaration.getReceiverParameter().isPresent();
     }
 
     /**

@@ -75,13 +75,8 @@ final class ConstructorDeclarationPrinter {
         }
         prefix += declaration.getNameAsString();
         docs.add(Doc.text(declaration.getNameAsString()));
-        boolean parametersBreak = callableSignatures.parametersBreak(
-            prefix,
-            declaration,
-            constructorParameterSuffix(declaration)
-        );
         boolean compactContinuationParameters = !declaration.getThrownExceptions().isEmpty();
-        docs.add(parameters(declaration, parametersBreak, compactContinuationParameters));
+        docs.add(parameters(declaration, compactContinuationParameters));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
@@ -130,26 +125,23 @@ final class ConstructorDeclarationPrinter {
         return Doc.concat(docs);
     }
 
+    /**
+     * Defers to {@link CallableSignaturePrinter#rankedParameters}, mirroring {@link MethodDeclarationPrinter}'s
+     * parameter ranking with no return type to hold fixed.
+     */
+    private Doc parameters(ConstructorDeclaration declaration, boolean compactContinuationParameters) {
+        return callableSignatures.rankedParameters(
+            declaration,
+            compactContinuationParameters,
+            constructorParameterSuffix(declaration).length()
+        );
+    }
+
     private String constructorParameterSuffix(ConstructorDeclaration declaration) {
         if (declaration.getThrownExceptions().isEmpty()) {
             return " {}";
         }
         return " throws " + compactJoin.apply(declaration.getThrownExceptions()) + " {";
-    }
-
-    private Doc parameters(
-            ConstructorDeclaration declaration,
-            boolean parametersBreak,
-            boolean compactContinuationParameters
-    ) {
-        if (
-            !parametersBreak
-            || !compactContinuationParameters
-            || !callableSignatures.parametersFitOnContinuation(declaration)
-        ) {
-            return callableSignatures.parameters(declaration, parametersBreak);
-        }
-        return callableSignatures.compactContinuationParameters(declaration);
     }
 
     /**

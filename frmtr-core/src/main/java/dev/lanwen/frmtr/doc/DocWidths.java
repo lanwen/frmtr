@@ -306,6 +306,13 @@ final class DocWidths {
                 if (aCount.fits() && aPriority != bPriority) {
                     return aPriority > bPriority;
                 }
+                // Neither arm fits anywhere (a column so deep even the shallowest header overruns): the gates above tie,
+                // so compare each arm's single worst line before summed overflow — several small overruns read better
+                // than one huge line, and a multi-line arm must not lose to a flat line just because summing its many
+                // small seam overruns happens to exceed the flat line's one large one.
+                if (!aCount.fits() && aCount.maxLineOverflow() != bCount.maxLineOverflow()) {
+                    return aCount.maxLineOverflow() < bCount.maxLineOverflow();
+                }
                 // Overflow before line count: the arms share one over-width body, so the shape that overflows less on its
                 // seam lines wins over the one that merely saves a line by hugging the selector onto the broken root.
                 if (aCount.overflow() != bCount.overflow()) {
@@ -374,7 +381,7 @@ final class DocWidths {
             walk.walk(doc, indent, GroupMode.BREAK);
             walk.flushLineSuffixes();
             walk.accountOverflowAtEnd();
-            return new LineCount(walk.lines, walk.overflow, walk.firstLineOverflow);
+            return new LineCount(walk.lines, walk.overflow, walk.firstLineOverflow, walk.maxLineOverflow);
         }
 
         private int measure(Doc doc, int remaining) {
@@ -476,6 +483,9 @@ final class DocWidths {
 
             /** Overflow contributed by line 0 only, captured the first time a line closes; the whole-doc overflow when it never breaks. */
             private int firstLineOverflow;
+
+            /** The single worst line's overflow seen so far, tracked alongside the sum for the neither-fits tie-break. */
+            private int maxLineOverflow;
 
             /** Mirrors {@link DocRenderer}'s reserved-columns cursor: consumed by one decision, then cleared. */
             private int reserved;
@@ -625,6 +635,7 @@ final class DocWidths {
             private void accountOverflow() {
                 int lineOverflow = Math.max(0, column - lineWidth);
                 overflow += lineOverflow;
+                maxLineOverflow = Math.max(maxLineOverflow, lineOverflow);
                 // Every line close routes through here before its lines++, so lines == 0 is exactly the first line's
                 // close (or end-of-doc when the doc never broke); capture its overflow once for first-line-fit ranking.
                 if (lines == 0) {
@@ -662,7 +673,7 @@ final class DocWidths {
      * and line count and is applied by {@link Measurement#betterThan(LineCount, int, LineCount, int, boolean)}, which keeps
      * {@code LineCount} a pure width fact.
      */
-    record LineCount(int lines, int overflow, int firstLineOverflow) {
+    record LineCount(int lines, int overflow, int firstLineOverflow, int maxLineOverflow) {
 
         /**
          * Whether the document fits — no rendered line exceeded the width, i.e. the summed per-line overflow is zero.

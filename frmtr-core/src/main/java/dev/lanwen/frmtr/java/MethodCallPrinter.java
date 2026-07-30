@@ -1347,11 +1347,27 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Always empty: a single inner-object-creation argument is not hugged onto the opener — it breaks by width through the
-     * generic path. Kept (returning empty) so the dispatch hook stays wired.
+     * Hugs a sole anonymous-class object-creation argument onto the wrapping call's opener
+     * ({@code timer.add(new SweepTask(interval) {}⏎ … ⏎{@code })}). The generic exploded-argument-list path wraps the
+     * whole call in one {@link Doc#group}, and a {@link Doc#group} containing any unconditional hard line always reports
+     * "does not fit" — the anonymous body's members hard-break unconditionally — so that group forces the opener and
+     * closer apart from the argument on every pass regardless of how short the header is. Hugging sidesteps that: the
+     * header keeps its own width-driven break ({@link ObjectCreationPrinter#objectCreation}'s inner group), so a header
+     * that overflows still wraps its own arguments, but the surrounding call parens never gain a break that fixes
+     * nothing. Withheld when a comment sits in the gap between the opener and the argument, or on the call itself, so
+     * that comment keeps its existing slot in the comment-aware paths checked below.
      */
     private Optional<Doc> singleObjectCreationArgument(String prefix, MethodCallExpr expression) {
-        return Optional.empty();
+        if (
+            expression.getArguments().size() != 1
+            || !(expression.getArgument(0) instanceof ObjectCreationExpr creation)
+            || creation.getAnonymousClassBody().isEmpty()
+            || expression.getComment().isPresent()
+            || commentedExpressionLists.hasUnprintedLineComments(expression, expression.getArguments())
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(prefix + "("), objectCreationWithSuffix.apply(creation, ")")));
     }
 
     /**

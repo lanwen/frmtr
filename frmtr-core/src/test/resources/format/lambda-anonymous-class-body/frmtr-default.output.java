@@ -31,14 +31,12 @@ final class LambdaAnonymousClassBody {
     }
 
     void directArgumentControl(GatewayRegistry registry) {
-        registry.registerProbe(
-            new DefaultConnectivityProbe("primary-verifiable-probe", routingContext()) {
-                @Override
-                public ProbeResult evaluate(ProbeScope scope, Map<String, Object> attributes) {
-                    return ProbeResultBuilder.withStatusAndScope(ProbeResult.Status.OK, scope).build();
-                }
+        registry.registerProbe(new DefaultConnectivityProbe("primary-verifiable-probe", routingContext()) {
+            @Override
+            public ProbeResult evaluate(ProbeScope scope, Map<String, Object> attributes) {
+                return ProbeResultBuilder.withStatusAndScope(ProbeResult.Status.OK, scope).build();
             }
-        );
+        });
     }
 
     RoutingContext routingContext() {

@@ -147,11 +147,9 @@ final class MethodDeclarationPrinter {
         String signature = returnType + " " + declaration.getNameAsString();
         prefix += signature;
         boolean breakReturnType = shouldBreakReturnType(declaration, prefix);
-        boolean parametersBreak = !breakReturnType
-            && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
         boolean compactContinuationParameters = !declaration.getThrownExceptions().isEmpty();
         docs.add(returnType(declaration, returnType, breakReturnType));
-        docs.add(parameters(declaration, parametersBreak, compactContinuationParameters));
+        docs.add(parameters(declaration, breakReturnType, compactContinuationParameters));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
@@ -356,19 +354,24 @@ final class MethodDeclarationPrinter {
         return !body.getOrphanComments().isEmpty() || !commentPlacement.containedComments(body).isEmpty();
     }
 
+    /**
+     * Holds {@code breakReturnType} at its already-decided build-time value and otherwise defers to
+     * {@link CallableSignaturePrinter#rankedParameters}: a broken return type keeps the parameter list on the
+     * flat/self-breaking shape only, matching the flat opener it leaves on the return type's own line.
+     */
     private Doc parameters(
             MethodDeclaration declaration,
-            boolean parametersBreak,
+            boolean breakReturnType,
             boolean compactContinuationParameters
     ) {
-        if (
-            parametersBreak
-            && compactContinuationParameters
-            && callableSignatures.parametersFitOnContinuation(declaration)
-        ) {
-            return callableSignatures.compactContinuationParameters(declaration);
+        if (breakReturnType) {
+            return callableSignatures.parameters(declaration, false);
         }
-        return callableSignatures.parameters(declaration, parametersBreak);
+        return callableSignatures.rankedParameters(
+            declaration,
+            compactContinuationParameters,
+            methodParameterSuffix(declaration).length()
+        );
     }
 
     private String compactJoin(List<? extends Node> nodes) {

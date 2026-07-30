@@ -430,9 +430,7 @@ final class VariableInitializerLayout {
             // the fan claims the trailing comment itself, and {@code methodCallWithSemicolon} would otherwise claim it first
             // (comment claims fire at doc-build time), leaving the fan's re-render empty and dropping the comment.
             Optional<Doc> dotBrokenTail = chainLayout.dotBrokenObjectRootTailChain(
-                variable,
                 variableName(variable),
-                flatName,
                 methodCall
             );
             if (dotBrokenTail.isPresent()) {

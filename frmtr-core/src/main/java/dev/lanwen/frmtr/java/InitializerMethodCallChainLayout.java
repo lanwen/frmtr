@@ -1142,42 +1142,30 @@ final class InitializerMethodCallChainLayout {
      * only fires on a chain that is currently attached over-width, it can only remove an over-width line, never reshape a
      * fitting one.
      */
-    private boolean attachedSingleSegmentChainMustBreakAfterEquals(
-            VariableDeclarator variable,
-            String flatName,
-            MethodCallExpr methodCall
-    ) {
-        if (
-            !methodCallChainRootIsObjectCreation.test(methodCall)
-            || !methodCallChainInitializerShape.apply(methodCall).singleCall()
-            || !methodCall.getArguments().isEmpty()
-            || !(methodCall.getScope().orElse(null) instanceof ObjectCreationExpr constructor)
-        ) {
-            return false;
-        }
-        // Reconstruct the one-line chain from the AST rather than {@code compact.apply(methodCall)}: the whole-chain
-        // compaction leaks a source-shaped space before the {@code .} for a chain the author wrote broken, which would make
-        // this width probe (and therefore the shape) depend on the source layout. The constructor scope compacts cleanly
-        // (no chain to leak) and the tail is a zero-argument selector, so this string is source-neutral.
-        String fullChain = compact.apply(constructor) + "." + methodCall.getNameAsString() + "()";
-        return layoutWidth.variableInitializer(variable, flatName + " = " + fullChain + ";") > options.lineWidth()
-            && layoutWidth.continuationStatement(fullChain + ";") <= options.lineWidth();
+    /**
+     * The single-call, empty-tail, object-creation-rooted chain shape ({@code new X(...).method()}): no interior break
+     * point exists (the constructor already stands alone, the tail cannot open an empty argument list), so attach versus
+     * break-after-{@code =} is decided by ranking the rendered Docs, never by a source-shape read.
+     */
+    private boolean isSingleCallEmptyTailObjectCreationChain(MethodCallExpr methodCall) {
+        return methodCallChainRootIsObjectCreation.test(methodCall)
+            && methodCallChainInitializerShape.apply(methodCall).singleCall()
+            && methodCall.getArguments().isEmpty()
+            && methodCall.getScope().orElse(null) instanceof ObjectCreationExpr;
     }
 
     /**
-     * Ranks the DOT-BREAK shape ({@code = new RelaySubject<>(...)}⏎{@code .withoutAuthentication(); // note}) against
-     * break-after-{@code =} for a comment-bearing, empty-tail object-creation chain, by true rendered first line
-     * ({@link Doc#bestFittingFirstLine}) over a constructor root Doc built once and shared by both candidates. Built
+     * Ranks ATTACH, the DOT-BREAK shape ({@code = new RelaySubject<>(...)}⏎{@code .withoutAuthentication(); // note}),
+     * and break-after-{@code =} for a comment-bearing, empty-tail object-creation chain, by true rendered first line
+     * ({@link Doc#bestFittingFirstLine}) over a constructor root Doc built once and shared by all three candidates. Built
      * HERE, ahead of {@link #variableWithMethodCallChainRanked}, so this fan claims the trailing comment itself before
      * the chain doc ({@code methodCallWithSemicolon}) can claim it first and leave this re-render comment-empty.
      */
     Optional<Doc> dotBrokenObjectRootTailChain(
-            VariableDeclarator variable,
             String name,
-            String flatName,
             MethodCallExpr methodCall
     ) {
-        if (!attachedSingleSegmentChainMustBreakAfterEquals(variable, flatName, methodCall)) {
+        if (!isSingleCallEmptyTailObjectCreationChain(methodCall)) {
             return Optional.empty();
         }
         // The constructor renders comment-free; only the tail trailing line comment is re-emitted. Bail unless every
@@ -1191,8 +1179,8 @@ final class InitializerMethodCallChainLayout {
             return Optional.empty();
         }
         // The constructor renders through the ordinary comment-blind expression printer, built exactly ONCE and shared
-        // by both ranked candidates below: it carries its own width-driven group (breaks its argument list on overflow),
-        // so the renderer — not a string first-line estimate — decides whether the constructor stays flat here.
+        // by all three ranked candidates below: it carries its own width-driven group (breaks its argument list on
+        // overflow), so the renderer — not a string first-line estimate — decides whether the constructor stays flat.
         Doc constructorRoot = expressionWithoutOwnComment.apply(methodCall.getScope().orElseThrow());
         Doc commentSuffix = tailComments.isEmpty()
             ? Doc.EMPTY
@@ -1201,6 +1189,7 @@ final class InitializerMethodCallChainLayout {
                 Doc.join(Doc.text(" "), tailComments.stream().map(comments::comment).toList())
             ));
         Doc tailSegment = Doc.concat(Doc.text(methodCallSegmentPrefix(methodCall) + "();"), commentSuffix);
+        Doc attached = Doc.concat(Doc.text(name + " = "), constructorRoot, tailSegment);
         Doc dotBroken = Doc.concat(
             Doc.text(name + " = "),
             constructorRoot,
@@ -1210,7 +1199,9 @@ final class InitializerMethodCallChainLayout {
             Doc.text(name + " ="),
             Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(constructorRoot, tailSegment)))
         );
-        return Optional.of(Doc.bestFittingFirstLine(List.of(dotBroken, brokenAfterEquals), new int[] { 1, 0 }));
+        return Optional.of(
+            Doc.bestFittingFirstLine(List.of(attached, dotBroken, brokenAfterEquals), new int[] { 2, 1, 0 })
+        );
     }
 
     /**
@@ -1241,9 +1232,6 @@ final class InitializerMethodCallChainLayout {
             Doc chain,
             int[] priorities
     ) {
-        if (attachedSingleSegmentChainMustBreakAfterEquals(variable, flatName, methodCall)) {
-            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
-        }
         Doc attached = Doc.concat(Doc.text(name + " = "), chain);
         Doc brokenAfterEquals = Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         return Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), priorities);

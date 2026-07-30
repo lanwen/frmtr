@@ -686,6 +686,10 @@ final class LambdaExpressionPrinter {
         return blockLambdaArguments.huggableMethodChainBlockLambdaArguments(prefix, arguments);
     }
 
+    Optional<Doc> explodedMethodChainBlockLambdaArgument(String prefix, NodeList<Expression> arguments) {
+        return blockLambdaArguments.explodedMethodChainBlockLambdaArgument(prefix, arguments);
+    }
+
     /**
      * Hugs a block-lambda argument after the caller supplies the width check for the first rendered line.
      *

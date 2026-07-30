@@ -62,6 +62,8 @@ final class MethodCallChainPrinter {
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
 
+    private final BiFunction<String, NodeList<Expression>, Optional<Doc>> explodedMethodChainBlockLambdaArgument;
+
     private final BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine;
 
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
@@ -117,6 +119,7 @@ final class MethodCallChainPrinter {
             Function<ObjectCreationExpr, Doc> widthDrivenObjectCreationRenderer,
             Function<ObjectCreationExpr, String> objectCreationPrefix,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
+            BiFunction<String, NodeList<Expression>, Optional<Doc>> explodedMethodChainBlockLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments huggableExpressionLambdaArguments,
@@ -143,6 +146,7 @@ final class MethodCallChainPrinter {
         this.widthDrivenObjectCreationRenderer = widthDrivenObjectCreationRenderer;
         this.objectCreationPrefix = objectCreationPrefix;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
+        this.explodedMethodChainBlockLambdaArgument = explodedMethodChainBlockLambdaArgument;
         this.huggableBlockLambdaFirstLine = huggableBlockLambdaFirstLine;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
@@ -232,6 +236,7 @@ final class MethodCallChainPrinter {
             chainSelectorLambda,
             methodChainPlanner,
             huggableBlockLambdaArguments,
+            explodedMethodChainBlockLambdaArgument,
             commentedExpressionLambdaArgument,
             this::methodCallChainAnalysis,
             this::chainBreaksByRule

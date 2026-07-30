@@ -60,6 +60,8 @@ final class ChainSegmentRenderer {
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
 
+    private final BiFunction<String, NodeList<Expression>, Optional<Doc>> explodedMethodChainBlockLambdaArgument;
+
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
 
     private final Function<MethodCallExpr, MethodCallChainSourcePlanner.MethodCallChainAnalysis> methodCallChainAnalysis;
@@ -80,6 +82,7 @@ final class ChainSegmentRenderer {
             ChainSelectorLambdaLayout chainSelectorLambda,
             MethodCallChainSourcePlanner methodChainPlanner,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
+            BiFunction<String, NodeList<Expression>, Optional<Doc>> explodedMethodChainBlockLambdaArgument,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             Function<MethodCallExpr, MethodCallChainSourcePlanner.MethodCallChainAnalysis> methodCallChainAnalysis,
             Predicate<MethodCallChainSourcePlanner.MethodCallChainAnalysis> chainBreaksByRule
@@ -97,6 +100,7 @@ final class ChainSegmentRenderer {
         this.chainSelectorLambda = chainSelectorLambda;
         this.methodChainPlanner = methodChainPlanner;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
+        this.explodedMethodChainBlockLambdaArgument = explodedMethodChainBlockLambdaArgument;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.methodCallChainAnalysis = methodCallChainAnalysis;
         this.chainBreaksByRule = chainBreaksByRule;
@@ -228,9 +232,8 @@ final class ChainSegmentRenderer {
             // header too wide at that column explodes instead of overflowing. Scoped to the one-per-line fan
             // (the only caller verified clear of the promoted-root group's ancestor-coupling hazard), a
             // comment-free call (a second, separately built rendering would offer its comments twice), and a
-            // multi-parameter header (the only shape whose own header can plausibly overflow) — the exploded
-            // arm's argument path renders lambda bodies through the generic printer, which mis-measures nested
-            // chains, so single-parameter bodies decline until that path measures at the chain column.
+            // multi-parameter header (the only shape whose own header can plausibly overflow) — see
+            // {@link #hasMultiParameterBlockLambda} for why a single-parameter header still declines the rank.
             if (
                 !rankHugAgainstExploded
                 || expression.getComment().isPresent()
@@ -239,7 +242,9 @@ final class ChainSegmentRenderer {
             ) {
                 return hugged;
             }
-            Doc exploded = brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
+            Doc exploded = explodedMethodChainBlockLambdaArgument.apply(prefix, expression.getArguments())
+                .map(doc -> Doc.concat(segmentPrefix, doc, finalSegmentSuffix.doc()))
+                .orElseGet(() -> brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix));
             return Doc.bestFittingFirstLine(List.of(hugged, exploded));
         }
         Optional<Doc> commentedExpressionLambda =
@@ -303,7 +308,9 @@ final class ChainSegmentRenderer {
     /**
      * Reports a block-lambda argument whose own parameter list is parenthesized (two or more parameters): the one
      * header shape whose flat form can itself run wide enough to need exploding, as opposed to a bare single
-     * parameter, whose header is always short regardless of context.
+     * parameter, whose header is always short regardless of context. Also a safety net: one indent level deeper than
+     * this gate otherwise admits, a nested chain inside the exploded body can still rank flat-over-width against its
+     * own broken form, a seam the routed chain-specific block renderer alone does not fix.
      */
     private boolean hasMultiParameterBlockLambda(MethodCallExpr expression) {
         return expression.getArguments()

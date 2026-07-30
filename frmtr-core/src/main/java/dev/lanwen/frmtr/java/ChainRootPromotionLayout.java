@@ -200,34 +200,28 @@ final class ChainRootPromotionLayout {
         return Optional.empty();
     }
 
+    /**
+     * The single-segment promoted-root shape: ranks attaching the segment to {@code rootDoc} against dropping it to its
+     * own continuation line via {@link Doc#bestFittingFirstLine}, not a plain {@link Doc#group} — a group would flatten
+     * {@code rootDoc}'s own nested break decision instead of simulating it. {@code segment} is shared across both arms.
+     */
     Doc groupedPromotedRootWithSingleSegment(
             Doc rootDoc,
             MethodCallExpr expression,
             MethodCallChainTail finalSegmentSuffix
     ) {
-        if (methodCallSegmentHasBlockLambdaArgument.test(expression)) {
-            // Rank the block-lambda hug against dropping the selector to its own continuation line at the true rendered
-            // column: both arms carry the same hard-break body, so first-line fit — not fewest lines — must decide.
-            Doc segment = segmentRenderer.methodCallChainSegment(expression, finalSegmentSuffix);
-            Doc hug = Doc.concat(rootDoc, segment);
-            Doc broken = Doc.concat(rootDoc, chainContinuation.apply(segment));
-            return Doc.bestFittingFirstLine(List.of(hug, broken));
-        }
-        return Doc.group(
-            Doc.concat(
-                rootDoc,
-                // Measure the segment on its own continuation line, where softChainContinuation drops it when it breaks.
-                softChainContinuation.apply(
-                    segmentRenderer.methodCallChainSegment(
-                        expression,
-                        Optional.empty(),
-                        finalSegmentSuffix,
-                        layoutWidth::continuationStatement,
-                        true
-                    )
-                )
-            )
-        );
+        Doc segment = methodCallSegmentHasBlockLambdaArgument.test(expression)
+            ? segmentRenderer.methodCallChainSegment(expression, finalSegmentSuffix)
+            : segmentRenderer.methodCallChainSegment(
+                expression,
+                Optional.empty(),
+                finalSegmentSuffix,
+                layoutWidth::continuationStatement,
+                true
+            );
+        Doc hug = Doc.concat(rootDoc, segment);
+        Doc broken = Doc.concat(rootDoc, chainContinuation.apply(segment));
+        return Doc.bestFittingFirstLine(List.of(hug, broken));
     }
 
     Doc inlineMethodCall(MethodCallExpr expression) {

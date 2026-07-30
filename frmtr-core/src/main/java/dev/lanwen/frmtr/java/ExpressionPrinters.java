@@ -785,6 +785,10 @@ final class ExpressionPrinters {
         return lambdas.huggableBlockLambdaArguments(prefix, arguments, firstLineWidth);
     }
 
+    Optional<Doc> eligibleBlockLambdaHug(String prefix, NodeList<Expression> arguments) {
+        return lambdas.eligibleBlockLambdaHug(prefix, arguments);
+    }
+
     String lambdaParameters(LambdaExpr expression) {
         return lambdas.lambdaParameters(expression);
     }

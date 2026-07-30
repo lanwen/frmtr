@@ -108,7 +108,7 @@ final class StatementPrinters {
             types::compactJoinTypeLike,
             declarations::modifiers,
             expressions::annotationFlatText,
-            expressions::huggableBlockLambdaArguments,
+            expressions::eligibleBlockLambdaHug,
             expressions::statementChain,
             expressions::brokenMethodCall,
             controlConditions::ifCondition,

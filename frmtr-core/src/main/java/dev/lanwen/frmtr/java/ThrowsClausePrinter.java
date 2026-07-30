@@ -39,8 +39,7 @@ final class ThrowsClausePrinter {
             String prefix,
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
-            LayoutContext layout,
-            boolean parametersBreak
+            LayoutContext layout
     ) {
         String exceptions = compactJoin.apply(thrownExceptions);
         String throwsText = "throws " + exceptions;

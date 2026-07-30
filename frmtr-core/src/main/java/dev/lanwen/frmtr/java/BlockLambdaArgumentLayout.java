@@ -121,6 +121,30 @@ final class BlockLambdaArgumentLayout {
     }
 
     /**
+     * Builds the EXPLODED shape (the lambda header on its own indented line, opener and closer each on their own line)
+     * for a block-lambda argument that is also hug-eligible, with the body routed through the chain-specific block
+     * renderer so its width probes measure the fan's true continuation depth instead of the generic block's shallow
+     * one. Empty for every reason the hug itself declines, plus a leading/trailing argument alongside the lambda — the
+     * rarer combined shape this caller does not build, left on the generic argument-list rendering instead.
+     */
+    Optional<Doc> explodedMethodChainBlockLambdaArgument(String prefix, NodeList<Expression> arguments) {
+        Optional<HuggableBlockLambdaArgument> huggable = huggableBlockLambdaArgument(prefix, arguments);
+        if (huggable.isEmpty()) {
+            return Optional.empty();
+        }
+        HuggableBlockLambdaArgument argument = huggable.orElseThrow();
+        if (!argument.leadingArguments().isEmpty() || argument.lambdaIndex() < arguments.size() - 1) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+            Doc.text(prefix + "("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, methodChainLambdaExpression(argument.lambdaExpr()))),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        ));
+    }
+
+    /**
      * Hugs a block-lambda argument after the caller supplies the width check for the first rendered line.
      *
      * <p>Statement, method-call, and object-creation contexts use normal block-statement width. Field declarations include

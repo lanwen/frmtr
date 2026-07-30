@@ -142,27 +142,13 @@ final class LoopStatementLayout {
     }
 
     /**
-     * Renders a braceless {@code while}/{@code for}/{@code for-each} body that carries a {@code //} line comment between
-     * the loop header and the body, claiming the comment exactly once and placing it the same way the {@code if}
-     * close-paren path places a condition comment.
-     *
-     * <p>A braceless body normally collapses onto the header line ({@code while (cond) call();}), but a header-to-body
-     * {@code //} comment cannot share that line (it would comment out the body). Source position decides placement: a
-     * comment on the header-end line ({@code while (cond) // note}) stays inline like
-     * {@link ControlConditions#closeParenTrailingLineComment}; one on its own line below the header leads the body and
-     * moves above it. Either way the body breaks to an indented next line.
-     *
-     * <p>JavaParser attaches that gap comment to different nodes by whitespace (body's own leading trivia at
-     * {@code @default}, the {@code afterNode} header expression's trailing trivia under a collapse, the
-     * {@code controlStmt} orphans under an expand);
-     * {@link JavaCommentPlacementPolicy#gapLineCommentsBefore(Node, Node, java.util.Collection)} recovers it from
-     * whichever bucket (excluding the body's own comment) and claims it once under the body's leading slot, so exactly
-     * one path prints it — neither dropped under perturbation nor duplicated at {@code @default}. Empty when no leading
-     * line comment is present, leaving the caller's same-line collapse intact.
+     * Renders a braceless {@code while}/{@code for}/{@code for-each} header+body as one shape: forces the indented break
+     * when a header-to-body {@code //} comment or a nested control-statement body requires it (never collapsed onto the
+     * header line), otherwise ranks collapsed-vs-broken at the true rendered column via {@link Doc#conditionalGroup}.
      */
-    private Optional<Doc> bracelessLoopBody(Node controlStmt, Node afterNode, Statement body) {
+    private Doc bracelessLoopBody(Node controlStmt, Node afterNode, Doc header, Statement body) {
         if (body.isBlockStmt()) {
-            return Optional.empty();
+            return Doc.concat(header, Doc.text(" "), nestedStatement.apply(body));
         }
         List<JavaCommentTrivia> gapComments = commentPlacement.gapLineCommentsBefore(
             afterNode,
@@ -173,8 +159,11 @@ final class LoopStatementLayout {
                 .filter(JavaCommentTrivia::isLine)
                 .filter(trivia -> !trivia.startsAfterEndOf(body))
                 .isPresent();
-        if (gapComments.isEmpty() && !bodyOwnsLeadingLineComment && !joinedFormOverflows(controlStmt, body)) {
-            return Optional.empty();
+        Doc bodyDoc = statementRenderer.format(body, LayoutContext.root());
+        if (gapComments.isEmpty() && !bodyOwnsLeadingLineComment && !forcesBrokenBody(body)) {
+            Doc collapsed = Doc.concat(header, Doc.text(" "), bodyDoc);
+            Doc broken = Doc.concat(header, Doc.text(" "), Doc.indent(Doc.concat(Doc.HARD_LINE, bodyDoc)));
+            return Doc.conditionalGroup(List.of(collapsed, broken));
         }
         List<Doc> headerTrailing = new ArrayList<>();
         List<Doc> aboveBody = new ArrayList<>();
@@ -195,32 +184,23 @@ final class LoopStatementLayout {
             indented.add(aboveComment);
             indented.add(Doc.HARD_LINE);
         }
-        indented.add(statementRenderer.format(body, LayoutContext.root()));
+        indented.add(bodyDoc);
         List<Doc> result = new ArrayList<>();
+        result.add(header);
         result.add(Doc.text(" "));
         for (Doc inline : headerTrailing) {
             result.add(inline);
         }
         result.add(Doc.indent(Doc.concat(indented)));
-        return Optional.of(Doc.concat(result));
+        return Doc.concat(result);
     }
 
     /**
-     * Whether the braceless loop collapsed onto one line ({@code for (...) call(...);}) would overflow the width, forcing
-     * the body onto its own indented line instead of an over-width header. Source-neutral: it measures a comment-stripped
-     * clone rendered from the AST (its retained source token range is cleared) at the loop's indentation, so an author's
-     * wrapping cannot flip the verdict and the result is a fixpoint. A block body already breaks, so it never overflows.
+     * Whether a braceless body is itself a nested control statement, which {@link #nestedStatement} always breaks and
+     * indents regardless of width — the collapsed shape is never a candidate for this body kind.
      */
-    private boolean joinedFormOverflows(Node loop, Statement body) {
-        if (body.isBlockStmt()) {
-            return false;
-        }
-        Node clone = loop.clone();
-        clone.removeComment();
-        List.copyOf(clone.getOrphanComments()).forEach(clone::removeOrphanComment);
-        List.copyOf(clone.getAllContainedComments()).forEach(Node::remove);
-        clone.setTokenRange(null);
-        return layoutWidth.nodeLine(loop, compact.apply(clone)) > options.lineWidth();
+    private boolean forcesBrokenBody(Statement body) {
+        return body.isIfStmt() || body.isForStmt() || body.isForEachStmt() || body.isWhileStmt() || body.isDoStmt();
     }
 
     Doc forEachStatement(ForEachStmt statement) {
@@ -235,15 +215,7 @@ final class LoopStatementLayout {
             );
         }
         Doc header = forEachHeader(statement);
-        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
-            statement,
-            statement.getIterable(),
-            statement.getBody()
-        );
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(header, commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(header, Doc.text(" "), nestedStatement.apply(statement.getBody()));
+        return bracelessLoopBody(statement, statement.getIterable(), header, statement.getBody());
     }
 
     /**
@@ -315,12 +287,10 @@ final class LoopStatementLayout {
         if (statement.getBody() instanceof DoStmt) {
             return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.format(statement.getBody(), LayoutContext.root()));
         }
-        Optional<Doc> commentedBracelessBody = forHeaderEndNode(statement)
-                .flatMap(afterNode -> bracelessLoopBody(statement, afterNode, statement.getBody()));
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(Doc.text(forHeader(statement)), commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(Doc.text(forHeader(statement) + " "), nestedStatement.apply(statement.getBody()));
+        Doc header = Doc.text(forHeader(statement));
+        return forHeaderEndNode(statement)
+                .map(afterNode -> bracelessLoopBody(statement, afterNode, header, statement.getBody()))
+                .orElseGet(() -> Doc.concat(header, Doc.text(" "), nestedStatement.apply(statement.getBody())));
     }
 
     /**
@@ -373,15 +343,7 @@ final class LoopStatementLayout {
                 layoutWidth::blockStatement
             )
         );
-        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
-            statement,
-            statement.getCondition(),
-            statement.getBody()
-        );
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(whileHeader, commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(whileHeader, Doc.text(" "), nestedStatement.apply(statement.getBody()));
+        return bracelessLoopBody(statement, statement.getCondition(), whileHeader, statement.getBody());
     }
 
     /**

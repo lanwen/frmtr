@@ -72,8 +72,6 @@ final class EnumDeclarationPrinter {
 
     private final Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlineImplementsTypes;
 
-    private final Function<NodeList<ClassOrInterfaceType>, String> flatImplementsTypes;
-
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
     private final EnumConstantLayout enumConstantLayout;
@@ -103,7 +101,6 @@ final class EnumDeclarationPrinter {
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> brokenImplementsTypes,
             Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlineImplementsTypes,
-            Function<NodeList<ClassOrInterfaceType>, String> flatImplementsTypes,
             Function<List<? extends Node>, String> compactJoin,
             Function<Expression, Doc> expression,
             ToIntFunction<String> currentIndentedWidth,
@@ -125,7 +122,6 @@ final class EnumDeclarationPrinter {
         this.modifiers = modifiers;
         this.brokenImplementsTypes = brokenImplementsTypes;
         this.inlineImplementsTypes = inlineImplementsTypes;
-        this.flatImplementsTypes = flatImplementsTypes;
         this.memberRenderer = memberRenderer;
         this.enumConstantLayout = new EnumConstantLayout(
             this.enumConstantComments,
@@ -147,50 +143,47 @@ final class EnumDeclarationPrinter {
         header.add(annotations.apply(declaration));
         header.add(Doc.text(modifiers.apply(declaration)));
         header.add(Doc.text("enum " + declaration.getNameAsString()));
-        boolean breakHeader = shouldBreakEnumHeader(declaration);
-        if (breakHeader) {
-            brokenImplementsTypes.apply(declaration.getImplementedTypes()).ifPresent(header::add);
-            header.add(enumBodyOpenBreak(declaration));
-        } else {
-            inlineImplementsTypes.apply(declaration.getImplementedTypes()).ifPresent(header::add);
-            header.add(Doc.text(" "));
-        }
+        header.add(enumImplementsAndOpener(declaration));
         header.add(enumBlock(declaration));
         return Doc.concat(header);
     }
 
     /**
-     * Breaks long {@code implements} clauses before the enum body, accounting for whether the body can still be empty.
+     * Ranks the flat vs. broken {@code implements} clause at the true rendered column, reserving room for the block
+     * opener that follows on the same line so the ranking sees the space actually left at the enum's real nesting depth.
      */
-    private boolean shouldBreakEnumHeader(EnumDeclaration declaration) {
+    private Doc enumImplementsAndOpener(EnumDeclaration declaration) {
         if (declaration.getImplementedTypes().isEmpty()) {
-            return false;
+            return Doc.text(" ");
         }
-        String flatHeader = modifiers.apply(declaration)
-            + "enum "
-            + declaration.getNameAsString()
-            + flatImplementsTypes.apply(declaration.getImplementedTypes());
-        int blockWidth =
-            declaration.getEntries().isEmpty()
-            && declaration.getMembers().isEmpty()
-            && declaration.getOrphanComments().isEmpty()
-                ? "{}".length()
-                : "{".length();
-        return flatHeader.length() + 1 + blockWidth > options.lineWidth();
+        Doc flatCandidate = Doc.concat(
+            inlineImplementsTypes.apply(declaration.getImplementedTypes()).orElse(Doc.EMPTY),
+            Doc.text(" ")
+        );
+        Doc brokenCandidate = Doc.concat(
+            brokenImplementsTypes.apply(declaration.getImplementedTypes()).orElse(Doc.EMPTY),
+            enumBodyOpenBreak(declaration)
+        );
+        return Doc.reserving(
+            Doc.conditionalGroup(List.of(flatCandidate, brokenCandidate)),
+            emptyBlockOpener(declaration) ? "{}".length() : "{".length()
+        );
     }
 
     /**
      * Keeps broken headers with empty enum bodies on one physical line before {@code {}}.
      */
     private Doc enumBodyOpenBreak(EnumDeclaration declaration) {
-        if (
-            declaration.getEntries().isEmpty()
+        return emptyBlockOpener(declaration) ? Doc.text(" ") : Doc.HARD_LINE;
+    }
+
+    /**
+     * Whether the enum body has nothing to print, so a broken header can still collapse its brace onto one line.
+     */
+    private boolean emptyBlockOpener(EnumDeclaration declaration) {
+        return declaration.getEntries().isEmpty()
             && declaration.getMembers().isEmpty()
-            && declaration.getOrphanComments().isEmpty()
-        ) {
-            return Doc.text(" ");
-        }
-        return Doc.HARD_LINE;
+            && declaration.getOrphanComments().isEmpty();
     }
 
     /**

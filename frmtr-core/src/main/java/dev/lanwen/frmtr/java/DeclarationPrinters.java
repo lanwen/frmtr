@@ -254,7 +254,6 @@ final class DeclarationPrinters {
             declarationPrefixes::modifiers,
             enumTypes -> types.typeClause("implements", enumTypes),
             types::implementsTypes,
-            enumTypes -> types.flatTypeClause("implements", enumTypes),
             compactSource::compactJoin,
             expressions::expression,
             this::currentIndentedWidth,

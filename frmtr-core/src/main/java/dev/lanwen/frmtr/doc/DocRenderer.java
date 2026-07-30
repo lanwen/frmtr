@@ -222,18 +222,21 @@ public final class DocRenderer {
      * renders, so dependent content that follows can read it.
      */
     private void renderBestFitting(Doc.BestFitting bestFitting, int indent, DocWidths.Measurement widths) {
+        int reserved = takeReservedColumns();
         int chosen = widths.chooseBestFitting(
             bestFitting,
             indent,
             column,
             options.lineWidth(),
-            takeReservedColumns(),
+            reserved,
             groupModes
         );
         if (bestFitting.groupId() != null) {
             groupModes.put(bestFitting.groupId(), DocWidths.Measurement.verdictOf(chosen));
         }
-        render(bestFitting.alternatives().get(chosen), indent, GroupMode.BREAK, widths);
+        // The chosen alternative's tail may hold another ranked node on the same caller-owned last line; re-wrap it so
+        // that nested decision sees the reservation the ranking simulation already credited it with, not a spent one.
+        render(Doc.reserving(bestFitting.alternatives().get(chosen), reserved), indent, GroupMode.BREAK, widths);
     }
 
     private void append(String value) {

@@ -55,6 +55,8 @@ final class LoopStatementLayout {
 
     private final RawSource rawSource;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -93,6 +95,7 @@ final class LoopStatementLayout {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             ControlConditionPrinter controlConditions,
@@ -114,6 +117,7 @@ final class LoopStatementLayout {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.controlConditions = controlConditions;
@@ -244,19 +248,32 @@ final class LoopStatementLayout {
 
     /**
      * Lets the iterable own method-call argument breaks when the enhanced-for header would otherwise overflow.
+     *
+     * <p>Comment-free, the flat header and the broken iterable are ranked at the true rendered column via
+     * {@link Doc#conditionalGroup}, reserving the {@code " {}"} the caller always appends so the check matches the old
+     * build-time margin. A commented iterable keeps the build-time {@link LayoutWidth#nodeLine} gate instead, since
+     * building the broken shape unconditionally would claim its comments even on the pass that keeps it flat.
      */
     private Doc forEachHeader(ForEachStmt statement) {
         String variable = forEachVariable(statement);
         Expression iterable = statement.getIterable();
         String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
-        if (
-            // Measure the for-each header at the statement's true rendered block/type depth
-            // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-            layoutWidth.nodeLine(statement, header + " {}") <= options.lineWidth()
-            || !(iterable instanceof MethodCallExpr methodCall)
-        ) {
-            return Doc.text(header);
+        Doc flat = Doc.text(header);
+        if (!(iterable instanceof MethodCallExpr methodCall)) {
+            return flat;
         }
+        if (sourceShapePolicy.hasContainedComments(methodCall)) {
+            return layoutWidth.nodeLine(statement, header + " {}") <= options.lineWidth()
+                ? flat
+                : forEachBrokenHeader(variable, methodCall);
+        }
+        return Doc.reserving(
+            Doc.conditionalGroup(List.of(flat, forEachBrokenHeader(variable, methodCall))),
+            " {}".length()
+        );
+    }
+
+    private Doc forEachBrokenHeader(String variable, MethodCallExpr methodCall) {
         return Doc.concat(
             Doc.text("for (" + variable + " : "),
             brokenMethodCallRenderer.apply(methodCall),

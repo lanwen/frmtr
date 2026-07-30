@@ -2047,35 +2047,16 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * Measures a chain root's compact form at the column where the root renders, feeding the compact-root break
-     * decision ({@link #canBreakAfterCompactExpressionLambdaRoot}).
-     *
-     * <p>Like {@link #compactRootLineWidth} it takes the wider of the source-column reconstruction and the root's
-     * rendered indentation ({@link LayoutWidth#nodeIndentWidth}), so a root reindented shallower than its true
-     * depth is not under-measured, while the source-column floor keeps the {@code = }/{@code return }/continuation
-     * leading prefix accounted for (dropping it under-measures the initializer/return chains). The wider-of rule can only
-     * measure wider, never relax a break.
-     *
-     * <p>{@code layout} is read here: when a caller threads a same-line prefix through
-     * {@link LayoutContext#leftEdgePrefix()} the rendered column is known exactly
-     * ({@code nodeIndentWidth(root) + leftEdgePrefix.length() + text.length()}) and the source-column floor is dropped,
-     * exactly as {@link #compactRootLineWidth} does. The initializer chain carries a real {@code "NAME = "} prefix, so its
-     * verdict is measured at that chain's true rendered column rather than the value's stale source column. Callers with
-     * no prefix ({@code root()}) keep the wider-of source-column floor, which stands in for their unmodelled prefix.
+     * Measures a chain root's compact form at the column where it renders, feeding the compact-root break decision
+     * and the trivial-receiver first-selector attach fit check ({@link ChainFanLayout#firstSelectorAttachesFlat}). A
+     * threaded {@link LayoutContext#leftEdgePrefix()} gives the exact column; with none, measures at the root's
+     * rendered indentation alone — never the root's source column, which differs between passes for the same chain.
      */
     private int rootLineWidth(Expression root, String text, LayoutContext layout) {
-        // With the same-line prefix threaded, measure at the exact rendered column and drop the source-column floor,
-        // which is only ever a stand-in for this prefix (mirrors compactRootLineWidth's prefix-set arm).
         if (!layout.leftEdgePrefix().isEmpty()) {
             return layoutWidth.nodeIndentWidth(root) + layout.leftEdgePrefix().length() + text.length();
         }
-        return root.getRange()
-                .map(range -> Math.max(
-                    Math.max(0, range.begin.column - 1) + text.length(),
-                    layoutWidth.nodeIndentWidth(root) + text.length()))
-                // Rangeless (synthetic) fallback measures at the rendered column, mirroring the wider-of arm's
-                // nodeIndentWidth term, instead of the fixed one-indent baseline.
-                .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + text.length());
+        return layoutWidth.nodeIndentWidth(root) + text.length();
     }
 
         private boolean promotedNoArgRootScopeOverflows(

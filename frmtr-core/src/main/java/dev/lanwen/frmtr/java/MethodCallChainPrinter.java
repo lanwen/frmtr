@@ -686,7 +686,7 @@ final class MethodCallChainPrinter {
             calls.isEmpty()
             || (calls.size() < 2
                 && !(root instanceof MethodCallExpr)
-                && !forcedSingleCallPrefixOverflows(breakMode, expression, lineWidth)
+                && !forcedSingleCallPrefixOverflows(breakMode, expression, firstLineWidth)
                 && !(breakMode.isForced() && root instanceof ObjectCreationExpr)
                 && !rootObjectCreationNeedsBreak
                 // A block-bodied lambda in the object-creation ROOT of a single-selector chain
@@ -1707,15 +1707,20 @@ final class MethodCallChainPrinter {
             + expression.getNameAsString();
     }
 
+    /**
+     * Measures the bare selector prefix through the caller's {@code firstLineWidth} probe rather than a fixed budget,
+     * so a same-line prefix a caller threads (an initializer's {@code NAME = }) counts toward the overflow verdict at
+     * the true rendered column instead of being invisible to it.
+     */
     private boolean forcedSingleCallPrefixOverflows(
             MethodCallBreakMode breakMode,
             MethodCallExpr expression,
-            ToIntFunction<String> lineWidth
+            ToIntFunction<String> firstLineWidth
     ) {
         return breakMode.isForced()
             && expression.getScope().isPresent()
             && methodCallSegmentHasBlockLambdaArgument(expression)
-            && lineWidth.applyAsInt(calls.methodCallPrefix(expression) + "(") > options.lineWidth();
+            && firstLineWidth.applyAsInt(calls.methodCallPrefix(expression) + "(") > options.lineWidth();
     }
 
     private Doc methodCallChainRootDoc(

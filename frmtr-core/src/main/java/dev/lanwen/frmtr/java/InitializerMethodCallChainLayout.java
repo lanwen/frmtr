@@ -461,16 +461,6 @@ final class InitializerMethodCallChainLayout {
             if (brokenReceiverCall.isPresent()) {
                 return brokenReceiverCall;
             }
-            Optional<Doc> hugAfterEquals = variableWithBlockLambdaHugRankedAfterEquals(
-                variable,
-                name,
-                flatName,
-                methodCall,
-                callPrefix
-            );
-            if (hugAfterEquals.isPresent()) {
-                return hugAfterEquals;
-            }
         }
         String firstLine = flatName + " = " + callPrefix + "(";
         boolean openerFits = openerLineWidth(variable, firstLine) <= options.lineWidth();
@@ -1029,30 +1019,6 @@ final class InitializerMethodCallChainLayout {
                     firstLine -> layoutWidth.variableInitializer(variable, flatName + " = " + firstLine)
                 )
                 .map(call -> Doc.concat(Doc.text(name + " = "), call));
-    }
-
-    /**
-     * Offers the block-lambda hug on the break-after-{@code =} line for a call whose hug cannot fit attached, ranking
-     * the two seams over one shared hug doc so the renderer decides at the true column. Reaches the chains a receiver
-     * break cannot help — a method-call receiver has no plain-expression line of its own to break onto.
-     */
-    private Optional<Doc> variableWithBlockLambdaHugRankedAfterEquals(
-            VariableDeclarator variable,
-            String name,
-            String flatName,
-            MethodCallExpr methodCall,
-            String callPrefix
-    ) {
-        return huggableBlockLambdaArguments
-                .render(callPrefix, methodCall.getArguments(), layoutWidth::continuationStatement)
-                .map(call -> variableWithMethodCallChainRanked(
-                    variable,
-                    name,
-                    flatName,
-                    methodCall,
-                    call,
-                    new int[] { 1, 0 }
-                ));
     }
 
     Optional<Doc> variableWithReceiverBreakBeforeOverWidthHuggableBlockLambdaArguments(

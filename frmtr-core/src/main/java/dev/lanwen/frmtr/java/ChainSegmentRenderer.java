@@ -168,6 +168,7 @@ final class ChainSegmentRenderer {
             reserveStatementTerminator,
             compactSegmentWidth,
             MethodCallChainTail.EMPTY,
+            false,
             false
         );
     }
@@ -178,6 +179,28 @@ final class ChainSegmentRenderer {
             ToIntFunction<String> compactSegmentWidth,
             MethodCallChainTail finalSegmentSuffix,
             boolean segmentOnOwnLine
+    ) {
+        return methodCallChainSegment(
+            expression,
+            reserveStatementTerminator,
+            compactSegmentWidth,
+            finalSegmentSuffix,
+            segmentOnOwnLine,
+            false
+        );
+    }
+
+    /**
+     * The one-per-line chain fan's own entry: the only call site verified clear of the promoted-root group's
+     * ancestor-coupling hazard, so it alone may rank the block-lambda hug against the exploded shape.
+     */
+    private Doc methodCallChainSegment(
+            MethodCallExpr expression,
+            boolean reserveStatementTerminator,
+            ToIntFunction<String> compactSegmentWidth,
+            MethodCallChainTail finalSegmentSuffix,
+            boolean segmentOnOwnLine,
+            boolean rankHugAgainstExploded
     ) {
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
@@ -199,7 +222,25 @@ final class ChainSegmentRenderer {
         Optional<Doc> huggableLambda =
             huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
-            return Doc.concat(segmentPrefix, huggableLambda.orElseThrow(), finalSegmentSuffix.doc());
+            Doc hugged = Doc.concat(segmentPrefix, huggableLambda.orElseThrow(), finalSegmentSuffix.doc());
+            // The hug's eligibility is decided at a fixed block-statement depth, blind to this segment's true
+            // fanned continuation column; rank it against the exploded shape by real rendered first line so a
+            // header too wide at that column explodes instead of overflowing. Scoped to the one-per-line fan
+            // (the only caller verified clear of the promoted-root group's ancestor-coupling hazard), a
+            // comment-free call (a second, separately built rendering would offer its comments twice), and a
+            // multi-parameter header (the only shape whose own header can plausibly overflow) — the exploded
+            // arm's argument path renders lambda bodies through the generic printer, which mis-measures nested
+            // chains, so single-parameter bodies decline until that path measures at the chain column.
+            if (
+                !rankHugAgainstExploded
+                || expression.getComment().isPresent()
+                || sourceShapePolicy.hasContainedComments(expression)
+                || !hasMultiParameterBlockLambda(expression)
+            ) {
+                return hugged;
+            }
+            Doc exploded = brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
+            return Doc.bestFittingFirstLine(List.of(hugged, exploded));
         }
         Optional<Doc> commentedExpressionLambda =
             commentedExpressionLambdaArgument.apply(prefix, expression);
@@ -257,6 +298,20 @@ final class ChainSegmentRenderer {
                 )
             )
         );
+    }
+
+    /**
+     * Reports a block-lambda argument whose own parameter list is parenthesized (two or more parameters): the one
+     * header shape whose flat form can itself run wide enough to need exploding, as opposed to a bare single
+     * parameter, whose header is always short regardless of context.
+     */
+    private boolean hasMultiParameterBlockLambda(MethodCallExpr expression) {
+        return expression.getArguments()
+                .stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .filter(lambda -> lambda.getBody().isBlockStmt())
+                .anyMatch(lambda -> lambda.getParameters().size() > 1);
     }
 
     Doc brokenMethodCallSegment(
@@ -409,13 +464,15 @@ final class ChainSegmentRenderer {
         for (int i = 0; i < calls.size(); i++) {
             Optional<MethodCallExpr> next = i + 1 < calls.size() ? Optional.of(calls.get(i + 1)) : Optional.empty();
             // Every segment in this one-per-line layout renders alone on its own continuation line, so the final
-            // segment is measured at the continuation indent.
+            // segment is measured at the continuation indent. This is the one call site verified clear of the
+            // promoted-root group's ancestor-coupling hazard, so it alone ranks a block-lambda hug against explode.
             segments.add(
                 methodCallChainSegment(
                     calls.get(i),
                     next,
                     next.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY,
                     layoutWidth::continuationStatement,
+                    true,
                     true
                 )
             );
@@ -451,6 +508,17 @@ final class ChainSegmentRenderer {
             ToIntFunction<String> compactSegmentWidth,
             boolean segmentOnOwnLine
     ) {
+        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, compactSegmentWidth, segmentOnOwnLine, false);
+    }
+
+    private Doc methodCallChainSegment(
+            MethodCallExpr expression,
+            Optional<MethodCallExpr> nextCall,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> compactSegmentWidth,
+            boolean segmentOnOwnLine,
+            boolean rankHugAgainstExploded
+    ) {
         MethodCallChainTail segmentSuffix = nextCall.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY;
         // A single method-call argument that itself trails a line comment binds that comment inside the argument, though
         // it belongs after this segment's `)`. Claim the segment's trailing slot before rendering the argument (first
@@ -467,7 +535,8 @@ final class ChainSegmentRenderer {
             nextCall.isEmpty(),
             compactSegmentWidth,
             segmentSuffix,
-            segmentOnOwnLine
+            segmentOnOwnLine,
+            rankHugAgainstExploded
         );
         Doc trailingComment = claimTrailingBeforeArgument
             ? claimedTrailingComment

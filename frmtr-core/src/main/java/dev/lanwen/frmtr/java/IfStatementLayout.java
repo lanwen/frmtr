@@ -155,15 +155,32 @@ final class IfStatementLayout {
             docs.add(Doc.text(" "));
             docs.add(conditionTrailingLineComment);
             docs.add(ifThenStatementAfterConditionTrailingComment(statement));
-        } else if (joinedFormOverflows(statement) && !statement.getThenStmt().isBlockStmt()) {
-            // The collapsed one-line if/else would overflow, so break the braceless then onto its own indented line
-            // (the else side follows via thenBrokeBraceless). The trailing space before the HARD_LINE is trimmed by the
-            // renderer, leaving `if (cond)` alone on its line.
-            docs.add(Doc.text(" "));
-            docs.add(ifThenStatementAfterConditionTrailingComment(statement));
-        } else {
+        } else if (statement.getThenStmt().isBlockStmt() || bracelessThenBrokeOnLeadingComment(statement)) {
             docs.add(Doc.text(" "));
             docs.add(ifThenStatement(statement));
+        } else if (bracelessElse.isPresent()) {
+            // A braceless else's own text shares the joined-line measurement with then (joinedFormOverflows keeps the
+            // else unstripped here), and bracelessElseBody's break stays keyed to that same build-time verdict (1b
+            // scope), so this placement must keep reading it too rather than ranking then in isolation.
+            docs.add(Doc.text(" "));
+            docs.add(
+                joinedFormOverflows(statement)
+                    ? ifThenStatementAfterConditionTrailingComment(statement)
+                    : ifThenStatement(statement)
+            );
+        } else {
+            // Comment-free braceless then with no braceless-else coupling (no else, block else, or else-if): rank the
+            // attached-vs-broken shape at the true rendered column instead of the build-time probe.
+            // elseChainSeparator reads this same ranked verdict (by group id) so `else` only moves to its own line
+            // when the then actually broke here.
+            docs.add(Doc.text(" "));
+            docs.add(
+                Doc.bestFittingFirstLine(
+                    List.of(ifThenStatement(statement), ifThenStatementAfterConditionTrailingComment(statement)),
+                    new int[] {1, 0},
+                    thenWidthGroupId(statement)
+                )
+            );
         }
         statement.getElseStmt()
                 .ifPresent(elseStatement -> {
@@ -187,8 +204,7 @@ final class IfStatementLayout {
                             thenTrailingLineComment,
                             betweenThenAndElseBlockComment,
                             elseLeadingLineComment,
-                            elseLeadingBlockComment,
-                            thenBrokeBraceless
+                            elseLeadingBlockComment
                         )
                     );
                     if (bracelessElseBody.isPresent()) {
@@ -487,8 +503,7 @@ final class IfStatementLayout {
             Doc thenTrailingLineComment,
             Doc betweenThenAndElseBlockComment,
             Doc elseLeadingLineComment,
-            Doc elseLeadingBlockComment,
-            boolean thenBrokeBraceless
+            Doc elseLeadingBlockComment
     ) {
         if (conditionTrailingLineComment != Doc.EMPTY && !statement.getThenStmt().isBlockStmt()) {
             // The condition trailing comment is rendered on the `if` line by ifStatement; this slot only emits the
@@ -515,7 +530,7 @@ final class IfStatementLayout {
         if (elseStatement.isIfStmt() && !statement.getThenStmt().isBlockStmt()) {
             return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
         }
-        if (thenBrokeBraceless) {
+        if (bracelessThenBrokeOnLeadingComment(statement)) {
             // The braceless then broke onto its own line(s) (a leading `//` comment), so `else` cannot hang off the
             // then's last line: it goes on its own line. A block else keeps `{` on the `else` line; a braceless else
             // body breaks and indents beneath it ({@link #bracelessElseBody}), so it needs no trailing space here.
@@ -523,7 +538,28 @@ final class IfStatementLayout {
                 ? Doc.concat(Doc.HARD_LINE, Doc.text("else "))
                 : Doc.concat(Doc.HARD_LINE, Doc.text("else"));
         }
-        return Doc.text(" else ");
+        if (statement.getThenStmt().isBlockStmt()) {
+            return Doc.text(" else ");
+        }
+        if (!elseStatement.isBlockStmt()) {
+            // Braceless else: its own text shares the joined-line measurement with then (see the matching
+            // ifStatement branch), and bracelessElseBody's break stays keyed to that same build-time verdict (1b
+            // scope), so this placement must keep reading it too rather than the then-placement ranking.
+            return joinedFormOverflows(statement)
+                ? Doc.concat(Doc.HARD_LINE, Doc.text("else"))
+                : Doc.text(" else ");
+        }
+        // Block else, braceless comment-free then: read the true-column verdict ifStatement's then-placement ranked
+        // under the same group id, so `else` only moves to its own line when the then actually broke there.
+        return Doc.ifBreak(Doc.concat(Doc.HARD_LINE, Doc.text("else ")), Doc.text(" else "), thenWidthGroupId(statement));
+    }
+
+    /**
+     * Identifies the then-placement ranking for one {@code if} statement so {@link #elseChainSeparator} can read back
+     * which shape won, keeping the {@code else} keyword's placement consistent with wherever the then landed.
+     */
+    private String thenWidthGroupId(IfStmt statement) {
+        return "if-then-width-" + System.identityHashCode(statement);
     }
 
     /**

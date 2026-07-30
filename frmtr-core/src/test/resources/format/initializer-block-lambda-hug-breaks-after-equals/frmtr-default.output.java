@@ -1,10 +1,11 @@
 class AclPublisherSample {
 
     void publishMatchingBindings(AclBindingFilter filter, AclStore store, MetadataImage image) {
-        var resourcePatternsByPrincipalAndPatternType =
-            store.bindingsMatchingFilter(filter).collectByPattern(binding -> {
+        var resourcePatternsByPrincipalAndPatternType = store.bindingsMatchingFilter(filter).collectByPattern(
+            binding -> {
                 return image.acls().resolvePattern(binding.pattern(), binding.entry().principal());
-            });
+            }
+        );
         publish(resourcePatternsByPrincipalAndPatternType);
     }
 
@@ -16,10 +17,11 @@ class AclPublisherSample {
     }
 
     void publishFromPlainReceiver(AclBindingFilter filter, AclStore store, MetadataImage image) {
-        var resourcePatternsByPrincipalAndPatternType =
-            bindingRegistryForCurrentMetadataImage.collectByPattern(binding -> {
+        var resourcePatternsByPrincipalAndPatternType = bindingRegistryForCurrentMetadataImage.collectByPattern(
+            binding -> {
                 return image.acls().resolvePattern(binding.pattern(), binding.entry().principal());
-            });
+            }
+        );
         publish(resourcePatternsByPrincipalAndPatternType);
     }
 }

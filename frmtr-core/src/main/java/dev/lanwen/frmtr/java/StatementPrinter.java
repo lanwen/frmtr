@@ -124,7 +124,7 @@ final class StatementPrinter {
 
     private final Function<AnnotationExpr, String> annotationFlatText;
 
-    private final HuggableArgumentsRenderer huggableBlockLambdaArguments;
+    private final BiFunction<String, NodeList<Expression>, Optional<Doc>> eligibleBlockLambdaHug;
 
     // The expression statement's method-call-chain shape cascade, owned by {@link MethodCallPrinter#statementChain}
     // (statement analogue of {@link ReturnExpressionPrinter}'s {@code returnChain}). The statement printer no longer
@@ -186,7 +186,7 @@ final class StatementPrinter {
             Function<List<? extends Node>, String> compactJoinTypeLike,
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<AnnotationExpr, String> annotationFlatText,
-            HuggableArgumentsRenderer huggableBlockLambdaArguments,
+            BiFunction<String, NodeList<Expression>, Optional<Doc>> eligibleBlockLambdaHug,
             StatementChainRenderer statementChain,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Function<Expression, Doc> ifConditionRenderer,
@@ -223,7 +223,7 @@ final class StatementPrinter {
         this.compactJoinTypeLike = compactJoinTypeLike;
         this.modifiers = modifiers;
         this.annotationFlatText = annotationFlatText;
-        this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
+        this.eligibleBlockLambdaHug = eligibleBlockLambdaHug;
         this.statementChain = statementChain;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.ifConditionRenderer = ifConditionRenderer;
@@ -691,21 +691,13 @@ final class StatementPrinter {
         // super(...)/this(...) are constructor invocations, so they opt into the wide-argument-count rule the same way
         // object creation does. A heavy list must break one-per-line, so skip the lambda hug.
         boolean heavy = argumentHeaviness.isHeavy(statement.getArguments(), true);
-        if (!heavy) {
-            Optional<Doc> huggableLambda = huggableBlockLambdaArguments.render(prefix, statement.getArguments());
-            if (huggableLambda.isPresent()) {
-                return huggableLambda.orElseThrow();
-            }
-        }
+        Optional<Doc> eligibleHug = heavy ? Optional.empty() : eligibleBlockLambdaHug.apply(prefix, statement.getArguments());
         // super(...)/this(...) reach the plain argument list directly, so they miss the comment-aware breaking
         // method-call and object-creation printers get from CommentedExpressionListPrinter — without it an interior
         // argument's trailing line comment is dropped once the list breaks. Offer the same broken layout first so each
         // argument keeps its trailing comment, claimed once.
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, statement, statement.getArguments());
-        if (commentedArguments.isPresent()) {
-            return commentedArguments.orElseThrow();
-        }
-        return Doc.group(
+        Doc fallback = commentedArguments.orElseGet(() -> Doc.group(
             Doc.concat(
                 heavy ? Doc.BREAK_PARENT : Doc.EMPTY,
                 Doc.text(prefix + "("),
@@ -718,7 +710,13 @@ final class StatementPrinter {
                 Doc.SOFT_LINE,
                 Doc.text(")")
             )
-        );
+        ));
+        if (eligibleHug.isEmpty()) {
+            return fallback;
+        }
+        // Ranks the hug against the same fallback the gate used to fall through to on overflow, at the renderer's true
+        // column instead of the fixed block-statement width probe; the hug wins outright whenever its first line fits.
+        return Doc.bestFittingFirstLine(List.of(eligibleHug.orElseThrow(), fallback), new int[] {1, 0});
     }
 
     private Doc expressionStatement(ExpressionStmt statement, ToIntFunction<String> lineWidth) {
@@ -993,11 +991,6 @@ final class StatementPrinter {
                 .map(trivia -> comments.comment(trivia, node, slot))
                 .filter(doc -> doc != Doc.EMPTY)
                 .orElse(Doc.EMPTY);
-    }
-
-    @FunctionalInterface
-    interface HuggableArgumentsRenderer {
-        Optional<Doc> render(String prefix, NodeList<Expression> arguments);
     }
 
     /**

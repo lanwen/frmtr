@@ -707,6 +707,14 @@ final class LambdaExpressionPrinter {
     }
 
     /**
+     * Structural-eligibility-only hug candidate for ranking against a caller-built fallback; see
+     * {@link BlockLambdaArgumentLayout#eligibleBlockLambdaHug}.
+     */
+    Optional<Doc> eligibleBlockLambdaHug(String prefix, NodeList<Expression> arguments) {
+        return blockLambdaArguments.eligibleBlockLambdaHug(prefix, arguments);
+    }
+
+    /**
      * Reports whether hugging the block lambda onto the call's opener line would silently drop a comment.
      *
      * <p>The hug reconstructs the call prefix and the lambda parameter header from compact, comment-stripped text and only

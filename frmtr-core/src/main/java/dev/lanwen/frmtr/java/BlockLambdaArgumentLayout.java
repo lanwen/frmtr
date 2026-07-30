@@ -22,11 +22,13 @@ import java.util.function.ToIntFunction;
  *
  * <p>This helper owns the eligibility rules and the rendering for the {@code call(leading, param -> {}⏎ … ⏎{@code })}
  * shape: a lambda whose body is a brace block sitting at the START or END of the argument list keeps the call's ordinary
- * argument prefix / suffix while only the block breaks multi-line. It answers the shared question three ways — the fully
- * rendered hug ({@link #huggableBlockLambdaArguments}), the method-chain variant whose block renders through the chain
- * block renderer ({@link #huggableMethodChainBlockLambdaArguments}), and the bare first-line probe callers width-check
- * before committing ({@link #huggableBlockLambdaFirstLine}) — all off one eligibility gate ({@code huggableBlockLambdaArgument})
- * so the probe and the render never disagree. It also owns the suppression rules that keep the hug from producing a worse
+ * argument prefix / suffix while only the block breaks multi-line. It answers the shared question four ways — the fully
+ * rendered hug gated on a fixed-width probe ({@link #huggableBlockLambdaArguments}), the same hug left ungated for a
+ * caller that ranks it against its own fallback at the true rendered column ({@link #eligibleBlockLambdaHug}), the
+ * method-chain variant whose block renders through the chain block renderer ({@link #huggableMethodChainBlockLambdaArguments}),
+ * and the bare first-line probe callers width-check before committing ({@link #huggableBlockLambdaFirstLine}) — all off
+ * one eligibility gate ({@code huggableBlockLambdaArgument}) so the probe and the render never disagree. It also owns
+ * the suppression rules that keep the hug from producing a worse
  * shape: a middle-position lambda or a second lambda argument, source-multiline lambda parameters (delegated to
  * {@link SourceMultilineLambdaCallLayout}), and a non-lambda argument whose object-creation chain root is heavy
  * ({@link ArgumentHeaviness}) or too wide to stay compact ({@link ObjectCreationLayoutPolicy}).
@@ -133,6 +135,24 @@ final class BlockLambdaArgumentLayout {
         return huggableBlockLambdaArguments(prefix, arguments, firstLineWidth, lambdaExpression, blockRenderer);
     }
 
+    /**
+     * Structural-eligibility-only hug candidate: same rules as {@link #huggableBlockLambdaArguments(String, NodeList)}
+     * but skips the fixed-width first-line check, so a caller can rank this Doc against its own fallback shape (for
+     * example via {@code Doc.bestFittingFirstLine}) at the renderer's true column instead of a build-time probe.
+     */
+    Optional<Doc> eligibleBlockLambdaHug(String prefix, NodeList<Expression> arguments) {
+        Optional<HuggableBlockLambdaArgument> huggable = huggableBlockLambdaArgument(prefix, arguments);
+        if (huggable.isEmpty()) {
+            return Optional.empty();
+        }
+        HuggableBlockLambdaArgument argument = huggable.orElseThrow();
+        Optional<Doc> sourceMultilineParameters = sourceMultilineParameters(prefix, arguments, argument, blockRenderer);
+        if (sourceMultilineParameters.isPresent()) {
+            return sourceMultilineParameters;
+        }
+        return Optional.of(buildHug(prefix, arguments, argument, lambdaExpression));
+    }
+
     private Optional<Doc> huggableBlockLambdaArguments(
             String prefix,
             NodeList<Expression> arguments,
@@ -146,29 +166,45 @@ final class BlockLambdaArgumentLayout {
         }
         HuggableBlockLambdaArgument argument = huggable.orElseThrow();
         Optional<Doc> sourceMultilineParameters =
-            SourceMultilineLambdaCallLayout.blockLambdaArgumentWithSourceMultilineParameters(
-                prefix,
-                arguments,
-                argument.lambdaIndex(),
-                argument.lambdaExpr(),
-                argument.leadingArguments(),
-                compactJoin,
-                lambdaParameterHeaders,
-                lambdaBlockRenderer
-            );
+            sourceMultilineParameters(prefix, arguments, argument, lambdaBlockRenderer);
         if (sourceMultilineParameters.isPresent()) {
             return sourceMultilineParameters;
         }
         if (firstLineWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
             return Optional.empty();
         }
+        return Optional.of(buildHug(prefix, arguments, argument, lambdaRenderer));
+    }
+
+    private Optional<Doc> sourceMultilineParameters(
+            String prefix,
+            NodeList<Expression> arguments,
+            HuggableBlockLambdaArgument argument,
+            JavaFormatRule<BlockStmt> lambdaBlockRenderer
+    ) {
+        return SourceMultilineLambdaCallLayout.blockLambdaArgumentWithSourceMultilineParameters(
+            prefix,
+            arguments,
+            argument.lambdaIndex(),
+            argument.lambdaExpr(),
+            argument.leadingArguments(),
+            compactJoin,
+            lambdaParameterHeaders,
+            lambdaBlockRenderer
+        );
+    }
+
+    private Doc buildHug(
+            String prefix,
+            NodeList<Expression> arguments,
+            HuggableBlockLambdaArgument argument,
+            Function<LambdaExpr, Doc> lambdaRenderer
+    ) {
         String trailingArguments = compactJoin.apply(arguments.subList(argument.lambdaIndex() + 1, arguments.size()));
-        return Optional.of(
-            Doc.concat(
-                Doc.text(prefix + "(" + (argument.leadingArguments().isEmpty() ? "" : argument.leadingArguments() + ", ")),
-                lambdaRenderer.apply(argument.lambdaExpr()),
-                Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")
-            )
+        return Doc.concat(
+            Doc.text(prefix + "(" + (argument.leadingArguments().isEmpty() ? "" : argument.leadingArguments() + ", ")),
+            lambdaRenderer.apply(argument.lambdaExpr()),
+            Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")
         );
     }
 

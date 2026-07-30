@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
@@ -17,7 +16,6 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
-import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -1497,28 +1495,6 @@ final class MethodCallPrinter {
         return singleCallArgumentOpenerHug.hug(prefix, expression);
     }
 
-    private Optional<Integer> sharedFirstLineWidth(MethodCallExpr expression) {
-        return expression.getRange()
-                .flatMap(callRange -> enclosingStatement(expression)
-                        .filter(statement -> statement.getRange()
-                                .filter(statementRange -> statementRange.begin.line == callRange.begin.line)
-                                .isPresent())
-                        .map(statement -> layoutWidth.nodeIndentWidth(statement)
-                            + Math.max(0, callRange.begin.column - statement.getRange().orElseThrow().begin.column)));
-    }
-
-    private Optional<Statement> enclosingStatement(Node node) {
-        Optional<Node> ancestor = node.getParentNode();
-        while (ancestor.isPresent()) {
-            Node current = ancestor.orElseThrow();
-            if (current instanceof Statement statement) {
-                return Optional.of(statement);
-            }
-            ancestor = current.getParentNode();
-        }
-        return Optional.empty();
-    }
-
     Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression) {
         return sourceMultilineExpressionLambda(expression, LayoutContext.root());
     }
@@ -1542,43 +1518,16 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Measures the call's first line ({@code prefix(args lambda ->}) at the column where the call renders, gating whether
-     * a source-multiline expression-lambda argument can be hugged.
-     *
-     * <p>This gate reconstructs the call column from {@code range.begin.column}, a source-column read that
-     * understates the rendered column once the call is reindented shallower than its true block/type depth. It also
-     * considers the call's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type
-     * and block) and takes the <em>wider</em> of the two, mirroring the chain-printer root gates
-     * ({@code MethodCallChainPrinter.compactRootLineWidth}/{@code rootLineWidth}), the sibling
-     * {@link ExpressionLambdaArgumentLayout} first-line gate.
-     *
-     * <p>The source column is kept as the <em>floor</em> rather than replaced: this call can be an initializer/return
-     * value whose {@code = }/{@code return } leading prefix shares the measured line, and {@code nodeIndentWidth}
-     * (nesting depth only) does not carry that prefix while the source column does. Flooring by the source column keeps
-     * it accounted for, so the probe can only ever measure wider and never under-measures a prefixed call.
-     *
-     * <p>Reads {@code layout.leftEdgePrefix()} the same way its sibling
-     * {@code MethodCallChainPrinter.compactRootLineWidth} does: when the prefix is non-empty it measures the call's first
-     * line at the exact rendered column {@code nodeIndentWidth(expression) + leftEdgePrefix.length() + firstLine.length()}
-     * and drops the source-column floor. An empty prefix is a strict no-op, so every caller keeps the wider-of
-     * floor. No current caller of this source-multiline expression-lambda hug gate threads a non-empty prefix into it
-     * (the statement and argument chain callers thread an empty prefix), so the prefix read is dormant readiness for
-     * a prefixed lambda-hug caller; the chain-printer's {@code rootLineWidth}/{@code selectorLineWidth} equivalents, by
-     * contrast, already receive a real prefix from the initializer chain.
+     * Measures the call's first line ({@code prefix(args lambda ->}) at the column where it renders, gating whether
+     * a source-multiline expression-lambda argument can be hugged. A threaded {@link LayoutContext#leftEdgePrefix()}
+     * gives the exact column; with none, measures at the call's rendered indentation alone — never the call's
+     * source column, which differs between passes for the same call.
      */
     private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine, LayoutContext layout) {
-        // With the same-line prefix threaded, measure at the exact rendered column and drop the
-        // source-column floor, which was only ever a stand-in for this prefix.
         if (!layout.leftEdgePrefix().isEmpty()) {
             return layoutWidth.nodeIndentWidth(expression) + layout.leftEdgePrefix().length() + firstLine.length();
         }
-        return expression.getRange()
-                .map(range -> Math.max(
-                    Math.max(0, range.begin.column + 1) + firstLine.length(),
-                    layoutWidth.nodeIndentWidth(expression) + firstLine.length()))
-                // Rangeless (synthetic) fallback measures at the rendered column, mirroring the wider-of arm's
-                // nodeIndentWidth term above, instead of the fixed one-indent baseline.
-                .orElseGet(() -> layoutWidth.nodeIndentWidth(expression) + firstLine.length());
+        return layoutWidth.nodeIndentWidth(expression) + firstLine.length();
     }
 
     private boolean hasHuggableExpressionLambdaArgument(MethodCallExpr expression) {

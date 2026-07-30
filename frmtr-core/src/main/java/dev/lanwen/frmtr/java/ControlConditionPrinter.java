@@ -162,25 +162,41 @@ final class ControlConditionPrinter {
         }
         String flat = compact.apply(expression);
         int flatWidth = ifConditionLineWidth(expression, "if (" + flat + ") {}");
-        if (
-            expression instanceof MethodCallExpr methodCall
-            && methodCall.getArguments().size() > 1
-            && (flatWidth > options.lineWidth()
-                || (methodCallLayout.hasComplexArgument(methodCall)
-                    && flatWidth > options.lineWidth() - options.indentUnit().length()))
-        ) {
+        if (expression instanceof MethodCallExpr methodCall && marginPreemptsMultiArgBreak(methodCall, flatWidth)) {
             Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
             if (brokenMethodCall.isPresent()) {
                 return brokenMethodCall.orElseThrow();
             }
         }
-        if (flatWidth <= options.lineWidth()) {
-            if (expressionHasParenthesizedNestedBinary.test(expression)) {
-                return Doc.concat(Doc.text("("), expressionRenderer.apply(expression), Doc.text(")"));
-            }
-            return Doc.text("(" + flat + ")");
-        }
+        // flatWidth still feeds explain attribution (recordIfConditionWidthBreak) as a deliberate diagnostics decouple;
+        // the render verdict below ranks flat-vs-broken at the true rendered column instead.
         recordIfConditionWidthBreak(flat, flatWidth);
+        Doc flatCandidate = expressionHasParenthesizedNestedBinary.test(expression)
+            ? Doc.concat(Doc.text("("), expressionRenderer.apply(expression), Doc.text(")"))
+            : Doc.text("(" + flat + ")");
+        return Doc.reserving(
+            Doc.conditionalGroup(List.of(flatCandidate, brokenVerdict(expression))),
+            " {}".length()
+        );
+    }
+
+    /**
+     * Whether a multi-argument method-call condition should pre-emptively break before it strictly overflows: either it
+     * already does, or a complex argument leaves too little margin to the width. Readability preference, not a width
+     * verdict, so it stays a build-time probe.
+     */
+    private boolean marginPreemptsMultiArgBreak(MethodCallExpr methodCall, int flatWidth) {
+        return methodCall.getArguments().size() > 1
+            && (flatWidth > options.lineWidth()
+                || (methodCallLayout.hasComplexArgument(methodCall)
+                    && flatWidth > options.lineWidth() - options.indentUnit().length()));
+    }
+
+    /**
+     * Builds the broken candidate once from the existing fallback chain: a broken method-call condition, else a
+     * complemented method-call chain, else the generic broken condition — in that preference order.
+     */
+    private Doc brokenVerdict(Expression expression) {
         if (expression instanceof MethodCallExpr methodCall) {
             Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
             if (brokenMethodCall.isPresent()) {

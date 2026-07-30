@@ -282,6 +282,18 @@ final class MethodCallPrinter {
     }
 
     /**
+     * The routing that decides whether a call's arguments take the block-lambda hug shape: a heavy argument list (see
+     * {@link ArgumentHeaviness}) never hugs, otherwise defers to the injected width-gated hug builder. Exposed to
+     * {@link MethodCallChainPrinter} so its chain gates can ask the same question this call's own ladder answers.
+     */
+    Optional<Doc> eligibleBlockLambdaHugArm(String prefix, NodeList<Expression> arguments) {
+        if (argumentHeaviness.isHeavy(arguments, false)) {
+            return Optional.empty();
+        }
+        return huggableBlockLambdaArguments.apply(prefix, arguments);
+    }
+
+    /**
      * Chooses the method-call shape once callers know this expression really is a method call.
      *
      * <p>The unforced path tries a chain shape only when the call itself asks for it; the forced path is used by
@@ -379,11 +391,9 @@ final class MethodCallPrinter {
         // the nested-token signal marks a plain call heavy. The commented-expression-lambda branch is left ungated so a
         // heavy call still preserves an argument comment through its own comment-aware layout.
         boolean heavy = argumentHeaviness.isHeavy(expression.getArguments(), false);
-        if (!heavy) {
-            Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
-            if (huggableLambda.isPresent()) {
-                return withTailText(huggableLambda.orElseThrow(), tailText);
-            }
+        Optional<Doc> huggableLambda = eligibleBlockLambdaHugArm(prefix, expression.getArguments());
+        if (huggableLambda.isPresent()) {
+            return withTailText(huggableLambda.orElseThrow(), tailText);
         }
         Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument.apply(prefix, expression);
         if (commentedExpressionLambda.isPresent()) {

@@ -4,12 +4,12 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -52,8 +52,6 @@ final class RecordDeclarationPrinter {
 
     private final Function<NodeList<TypeParameter>, Doc> typeParameters;
 
-    private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
-
     private final Function<Node, String> compact;
 
     private final Function<List<? extends Node>, String> compactJoin;
@@ -78,7 +76,6 @@ final class RecordDeclarationPrinter {
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<NodeList<TypeParameter>, Doc> typeParameters,
-            Function<NodeList<TypeParameter>, String> flatTypeParameters,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
             Function<List<? extends Node>, String> compactJoinTypeLike,
@@ -95,7 +92,6 @@ final class RecordDeclarationPrinter {
         this.annotations = annotations;
         this.modifiers = modifiers;
         this.typeParameters = typeParameters;
-        this.flatTypeParameters = flatTypeParameters;
         this.compact = compact;
         this.compactJoin = compactJoin;
         this.compactJoinTypeLike = compactJoinTypeLike;
@@ -107,47 +103,93 @@ final class RecordDeclarationPrinter {
     }
 
     /**
-     * Prints the complete record declaration while delegating member sequencing to the supplied member-block renderer.
+     * Prints the complete record declaration. More than two type parameters force the broken header outright (a
+     * readability rule, not a fit test); otherwise the flat and fully broken headers are ranked at the true rendered
+     * column, mirroring {@code ClassOrInterfaceDeclarationPrinter}'s header cascade.
      */
     Doc record(RecordDeclaration declaration) {
-        List<Doc> header = new ArrayList<>();
-        header.add(annotations.apply(declaration));
-        String prefix = modifiers.apply(declaration) + "record " + declaration.getNameAsString();
-        header.add(Doc.text(prefix));
-        if (!declaration.getTypeParameters().isEmpty()) {
-            header.add(typeParameters.apply(declaration.getTypeParameters()));
-            prefix += flatTypeParameters.apply(declaration.getTypeParameters());
+        Doc prefix = recordPrefix(declaration);
+        Doc flatHeader = flatRecordHeader(declaration, prefix);
+        Doc brokenHeader = brokenRecordHeader(declaration, prefix);
+        // The member block is built last, after both header candidates claim their parameter-list and implements-clause
+        // comments, so first-claim-wins comment ownership matches the header's own source order instead of letting the
+        // body's orphan scan see a header comment first.
+        Doc memberBlockDoc = memberBlock.apply(declaration);
+        Doc flat = Doc.concat(flatHeader, Doc.text(" "), memberBlockDoc);
+        Doc broken = Doc.concat(brokenHeader, Doc.text(" "), memberBlockDoc);
+        if (declaration.getTypeParameters().size() > 2) {
+            return broken;
         }
-        boolean breakParameters = recordParametersBreak(prefix, declaration);
-        header.add(recordParameters(declaration, breakParameters));
-        recordImplementsTypes(prefix, declaration, breakParameters).ifPresent(header::add);
-        header.add(recordBodyBreak(declaration) ? Doc.HARD_LINE : Doc.text(" "));
-        header.add(memberBlock.apply(declaration));
+        return Doc.bestFittingFirstLine(List.of(flat, broken), new int[] {1, 0}, "recordHeader");
+    }
+
+    /**
+     * Builds the header prefix shared by the flat and broken candidates: annotations, modifiers, keyword, name, and
+     * type parameters. Built once so both ranked candidates render the identical Doc instance.
+     */
+    private Doc recordPrefix(RecordDeclaration declaration) {
+        List<Doc> prefix = new ArrayList<>();
+        prefix.add(annotations.apply(declaration));
+        prefix.add(Doc.text(modifiers.apply(declaration) + "record " + declaration.getNameAsString()));
+        if (!declaration.getTypeParameters().isEmpty()) {
+            prefix.add(typeParameters.apply(declaration.getTypeParameters()));
+        }
+        return Doc.concat(prefix);
+    }
+
+    /**
+     * Prints the inline header, without the trailing body: components stay in a self-wrapping group and the
+     * {@code implements} clause attaches after the closing paren. Ranked against {@link #brokenRecordHeader} at the
+     * true rendered column.
+     */
+    private Doc flatRecordHeader(RecordDeclaration declaration, Doc prefix) {
+        List<Doc> header = new ArrayList<>();
+        header.add(prefix);
+        header.add(recordParameters(declaration, false));
+        recordImplementsClause(declaration, false).ifPresent(header::add);
         return Doc.concat(header);
     }
 
     /**
-     * Decides whether the component list must use hard lines after considering type parameters, components, implemented
-     * types, and the empty-body suffix.
+     * Prints the broken header selected after the compact header no longer fits, without the trailing body: components
+     * hard-line one per line and the {@code implements} clause is ranked flat-attached-vs-one-per-line at the closing
+     * paren's own column.
      */
-    private boolean recordParametersBreak(String prefix, RecordDeclaration declaration) {
-        if (declaration.getTypeParameters().size() > 2) {
-            return true;
+    private Doc brokenRecordHeader(RecordDeclaration declaration, Doc prefix) {
+        List<Doc> header = new ArrayList<>();
+        header.add(prefix);
+        header.add(recordParameters(declaration, true));
+        recordImplementsClause(declaration, true).ifPresent(header::add);
+        return Doc.concat(header);
+    }
+
+    /**
+     * Ranks the record's {@code implements} clause: attached flat after the closing paren, or — when that overflows —
+     * the keyword stays attached but each type moves to its own indented line, matching the established record header
+     * convention (unlike class/interface clauses, the keyword never starts its own broken line).
+     */
+    private Optional<Doc> recordImplementsClause(RecordDeclaration declaration, boolean forceParametersBreak) {
+        NodeList<ClassOrInterfaceType> types = declaration.getImplementedTypes();
+        if (types.isEmpty()) {
+            return Optional.empty();
         }
-        String parameters = declaration.getParameters()
-                .stream()
-                .map(this::recordComponentFlat)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        String parameterHeader = prefix + "(" + parameters + ")";
-        if (declaration.getImplementedTypes().isEmpty()) {
-            return recordHeaderWidth(declaration, parameterHeader + " {}") > options.lineWidth();
+        Doc flatClause = Doc.text(" implements " + compactJoinTypeLike.apply(types));
+        if (types.size() == 1) {
+            return Optional.of(flatClause);
         }
-        String implementedTypes = compactJoinTypeLike.apply(declaration.getImplementedTypes());
-        return recordHeaderWidth(
-            declaration,
-            parameterHeader + " implements " + implementedTypes + " {}"
-        ) > options.lineWidth();
+        Doc onePerLineClause = Doc.concat(
+            Doc.text(" implements"),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        types.stream().map(type -> Doc.text(compactTypeLike.apply(type))).toList()
+                    )
+                )
+            )
+        );
+        return Optional.of(Doc.bestFittingFirstLine(List.of(flatClause, onePerLineClause), new int[] {1, 0}));
     }
 
     /**
@@ -202,7 +244,9 @@ final class RecordDeclarationPrinter {
                     )
                 );
             }
-            layouts.add(new RecordComponentLayout(recordComponent(parameter, trailing), separator, gapComments));
+            layouts.add(
+                new RecordComponentLayout(recordComponent(parameter, trailing, forceBreak), separator, gapComments)
+            );
         }
         return layouts;
     }
@@ -238,7 +282,7 @@ final class RecordDeclarationPrinter {
      * Prints one record component, including leading component comments, annotation line-break decisions, and a
      * line-comment attached to the component type.
      */
-    private Doc recordComponent(Parameter parameter, Doc trailing) {
+    private Doc recordComponent(Parameter parameter, Doc trailing, boolean forceBreak) {
         List<Doc> parts = new ArrayList<>();
         Doc leading = comments.leading(parameter);
         if (leading != Doc.EMPTY) {
@@ -246,15 +290,17 @@ final class RecordDeclarationPrinter {
         }
         if (recordComponentAnnotationsShouldBreak(parameter)) {
             // Each annotation is on its own component-indented line here, so its only same-line context is the extra
-            // indent past the member baseline; a wide annotation still breaks internally when it overflows that column.
-            LayoutContext stackedLayout = LayoutContext.root().withLeftEdgePrefix(options.indentUnit());
+            // indent past the member baseline when this candidate actually broke; a wide annotation still breaks
+            // internally when it overflows that column.
+            LayoutContext stackedLayout = LayoutContext.root()
+                    .withLeftEdgePrefix(forceBreak ? options.indentUnit() : "");
             parameter.getAnnotations()
                     .stream()
                     .map(node -> annotation.format(node, stackedLayout))
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .forEach(parts::add);
         } else if (!parameter.getAnnotations().isEmpty()) {
-            parts.add(recordComponentAnnotationPrefix(parameter));
+            parts.add(recordComponentAnnotationPrefix(parameter, forceBreak));
         }
         Doc typeComment = comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment);
         if (typeComment != Doc.EMPTY) {
@@ -345,13 +391,13 @@ final class RecordDeclarationPrinter {
         return currentIndentedWidth.applyAsInt(recordComponentFlat(parameter)) > options.lineWidth();
     }
 
-    private Doc recordComponentAnnotationPrefix(Parameter parameter) {
+    private Doc recordComponentAnnotationPrefix(Parameter parameter, boolean forceBreak) {
         List<AnnotationExpr> annotations = parameter.getAnnotations();
         List<Doc> docs = new ArrayList<>();
         for (int index = 0; index < annotations.size(); index++) {
             docs.add(annotation.format(
                 annotations.get(index),
-                recordComponentAnnotationLayout(parameter, annotations, index)
+                recordComponentAnnotationLayout(parameter, annotations, index, forceBreak)
             ));
         }
         return Doc.concat(
@@ -367,18 +413,20 @@ final class RecordDeclarationPrinter {
      * Builds the {@link LayoutContext} that tells a breakable inline record-component annotation where it renders, so its
      * flat/structured choice is width-driven at the real column rather than reading the author's source line breaks.
      *
-     * <p>A broken record header indents its components one unit past the member baseline {@link #currentIndentedWidth}
-     * assumes, so {@link LayoutContext#leftEdgePrefix()} contributes that extra unit plus every earlier annotation
-     * (joined by the same {@code " "} the render uses). The trailing content is the remaining annotations then the
+     * <p>This candidate's own component list only sits one unit past the member baseline {@link #currentIndentedWidth}
+     * assumes when it actually broke (either forced or self-wrapped); {@code forceBreak} carries that fact so
+     * {@link LayoutContext#leftEdgePrefix()} contributes the extra unit only then, plus every earlier annotation (joined
+     * by the same {@code " "} the render uses). The trailing content is the remaining annotations then the
      * {@code " Type name"} tail the component emits after the prefix on the same line, so the annotation breaks only when
      * keeping it flat would push that tail past the width.
      */
     private LayoutContext recordComponentAnnotationLayout(
             Parameter parameter,
             List<AnnotationExpr> annotations,
-            int index
+            int index,
+            boolean forceBreak
     ) {
-        StringBuilder leftEdge = new StringBuilder(options.indentUnit());
+        StringBuilder leftEdge = new StringBuilder(forceBreak ? options.indentUnit() : "");
         for (int before = 0; before < index; before++) {
             leftEdge.append(compact.apply(annotations.get(before))).append(' ');
         }
@@ -481,80 +529,6 @@ final class RecordDeclarationPrinter {
         }
         parts.add(Doc.text(" " + parameter.getNameAsString()));
         return Doc.group(Doc.concat(parts));
-    }
-
-    /**
-     * Places implemented types on the record header when they fit after the closing component list; otherwise breaks
-     * them under an {@code implements} continuation.
-     */
-    private Optional<Doc> recordImplementsTypes(
-            String prefix,
-            RecordDeclaration declaration,
-            boolean parametersBreak
-    ) {
-        if (declaration.getImplementedTypes().isEmpty()) {
-            return Optional.empty();
-        }
-        String flat = "implements " + compactJoinTypeLike.apply(declaration.getImplementedTypes());
-        String parameterHeader = parametersBreak
-            ? ")"
-            : prefix + "(" + declaration.getParameters()
-                    .stream()
-                    .map(this::recordComponentFlat)
-                    .reduce((left, right) -> left + ", " + right)
-                    .orElse("") + ")";
-        if (recordHeaderWidth(declaration, parameterHeader + " " + flat + " {}") <= options.lineWidth()) {
-            return Optional.of(Doc.text(" " + flat));
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.text(" implements"),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            declaration.getImplementedTypes()
-                                    .stream()
-                                    .map(type -> Doc.text(compactTypeLike.apply(type)))
-                                    .toList()
-                        )
-                    )
-                )
-            )
-        );
-    }
-
-    /**
-     * Starts the body on a new line only when the implemented-types continuation already forced the header open.
-     */
-    private boolean recordBodyBreak(RecordDeclaration declaration) {
-        if (declaration.getImplementedTypes().isEmpty()) {
-            return false;
-        }
-        String flat = "implements " + compactJoinTypeLike.apply(declaration.getImplementedTypes());
-        return recordHeaderWidth(declaration, ") " + flat + " {}") > options.lineWidth();
-    }
-
-    /**
-     * Computes record header width at the declaration's actual nesting depth, preserving the first-member baseline
-     * used by other declaration printers.
-     */
-    private int recordHeaderWidth(RecordDeclaration declaration, String text) {
-        return currentIndentedWidth.applyAsInt(text) + extraRecordHeaderIndentWidth(declaration);
-    }
-
-    private int extraRecordHeaderIndentWidth(RecordDeclaration declaration) {
-        int enclosingTypes = 0;
-        Optional<Node> parent = declaration.getParentNode();
-        while (parent.isPresent()) {
-            Node node = parent.orElseThrow();
-            if (node instanceof TypeDeclaration<?>) {
-                enclosingTypes++;
-            }
-            parent = node.getParentNode();
-        }
-        return Math.max(0, enclosingTypes - 1) * options.indentUnit().length();
     }
 
     private record RecordComponentLayout(

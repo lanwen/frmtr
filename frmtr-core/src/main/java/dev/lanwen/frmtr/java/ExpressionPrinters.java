@@ -239,6 +239,7 @@ final class ExpressionPrinters {
             objectCreations::objectCreationWithSuffix,
             objectCreations::objectCreationPrefix,
             lambdas::huggableBlockLambdaArguments,
+            lambdas::eligibleBlockLambdaHug,
             lambdas::huggableMethodChainBlockLambdaArguments,
             lambdas::explodedMethodChainBlockLambdaArgument,
             lambdas::huggableBlockLambdaFirstLine,

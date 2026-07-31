@@ -338,7 +338,11 @@ the single-segment promoted-root hug — rank hug-versus-selector-drop with `Doc
 decides at the true column even though the hard-break lambda body defeats plain fewest-lines ranking. A `LayoutWidth.nodeLine`
 indentation estimate still gates the block-lambda multi-argument pre-emption (which selects a distinct fully-exploded
 argument shape); the remaining `nodeLine` chain-path consumers are that pre-emption, the expression-rendered multi-arg
-root break, and the compact-root first-line fit. `CompactRootBrokenSegmentLayout` builds the
+root break, and the compact-root first-line fit (the latter also still backs the single-call decline for a
+non-trivial chain root, which has its own promoted-fan alternative). For a single-call chain off a TRIVIAL root
+(a bare name, field access, `this`, or `super`), the same block-lambda hug instead ranks against
+`MethodCallPrinter`'s real exploded-argument-list shape with `Doc.bestFittingFirstLine`, reserving the final
+segment's trailing text via `Doc.followedBy` so the ranking sees the true tail-inclusive column. `CompactRootBrokenSegmentLayout` builds the
 compact-root-with-broken-final-segment shapes (root and selector on one line, only the final argument list broken) and
 the sibling that breaks the root's arguments and glues a no-arg segment to its close; `MethodCallChainSourcePlanner`,
 `ChainSelectorLambdaLayout`, `LambdaBodyChainFanLayout`, `PackedMethodCallChainLayout`, and `VariableInitializerLayout`

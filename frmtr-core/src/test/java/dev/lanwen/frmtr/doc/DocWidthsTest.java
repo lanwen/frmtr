@@ -457,6 +457,27 @@ final class DocWidthsTest {
             )),
             1
         );
+        // A reservation must NOT cross a hard line to charge content on the new line — the reserved tail sits on the
+        // caller's line, not the next. The group here fits within lineWidth on its own but not with the leaked 2-column
+        // reservation, so this pins that the simulation and the renderer agree on extinguishing it after a hard break.
+        Doc reservationExtinguishedByHardLine = Doc.concat(
+            Doc.reserving(
+                Doc.concat(
+                    Doc.text("first;"),
+                    Doc.HARD_LINE,
+                    Doc.group(
+                        Doc.concat(
+                            Doc.text("call("),
+                            Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("arguments"))),
+                            Doc.SOFT_LINE,
+                            Doc.text(")")
+                        )
+                    )
+                ),
+                2
+            ),
+            Doc.text("!!")
+        );
 
         List<Doc> docs = List.of(
             argList,
@@ -468,7 +489,8 @@ final class DocWidthsTest {
             publishedVerdict,
             conditional,
             reservationAcrossConcatChildren,
-            reservationThroughNestedBestFitting
+            reservationThroughNestedBestFitting,
+            reservationExtinguishedByHardLine
         );
         List<org.junit.jupiter.params.provider.Arguments> cases = new java.util.ArrayList<>();
         // Sweep several line widths (20 is the configured minimum) so both the fitting (flat) and overflowing (broken)

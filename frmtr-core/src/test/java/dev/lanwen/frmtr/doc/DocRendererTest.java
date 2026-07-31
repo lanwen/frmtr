@@ -1185,4 +1185,29 @@ final class DocRendererTest {
                   resolveHost(hostname), lookupPort();"""
         );
     }
+
+    @Test
+    void reservationExtinguishedByHardLineBreakInConcatChildren() {
+        // A hard line inside a reserved doc puts subsequent children on a new line — the caller's reserved tail cannot
+        // land there, so the reservation must not reach those children. The group below fits flat within the line width
+        // on its own (19 ≤ 20), but a leaked 2-column reservation would push it over (19+2=21) and break it.
+        Doc group = Doc.group(
+            Doc.concat(
+                Doc.text("call("),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("argumentsName"))),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc statement = Doc.concat(
+            Doc.reserving(Doc.concat(Doc.text("first;"), Doc.HARD_LINE, group), 2),
+            Doc.text("!!")
+        );
+
+        assertThat(renderer(20).render(statement)).isEqualTo(
+            """
+                first;
+                call(argumentsName)!!"""
+        );
+    }
 }

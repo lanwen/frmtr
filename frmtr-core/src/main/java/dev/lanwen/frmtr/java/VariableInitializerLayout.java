@@ -538,8 +538,11 @@ final class VariableInitializerLayout {
                 .anyMatch(contained -> contained.comment() == trailing.comment()));
     }
 
+    // Trailing comments are width-free: they can't be moved and must not affect layout decisions. Using lineSuffix
+    // matches the same policy in MethodCallPrinter and keeps the comment measurement-neutral across all call sites.
     private Doc trailingLineComment(Doc comment) {
-        return comment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), comment);
+        if (comment == Doc.EMPTY) return Doc.EMPTY;
+        return Doc.lineSuffix(Doc.concat(Doc.text(" "), comment));
     }
 
     /**

@@ -1202,10 +1202,7 @@ final class VariableInitializerLayout {
             case LAMBDA:
                 return lambdaBrokenInitializer(variable, name, declarationPrefix, (LambdaExpr) initializer);
             case STRING_LITERAL_BREAK:
-                return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer)))
-                );
+                return attachOrBreakAfterEquals(name, expression.apply(initializer));
             case ARRAY_INITIALIZER_BREAK:
                 return Doc.concat(
                     Doc.text(name + " = "),
@@ -1249,12 +1246,29 @@ final class VariableInitializerLayout {
     /**
      * The {@link InitializerLayoutArm#GENERIC_BROKEN} arm (and the fall-through target of the method-call and lambda
      * sub-cascades): break after {@code =} and render the value indented on its own continuation line.
+     *
+     * <p>Stays unconditional rather than ranked against attach (unlike {@link #attachOrBreakAfterEquals}): nesting a
+     * ranked node here, under the outer object-creation {@code Doc.bestFitting} carve-out, flips an unrelated nested
+     * method call's own argument-explosion choice via reservation bookkeeping between the two ranked layers.
      */
     private Doc genericBrokenInitializer(VariableDeclarator variable, Expression initializer, String name) {
         return Doc.concat(
             Doc.text(name + " ="),
             Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(variable, initializer)))
         );
+    }
+
+    /**
+     * Ranks attach ({@code NAME = value}) against break-after-{@code =} at the true rendered first line, over one
+     * shared value Doc built once so neither arm re-offers the value's comments. Matches the template
+     * {@code InitializerCastLayout.variableWithCastTypeBreak} and {@code InitializerConditionalLayout.conditionalInitializer}
+     * already use: break-after-{@code =}'s own first line ({@code NAME =}) is always short, so it only wins when attach
+     * genuinely does not fit.
+     */
+    private Doc attachOrBreakAfterEquals(String name, Doc value) {
+        Doc attach = Doc.concat(Doc.text(name + " = "), value);
+        Doc breakAfterEquals = Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, value)));
+        return Doc.bestFittingFirstLine(List.of(attach, breakAfterEquals), new int[] {1, 0});
     }
 
 

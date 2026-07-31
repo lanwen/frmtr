@@ -783,17 +783,23 @@ final class MethodCallPrinter {
         return expression.getScope()
                 .filter(EnclosedExpr.class::isInstance)
                 .map(EnclosedExpr.class::cast)
-                .filter(scope -> leadingBreak
-                        // Measure the enclosed-scope call at its true rendered block/type depth
-                        // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-                        || layoutWidth.nodeLine(expression, compactSource.compact(expression) + ";")
-                            > options.lineWidth()
-                )
-                .map(scope -> Doc.concat(
-                        brokenEnclosedForSuffix.apply(scope, leadingBreak),
-                        Doc.text("."),
-                        methodCallWithoutScope(expression)
-                ));
+                .map(scope -> suffixedEnclosedMethodCall(expression, scope, leadingBreak));
+    }
+
+    /**
+     * Ranks the flat and broken parenthesized-scope shapes at the true rendered column instead of a fixed-baseline
+     * {@code nodeLine} estimate. {@link #methodCallWithoutScope} is built once and shared by both candidates so its
+     * own argument-list decision, and any comment it claims, happens exactly once regardless of which scope shape
+     * wins. A caller that already committed to breaking ({@code leadingBreak}) skips the rank entirely.
+     */
+    private Doc suffixedEnclosedMethodCall(MethodCallExpr expression, EnclosedExpr scope, boolean leadingBreak) {
+        Doc call = methodCallWithoutScope(expression);
+        Doc broken = Doc.concat(brokenEnclosedForSuffix.apply(scope, leadingBreak), Doc.text("."), call);
+        if (leadingBreak) {
+            return broken;
+        }
+        Doc flat = Doc.concat(Doc.text(compactSource.compact(scope)), Doc.text("."), call);
+        return Doc.bestFittingFirstLine(List.of(flat, broken), new int[] {1, 0});
     }
 
     Optional<Doc> methodCallChain(MethodCallExpr expression) {

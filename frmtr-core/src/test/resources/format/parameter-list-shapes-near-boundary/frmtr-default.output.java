@@ -27,4 +27,13 @@ class ConnectionSessionCoordinatorForRetryWindowAndFailover {
     ) throws ConnectionSetupException {
         this.primaryRequest = primaryRequest;
     }
+
+    class RetrySessionAttempt {
+
+        RetrySessionAttempt(
+                ConnectionRequestForRetrySession request, ConnectionContextForRetrySession context
+        ) throws ConnectionSetupException {
+            this.request = request;
+        }
+    }
 }

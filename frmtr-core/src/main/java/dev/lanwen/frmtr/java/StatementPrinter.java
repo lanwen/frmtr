@@ -331,12 +331,7 @@ final class StatementPrinter {
             case TryStmt tryStmt -> tryStatementLayout.tryStatement(tryStmt);
             case SynchronizedStmt synchronizedStmt -> Doc.concat(
                 Doc.text("synchronized "),
-                controlConditions.controlCondition(
-                    synchronizedStmt.getExpression(),
-                    "synchronized (",
-                    ") {}",
-                    layoutWidth::blockStatement
-                ),
+                controlConditions.controlCondition(synchronizedStmt.getExpression(), ") {}"),
                 Doc.text(" "),
                 blockRenderer.format(synchronizedStmt.getBody(), LayoutContext.root())
             );

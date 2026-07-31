@@ -325,23 +325,13 @@ final class LoopStatementLayout {
         if (commentedBody.isPresent()) {
             return Doc.concat(
                 Doc.text("while "),
-                controlConditions.controlCondition(
-                    statement.getCondition(),
-                    "while (",
-                    ") {}",
-                    layoutWidth::blockStatement
-                ),
+                controlConditions.controlCondition(statement.getCondition(), ") {}"),
                 commentedBody.orElseThrow()
             );
         }
         Doc whileHeader = Doc.concat(
             Doc.text("while "),
-            controlConditions.controlCondition(
-                statement.getCondition(),
-                "while (",
-                ") {}",
-                layoutWidth::blockStatement
-            )
+            controlConditions.controlCondition(statement.getCondition(), ") {}")
         );
         return bracelessLoopBody(statement, statement.getCondition(), whileHeader, statement.getBody());
     }
@@ -433,12 +423,7 @@ final class LoopStatementLayout {
         return Doc.concat(
             lead,
             Doc.text("while "),
-            controlConditions.controlCondition(
-                statement.getCondition(),
-                "while (",
-                ") {}",
-                layoutWidth::blockStatement
-            ),
+            controlConditions.controlCondition(statement.getCondition(), ") {}"),
             Doc.text(";"),
             trailing
         );

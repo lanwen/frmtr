@@ -117,13 +117,12 @@ final class ControlConditionPrinter {
         );
     }
 
-    Doc controlCondition(
-            Expression expression,
-            String opening,
-            String closing,
-            ToIntFunction<String> conditionLineWidth
-    ) {
-        String flat = compactWithOwnBlockComment(expression);
+    /**
+     * Every comment-bearing route returns before the flat/broken pick, so the pick is comment-free by construction —
+     * the same shape {@link #ifCondition(Expression)} already ranks. {@code closing} is the caller's trailing
+     * literal (for example {@code " {}"}), reserved so the ranking sees the true rendered column.
+     */
+    Doc controlCondition(Expression expression, String closing) {
         if (commentedLogicalCondition(expression)) {
             return brokenCondition(expression);
         }
@@ -134,10 +133,12 @@ final class ControlConditionPrinter {
         if (hasDetachedConditionLineComment(expression)) {
             return brokenCondition(expression);
         }
-        if (conditionLineWidth.applyAsInt(opening + flat + closing) <= options.lineWidth()) {
-            return Doc.text("(" + flat + ")");
-        }
-        return brokenCondition(expression);
+        String flat = compactWithOwnBlockComment(expression);
+        Doc flatCandidate = Doc.text("(" + flat + ")");
+        return Doc.reserving(
+            Doc.conditionalGroup(List.of(flatCandidate, brokenCondition(expression))),
+            closing.length() - 1
+        );
     }
 
     /**

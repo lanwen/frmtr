@@ -235,6 +235,20 @@ final class DocWidthsTest {
         assertThat(count.overflow()).isEqualTo(INDENT_WIDTH + "continue".length() - 6);
     }
 
+    @Test
+    void measureLineCountChargesAPendingReservationAgainstAGroupsOwnFitCheck() {
+        // Flat content is exactly 32 columns: "identifierName =" + LINE-as-space + "expressionValue".
+        Doc group = Doc.group(
+            Doc.concat(Doc.text("identifierName ="), Doc.indent(Doc.concat(Doc.LINE, Doc.text("expressionValue"))))
+        );
+
+        // With nothing reserved it fits a lineWidth of 32 and stays on one line.
+        assertThat(measurement().measureLineCount(group, 0, 0, 32).lines()).isEqualTo(0);
+        // Reserving 1 column for a trailing ";" leaves only 31, so the group's own fit check must now report a break —
+        // the same charge DocRenderer.renderBestFitting re-supplies to the chosen alternative's render.
+        assertThat(measurement().measureLineCount(group, 0, 0, 32, 1).lines()).isEqualTo(1);
+    }
+
     /**
      * A ranking sees the verdicts its caller already published: the same arm measured with an outer decision flat and
      * with it broken yields different line counts, because the conditional content inside it resolves differently.

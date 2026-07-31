@@ -520,7 +520,9 @@ final class DocWidths {
                     }
                     case Doc.Indent indented -> walk(indented.doc(), indent + 1, mode);
                     case Doc.Group group -> {
-                        GroupMode next = fits(group.doc(), lineWidth - column) ? GroupMode.FLAT : GroupMode.BREAK;
+                        // Mirrors DocRenderer: peek `reserved` (never take it here) so the group's own fit check charges
+                        // the pending same-line tail without spending a budget its content or siblings may still need.
+                        GroupMode next = fits(group.doc(), lineWidth - column - reserved) ? GroupMode.FLAT : GroupMode.BREAK;
                         if (group.groupId() != null) {
                             groupModes.put(group.groupId(), next);
                         }

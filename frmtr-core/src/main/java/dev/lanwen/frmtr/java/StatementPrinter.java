@@ -248,7 +248,6 @@ final class StatementPrinter {
             modifiers,
             annotationFlatText,
             methodCallArgumentList,
-            currentIndentedWidth,
             this::commentText
         );
         this.ifStatementLayout = new IfStatementLayout(

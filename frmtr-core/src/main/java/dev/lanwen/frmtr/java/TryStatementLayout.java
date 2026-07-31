@@ -21,16 +21,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Renders the try-statement family: {@code try}/{@code catch}/{@code finally} and the try-with-resources header, together
  * with the comment recovery those clauses need.
  *
  * <p>This helper owns everything reachable only from {@link StatementPrinter}'s {@code TryStmt} switch arm: the
- * resource-section layout (flat collapse, single attached method-call resource, one-resource-per-line lines, and the
- * width probe that measures the opener at its true rendered column), the multi-catch parameter breaking, the empty-body
- * shapes for try/catch/finally blocks, and the source-shape-independent comment handoffs between adjacent clauses
+ * resource-section layout (flat collapse, single attached method-call resource, and one-resource-per-line, ranked at
+ * the true rendered column), the multi-catch parameter breaking, the empty-body shapes for try/catch/finally blocks,
+ * and the source-shape-independent comment handoffs between adjacent clauses
  * (opener/inter-resource/trailing resource comments, the block/line comments that lead a {@code catch} or
  * {@code finally}, the trailing comment that a completed clause body hands to the next clause, and the final trailing
  * comment of the whole statement). The boundary exists so {@link StatementPrinter}'s statement-kind dispatch can keep the
@@ -39,10 +38,10 @@ import java.util.function.ToIntFunction;
  *
  * <p>Expression, type, local-variable-declaration, argument-list, and block formatting stay with their existing owners
  * and are reached through the callbacks injected here (for example {@code compact}, {@code variableDeclarationRenderer},
- * {@code methodCallArgumentList}, and {@code blockWithLeadingRenderer}). Width decisions defer to the injected
- * {@link LayoutWidth} and {@code currentIndentedWidth} probes rather than being recomputed here, and the shared
- * {@code commentText} flattening stays a StatementPrinter concern injected as a handle because many non-try statement
- * paths use it too.
+ * {@code methodCallArgumentList}, and {@code blockWithLeadingRenderer}). The multi-catch parameter break still defers to
+ * the injected {@link LayoutWidth}; the resource-section shapes are ranked at the true rendered column instead. The
+ * shared {@code commentText} flattening stays a StatementPrinter concern injected as a handle because many non-try
+ * statement paths use it too.
  */
 final class TryStatementLayout {
 
@@ -74,8 +73,6 @@ final class TryStatementLayout {
 
     private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
     private final Function<Doc, String> commentText;
 
     TryStatementLayout(
@@ -93,7 +90,6 @@ final class TryStatementLayout {
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<AnnotationExpr, String> annotationFlatText,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
-            ToIntFunction<String> currentIndentedWidth,
             Function<Doc, String> commentText
     ) {
         this.comments = comments;
@@ -110,7 +106,6 @@ final class TryStatementLayout {
         this.modifiers = modifiers;
         this.annotationFlatText = annotationFlatText;
         this.methodCallArgumentList = methodCallArgumentList;
-        this.currentIndentedWidth = currentIndentedWidth;
         this.commentText = commentText;
     }
 
@@ -205,32 +200,18 @@ final class TryStatementLayout {
         }
         List<JavaCommentTrivia> openerComments = tryResourceOpenerComments(statement);
         List<JavaCommentTrivia> trailingResourceComments = tryResourceTrailingComments(statement);
-        String flat = "try (" + flatResources + ")";
-        // The flat-collapse decision must be width-driven, not source-shape-driven, or the section never converges. For a
-        // single resource, a broken initializer call is incidental (not a deliberate one-per-line shape), so honoring
-        // spansMultipleLines there would flip-flop the section between opener-break and attached-argument-break every
-        // pass; with two or more resources it does capture a deliberate one-per-line layout and still gates.
+        // Flat-collapse eligibility stays source-shape-driven only (never width here), or the section never converges: a
+        // single resource's broken initializer is incidental, not deliberate, so spansMultipleLines only gates multi
+        // resource lists. The ranking below measures the actual flat-versus-broken fit at the true rendered column.
         boolean preserveAuthorMultiline = statement.getResources().size() > 1 && resourceShape.spansMultipleLines();
-        if (
-            !preserveAuthorMultiline
+        boolean flatEligible = !preserveAuthorMultiline
             && openerComments.isEmpty()
             && !tryResourcesHaveLeadingComments(statement)
-            && trailingResourceComments.isEmpty()
-            && tryOpenerLineWidth(statement, flat + " {}") <= options.lineWidth()
-        ) {
-            return Doc.text(" (" + flatResources + ")");
-        }
+            && trailingResourceComments.isEmpty();
         Optional<Doc> attachedMethodCallResource = trailingResourceComments.isEmpty()
             ? attachedSingleMethodCallResource(statement, resourceShape)
             : Optional.empty();
-        if (attachedMethodCallResource.isPresent()) {
-            return Doc.concat(
-                Doc.text(" ("),
-                attachedMethodCallResource.orElseThrow(),
-                Doc.text(")")
-            );
-        }
-        return Doc.concat(
+        Doc onePerLine = Doc.concat(
             Doc.text(" ("),
             tryResourceOpenerCommentsDoc(statement, openerComments),
             Doc.indent(
@@ -244,23 +225,24 @@ final class TryStatementLayout {
             Doc.HARD_LINE,
             Doc.text(")")
         );
-    }
-
-    /**
-     * Measures a try-with-resources opener line at the column where it actually renders.
-     *
-     * <p>The fit gates ask whether the flat opener ({@code try (…) {}} for the whole-section collapse, or
-     * {@code try (Type name = scope.call(} for a single attached method-call resource) fits on one line. The fixed
-     * {@link LayoutWidth#currentIndented} baseline under-counts the {@code try}'s real block/type nesting, which would
-     * collapse resource lists that overflow their true column past the width limit; {@link LayoutWidth#nodeLine}
-     * reproduces the rendered column regardless of source layout. {@code currentIndentedWidth} is kept as a floor so a
-     * {@code try} directly under a member (no enclosing block) still measures against at least one unit.
-     */
-    private int tryOpenerLineWidth(TryStmt statement, String openerLine) {
-        return Math.max(
-            layoutWidth.nodeLine(statement, openerLine),
-            currentIndentedWidth.applyAsInt(openerLine)
-        );
+        List<Doc> alternatives = new ArrayList<>();
+        List<Integer> priorities = new ArrayList<>();
+        if (flatEligible) {
+            alternatives.add(Doc.text(" (" + flatResources + ")"));
+            priorities.add(2);
+        }
+        attachedMethodCallResource.ifPresent(doc -> {
+            alternatives.add(Doc.concat(Doc.text(" ("), doc, Doc.text(")")));
+            priorities.add(1);
+        });
+        alternatives.add(onePerLine);
+        priorities.add(0);
+        Doc ranked = alternatives.size() == 1
+            ? onePerLine
+            : Doc.bestFittingFirstLine(alternatives, priorities.stream().mapToInt(Integer::intValue).toArray());
+        // Reserves the same 3 columns the retired build-time estimate appended (" {}") for the block opener that always
+        // follows on the resource section's own last rendered line, regardless of which shape wins.
+        return Doc.reserving(ranked, 3);
     }
 
     /**
@@ -338,9 +320,6 @@ final class TryStatementLayout {
             + " = "
             + tryResourceMethodCallPrefix(methodCall)
             + "(";
-        if (tryOpenerLineWidth(statement, "try (" + resourcePrefix) > options.lineWidth()) {
-            return Optional.empty();
-        }
         return Optional.of(
             Doc.concat(
                 Doc.text(resourcePrefix),

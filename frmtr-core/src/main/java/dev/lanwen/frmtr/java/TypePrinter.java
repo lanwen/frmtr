@@ -435,16 +435,6 @@ final class TypePrinter {
     }
 
     /**
-     * Builds flat header-clause text used by line-width estimates before a declaration chooses its final shape.
-     */
-    <T extends Node> String flatTypeClause(String keyword, NodeList<T> types) {
-        if (types.isEmpty()) {
-            return "";
-        }
-        return " " + keyword + " " + compactJoinTypeLike(types);
-    }
-
-    /**
      * Builds flat declaration type-parameter text used only for line-width estimates.
      */
     String flatTypeParameters(NodeList<TypeParameter> typeParameters) {

@@ -15,7 +15,6 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -70,8 +69,6 @@ final class ClassOrInterfaceDeclarationPrinter {
 
     private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
 
-    private final BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause;
-
     private final Function<ClassOrInterfaceDeclaration, Doc> memberBlock;
 
     ClassOrInterfaceDeclarationPrinter(
@@ -89,7 +86,6 @@ final class ClassOrInterfaceDeclarationPrinter {
             Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlinePermitsTypes,
             TypeClausePrinter typeClause,
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
-            BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause,
             Function<ClassOrInterfaceDeclaration, Doc> memberBlock
     ) {
         this.comments = comments;
@@ -106,7 +102,6 @@ final class ClassOrInterfaceDeclarationPrinter {
         this.inlinePermitsTypes = inlinePermitsTypes;
         this.typeClause = typeClause;
         this.flatTypeParameters = flatTypeParameters;
-        this.flatTypeClause = flatTypeClause;
         this.memberBlock = memberBlock;
     }
 
@@ -126,15 +121,42 @@ final class ClassOrInterfaceDeclarationPrinter {
                 commentedInterfaces.formatCommentedInterface(raw)
             );
         }
-        if (shouldBreakClassOrInterfaceHeader(declaration)) {
-            return brokenClassOrInterface(declaration);
+        Doc prefix = classOrInterfacePrefix(declaration);
+        Doc memberBlockDoc = memberBlock.apply(declaration);
+        if (classOrInterfaceHeaderClauses(declaration) == 0) {
+            return flatClassOrInterface(declaration, prefix, memberBlockDoc);
         }
+        return Doc.bestFittingFirstLine(
+            List.of(
+                flatClassOrInterface(declaration, prefix, memberBlockDoc),
+                brokenClassOrInterface(declaration, prefix, memberBlockDoc)
+            ),
+            new int[] {1, 0},
+            "classHeader"
+        );
+    }
+
+    /**
+     * Builds the header prefix shared by the flat and broken candidates: annotations, leading name comment, modifiers,
+     * keyword, and name. Built once so both ranked candidates render the identical Doc instance.
+     */
+    private Doc classOrInterfacePrefix(ClassOrInterfaceDeclaration declaration) {
+        return Doc.concat(
+            annotations.apply(declaration),
+            nameLeadingLineComment(declaration),
+            Doc.text(modifiers.apply(declaration)),
+            Doc.text(declaration.isInterface() ? "interface " : "class "),
+            Doc.text(declaration.getNameAsString())
+        );
+    }
+
+    /**
+     * Prints the inline header: type clauses attach directly after the name/type-parameters instead of each starting a
+     * new line. Ranked against {@link #brokenClassOrInterface} at the true rendered column when clauses are present.
+     */
+    private Doc flatClassOrInterface(ClassOrInterfaceDeclaration declaration, Doc prefix, Doc memberBlockDoc) {
         List<Doc> header = new ArrayList<>();
-        header.add(annotations.apply(declaration));
-        header.add(nameLeadingLineComment(declaration));
-        header.add(Doc.text(modifiers.apply(declaration)));
-        header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
-        header.add(Doc.text(declaration.getNameAsString()));
+        header.add(prefix);
         if (!declaration.getTypeParameters().isEmpty()) {
             header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
         }
@@ -145,37 +167,8 @@ final class ClassOrInterfaceDeclarationPrinter {
         header.add(clauseLeadingBlockComment(declaration.getPermittedTypes()));
         inlinePermitsTypes.apply(declaration.getPermittedTypes()).ifPresent(header::add);
         header.add(Doc.text(" "));
-        header.add(memberBlock.apply(declaration));
+        header.add(memberBlockDoc);
         return Doc.concat(header);
-    }
-
-    /**
-     * Decides whether a header with type clauses must leave the flat path before printing the member block.
-     *
-     * <p>Headers without {@code extends}, {@code implements}, or {@code permits} clauses keep the simple inline form.
-     * Clause-bearing headers compare the compact declaration text plus the following body opener against the configured
-     * line width, so a non-empty body budgets for one opening brace while an empty body budgets for the full empty
-     * block.
-     */
-    private boolean shouldBreakClassOrInterfaceHeader(ClassOrInterfaceDeclaration declaration) {
-        if (
-            declaration.getExtendedTypes().isEmpty()
-            && declaration.getImplementedTypes().isEmpty()
-            && declaration.getPermittedTypes().isEmpty()
-        ) {
-            return false;
-        }
-        String flatHeader = modifiers.apply(declaration)
-            + (declaration.isInterface() ? "interface " : "class ")
-            + declaration.getNameAsString()
-            + flatTypeParameters.apply(declaration.getTypeParameters())
-            + flatTypeClause.apply("extends", declaration.getExtendedTypes())
-            + flatTypeClause.apply("implements", declaration.getImplementedTypes())
-            + flatTypeClause.apply("permits", declaration.getPermittedTypes());
-        return classOrInterfaceHeaderWidth(
-            declaration,
-            flatHeader + " " + (emptyMemberBlock(declaration) ? "{}" : "{")
-        ) > options.lineWidth();
     }
 
     /**
@@ -185,13 +178,9 @@ final class ClassOrInterfaceDeclarationPrinter {
      * clause to start from the same broken-header shape instead of attaching the first clause to the type-parameter
      * block and making later clauses look unrelated.
      */
-    private Doc brokenClassOrInterface(ClassOrInterfaceDeclaration declaration) {
+    private Doc brokenClassOrInterface(ClassOrInterfaceDeclaration declaration, Doc prefix, Doc memberBlockDoc) {
         List<Doc> header = new ArrayList<>();
-        header.add(annotations.apply(declaration));
-        header.add(nameLeadingLineComment(declaration));
-        header.add(Doc.text(modifiers.apply(declaration)));
-        header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
-        header.add(Doc.text(declaration.getNameAsString()));
+        header.add(prefix);
         boolean breakTypeParameters = classOrInterfaceTypeParametersBreak(declaration);
         if (breakTypeParameters) {
             header.add(
@@ -229,7 +218,7 @@ final class ClassOrInterfaceDeclarationPrinter {
                 )
                 .ifPresent(header::add);
         header.add(Doc.text(" "));
-        header.add(memberBlock.apply(declaration));
+        header.add(memberBlockDoc);
         return Doc.concat(header);
     }
 
@@ -307,13 +296,6 @@ final class ClassOrInterfaceDeclarationPrinter {
             clauses++;
         }
         return clauses;
-    }
-
-    /**
-     * Treats a declaration with only orphan comments as non-empty because the member block must print a real body.
-     */
-    private boolean emptyMemberBlock(ClassOrInterfaceDeclaration declaration) {
-        return declaration.getMembers().isEmpty() && declaration.getOrphanComments().isEmpty();
     }
 
     private int classOrInterfaceHeaderWidth(ClassOrInterfaceDeclaration declaration, String text) {

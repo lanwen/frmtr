@@ -179,8 +179,7 @@ final class DeclarationPrinters {
             types::typeBody,
             types::typeCanBreak,
             fields::variable,
-            fields::variableWithStatementTerminator,
-            this::currentIndentedWidth
+            fields::variableWithStatementTerminator
         );
         this.callableSignatures = new CallableSignaturePrinter(
             comments,

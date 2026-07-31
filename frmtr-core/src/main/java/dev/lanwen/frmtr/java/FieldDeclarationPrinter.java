@@ -18,7 +18,6 @@ import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,10 +46,6 @@ import java.util.function.ToIntFunction;
  * near {@code variableWithComment1} through {@code variableWithComment4} cover the before/after {@code =} branches.
  */
 final class FieldDeclarationPrinter {
-
-    private final FormatterOptions options;
-
-    private final LayoutWidth layoutWidth;
 
     private final Function<NodeWithAnnotations<?>, Doc> declarationAnnotations;
 
@@ -114,8 +109,6 @@ final class FieldDeclarationPrinter {
             BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak,
             Function<LambdaExpr, Doc> lambdaExpression
     ) {
-        this.options = context.options;
-        this.layoutWidth = context.layoutWidth;
         this.declarationAnnotations = declarationAnnotations;
         this.modifiers = modifiers;
         this.inlineAnnotations = inlineAnnotations;
@@ -175,68 +168,48 @@ final class FieldDeclarationPrinter {
         docs.add(declarationAnnotations.apply(declaration));
         docs.add(Doc.text(modifiers.apply(declaration)));
         String declarationPrefix = modifiers.apply(declaration);
-        if (!declaration.getVariables().isEmpty()) {
-            Type type = CStyleArrayDeclarators.sharedPrefixType(declaration.getVariables());
-            String flatType = inlineAnnotations.apply(declaration) + compactTypeLike.apply(type) + " ";
-            declarationPrefix += flatType;
-            if (fieldTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
-                Doc variables = Doc.joinComma(
-                    declaration.getVariables()
-                            .stream()
-                            .map(variable -> variableDoc(variable, "", isLastVariable(declaration, variable)))
-                            .toList()
-                );
-                docs.add(
-                    Doc.group(
-                        Doc.concat(
-                            Doc.text(inlineAnnotations.apply(declaration)),
-                            typeBody.apply(type),
-                            Doc.text(" "),
-                            variables
-                        )
-                    )
-                );
-                return Doc.concat(docs);
-            }
-            docs.add(Doc.text(flatType));
+        if (declaration.getVariables().isEmpty()) {
+            return Doc.concat(docs);
         }
-        String variableDeclarationPrefix = declarationPrefix;
-        docs.add(
-            Doc.group(
-                Doc.joinComma(
-                    declaration.getVariables()
-                            .stream()
-                            .map(variable -> variableDoc(
-                                    variable,
-                                    variableDeclarationPrefix,
-                                    isLastVariable(declaration, variable)
-                            ))
-                            .toList()
-                )
-            )
-        );
+        Type type = CStyleArrayDeclarators.sharedPrefixType(declaration.getVariables());
+        String flatType = inlineAnnotations.apply(declaration) + compactTypeLike.apply(type) + " ";
+        String variableDeclarationPrefix = declarationPrefix + flatType;
+        docs.add(fieldTypeAndVariables(declaration, type, flatType, variableDeclarationPrefix));
         return Doc.concat(docs);
     }
 
     /**
-     * Lets the type body own generic argument breaks when a field type and name cannot fit on one member line.
+     * Ranks the flat type-prefixed variable list against the type-body-broken, bare-variable list at the true
+     * rendered column (skipped when the type cannot break). Flat keeps priority so a further-exploding initializer
+     * cannot win the broken type body on the fewer-lines tie-break.
      */
-    private boolean fieldTypeShouldBreak(
+    private Doc fieldTypeAndVariables(
+            FieldDeclaration declaration,
             Type type,
-            NodeList<VariableDeclarator> variables,
-            String declarationPrefix
+            String flatType,
+            String variableDeclarationPrefix
     ) {
-        return (
-            typeCanBreak.test(type)
-            && variables.stream()
-                    // Measure the field type-and-name at the declarator's true rendered type-body depth
-                    // ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline, so a field in a nested type is
-                    // measured at the column it renders at.
-                    .anyMatch(variable -> layoutWidth.nodeLine(
-                            variable,
-                            declarationPrefix + variable.getNameAsString()
-                        ) > options.lineWidth()
-                    )
+        Doc flatTail = Doc.concat(Doc.text(flatType), Doc.group(variablesDoc(declaration, variableDeclarationPrefix)));
+        if (!typeCanBreak.test(type)) {
+            return flatTail;
+        }
+        Doc brokenTail = Doc.group(
+            Doc.concat(
+                Doc.text(inlineAnnotations.apply(declaration)),
+                typeBody.apply(type),
+                Doc.text(" "),
+                variablesDoc(declaration, "")
+            )
+        );
+        return Doc.bestFittingFirstLine(List.of(flatTail, brokenTail), new int[] {1, 0});
+    }
+
+    private Doc variablesDoc(FieldDeclaration declaration, String declarationPrefix) {
+        return Doc.joinComma(
+            declaration.getVariables()
+                    .stream()
+                    .map(variable -> variableDoc(variable, declarationPrefix, isLastVariable(declaration, variable)))
+                    .toList()
         );
     }
 

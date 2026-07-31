@@ -3,13 +3,11 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Renders method references after broad expression dispatch has selected {@code scope::member} syntax.
@@ -26,28 +24,20 @@ import java.util.function.ToIntFunction;
  */
 final class MethodReferencePrinter {
 
-    private final FormatterOptions options;
-
     private final Function<Node, String> compact;
 
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
 
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
 
-    private final ToIntFunction<String> blockStatementWidth;
-
     MethodReferencePrinter(
-            FormatterOptions options,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoinTypeLike,
-            BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
-            ToIntFunction<String> blockStatementWidth
+            BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix
     ) {
-        this.options = options;
         this.compact = compact;
         this.compactJoinTypeLike = compactJoinTypeLike;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
-        this.blockStatementWidth = blockStatementWidth;
     }
 
     /**
@@ -75,27 +65,27 @@ final class MethodReferencePrinter {
     }
 
     /**
-     * Breaks method references only when their scope is already parenthesized and the full statement is too wide.
+     * Breaks method references only when their scope is already parenthesized, ranking the flat scope against the
+     * broken suffix breaker at the true rendered column.
      *
-     * <p>Without a leading break request, a method reference that still fits as a statement is left to compact output.
-     * Once the caller already knows the surrounding assignment or declaration must break, or this reference alone would
-     * overflow a block statement, the enclosed scope is rendered through the shared suffix breaker and {@code ::...}
-     * stays attached after that broken parenthesized scope.
+     * <p>A caller that already knows the surrounding assignment or declaration must break skips the rank and always
+     * gets the broken shape. Otherwise the flat and broken scope are ranked, reserving the {@code ::...} tail so the
+     * rank sees the space it actually leaves on the closing line.
      */
     Optional<Doc> suffixedEnclosedMethodReference(MethodReferenceExpr expression, boolean leadingBreak) {
-        if (
-            !leadingBreak
-            && blockStatementWidth.applyAsInt(compact.apply(expression) + ";") <= options.lineWidth()
-        ) {
-            return Optional.empty();
-        }
         if (!(expression.getScope() instanceof EnclosedExpr enclosed)) {
             return Optional.empty();
         }
+        String suffix = methodReferenceSuffix(expression);
+        Doc broken = brokenEnclosedForSuffix.apply(enclosed, leadingBreak);
+        if (leadingBreak) {
+            return Optional.of(Doc.concat(broken, Doc.text(suffix)));
+        }
+        Doc flat = Doc.text(compact.apply(enclosed));
         return Optional.of(
             Doc.concat(
-                brokenEnclosedForSuffix.apply(enclosed, leadingBreak),
-                Doc.text(methodReferenceSuffix(expression))
+                Doc.reserving(Doc.conditionalGroup(List.of(flat, broken)), suffix.length()),
+                Doc.text(suffix)
             )
         );
     }

@@ -13,7 +13,6 @@ import com.github.javaparser.ast.modules.ModuleProvidesDirective;
 import com.github.javaparser.ast.modules.ModuleRequiresDirective;
 import com.github.javaparser.ast.modules.ModuleUsesDirective;
 import dev.lanwen.frmtr.FormatterException;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -45,8 +44,6 @@ final class ModuleBlockPrinter {
 
     private final SourceShapePolicy sourceShapePolicy;
 
-    private final FormatterOptions options;
-
     private final SourceText sourceText;
 
     private final RecoveredListPlanner recoveredListPlanner;
@@ -69,7 +66,6 @@ final class ModuleBlockPrinter {
     ) {
         this.comments = context.comments;
         this.sourceShapePolicy = context.sourceShapePolicy;
-        this.options = context.options;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, ModuleBlockPrinter::moduleDirectiveListRecoveryFailure);
@@ -376,11 +372,12 @@ final class ModuleBlockPrinter {
     }
 
     /**
-     * Prints target-bearing module directives using the widest layout that fits within the configured line width.
+     * Ranks target-bearing module directives' flat, one-continuation-line, and one-target-per-line shapes at the true
+     * rendered column.
      *
-     * <p>The first broken form keeps {@code to ...;} or {@code with ...;} on one continuation line. The deeper broken
-     * form is reserved for long multi-target lists, where each target gets its own continuation line under the target
-     * keyword.
+     * <p>The continuation shape keeps {@code to ...;} or {@code with ...;} on one indented line under the declaration.
+     * The one-per-line shape is the always-fitting fallback for long multi-target lists, where each target gets its own
+     * continuation line under the target keyword.
      */
     private Doc moduleAccessDirective(
             String keyword,
@@ -393,15 +390,12 @@ final class ModuleBlockPrinter {
             return Doc.text(prefix + ";");
         }
         String flatTargets = compactJoin.apply(targets);
-        String flat = prefix + " " + targetKeyword + " " + flatTargets + ";";
-        if (currentIndentedWidth(flat) <= options.lineWidth()) {
-            return Doc.text(flat);
-        }
-        String targetLine = targetKeyword + " " + flatTargets + ";";
-        if (currentIndentedWidth(targetLine) <= options.lineWidth()) {
-            return Doc.concat(Doc.text(prefix), Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(targetLine))));
-        }
-        return Doc.concat(
+        Doc flat = Doc.text(prefix + " " + targetKeyword + " " + flatTargets + ";");
+        Doc continuation = Doc.concat(
+            Doc.text(prefix),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(targetKeyword + " " + flatTargets + ";")))
+        );
+        Doc onePerLine = Doc.concat(
             Doc.text(prefix),
             Doc.indent(
                 Doc.concat(
@@ -420,10 +414,7 @@ final class ModuleBlockPrinter {
                 )
             )
         );
-    }
-
-    private int currentIndentedWidth(String text) {
-        return options.indentUnit().length() + text.length();
+        return Doc.bestFittingFirstLine(List.of(flat, continuation, onePerLine), new int[] { 2, 1, 0 });
     }
 
     private enum EntryKind {

@@ -225,11 +225,9 @@ final class ExpressionPrinters {
         );
         this.fieldAccesses = new FieldAccessPrinter(comments, rendering);
         this.methodReferences = new MethodReferencePrinter(
-            options,
             compactSource::compact,
             types::compactJoinTypeLike,
-            enclosedExpressions::brokenEnclosedForSuffix,
-            context.layoutWidth::blockStatement
+            enclosedExpressions::brokenEnclosedForSuffix
         );
         this.methodCalls = new MethodCallPrinter(
             context,

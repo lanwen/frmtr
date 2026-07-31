@@ -43,9 +43,9 @@ public final class DocRenderer {
     private int column;
 
     /**
-     * Columns of caller content that will follow the enclosing {@link Doc.Reserve}'s single decision node on the same
-     * line. The decision subtracts it and then clears it, so exactly one ranking is judged against the reduced budget
-     * and nothing inside the winner inherits the reservation.
+     * Columns of caller content that will follow the enclosing {@link Doc.Reserve} on the same line. A ranked decision
+     * takes and clears it for its one choice among alternatives; a plain {@link Doc.Group} only peeks, since it is not
+     * a terminal choice and its content or siblings may still need the same budget.
      */
     private int reservedColumns;
 
@@ -118,7 +118,11 @@ public final class DocRenderer {
             }
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
             case Doc.Group group -> {
-                GroupMode next = widths.fits(group.doc(), options.lineWidth() - column) ? GroupMode.FLAT : GroupMode.BREAK;
+                // Peek, don't take: an enclosing Reserve's budget is a field, not a per-call token, so charging it here
+                // without clearing it leaves it live for whatever follows this group on the same caller-owned last line.
+                GroupMode next = widths.fits(group.doc(), options.lineWidth() - column - reservedColumns)
+                    ? GroupMode.FLAT
+                    : GroupMode.BREAK;
                 if (group.groupId() != null) {
                     groupModes.put(group.groupId(), next);
                 }
@@ -234,9 +238,12 @@ public final class DocRenderer {
         if (bestFitting.groupId() != null) {
             groupModes.put(bestFitting.groupId(), DocWidths.Measurement.verdictOf(chosen));
         }
-        // The chosen alternative's tail may hold another ranked node on the same caller-owned last line; re-wrap it so
-        // that nested decision sees the reservation the ranking simulation already credited it with, not a spent one.
-        render(Doc.reserving(bestFitting.alternatives().get(chosen), reserved), indent, GroupMode.BREAK, widths);
+        // The winner's own fit decisions may sit on the same caller-owned last line the reservation was funding, so
+        // re-supply it as the live field for its render, exactly as the ranking walk already did, then restore after.
+        int enclosing = reservedColumns;
+        reservedColumns = reserved;
+        render(bestFitting.alternatives().get(chosen), indent, GroupMode.BREAK, widths);
+        reservedColumns = enclosing;
     }
 
     private void append(String value) {

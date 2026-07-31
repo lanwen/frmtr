@@ -1118,4 +1118,41 @@ final class DocRendererTest {
                     : two"""
         );
     }
+
+    @Test
+    void groupChargesAPendingReservationInsteadOfPrintingAOneOverFlatLine() {
+        // Flat content is exactly 32 columns, fitting lineWidth 32 unreserved; reserving 1 for a trailing ";" must
+        // still count against the group's own fit check. A raw Doc.Reserve, not Doc.reserving(Doc, int) — that rewrite
+        // only attaches to a ConditionalGroup/BestFitting and drops the reservation once it reaches a plain Group.
+        Doc group = Doc.group(
+            Doc.concat(Doc.text("identifierName ="), Doc.indent(Doc.concat(Doc.LINE, Doc.text("expressionValue"))))
+        );
+        Doc doc = Doc.concat(new Doc.Reserve(group, 1), Doc.text(";"));
+
+        assertThat(renderer(32).render(doc)).isEqualTo(
+            """
+                identifierName =
+                  expressionValue;"""
+        );
+    }
+
+    @Test
+    void bestFittingPrefersTheBreakingArmWhenBothArmsTieOnlyBecauseTheReservationWasIgnored() {
+        // Mirrors the cast-initializer shape: an attach arm with no break point of its own, ranked by priority against
+        // a break-after-`=` arm that owns a LINE. Both arms measure the same flat width; only the arm that can actually
+        // shed the reserved trailing `;` should win once the reservation is charged.
+        Doc initializer = Doc.text("computedValue");
+        Doc attached = Doc.group(Doc.concat(Doc.text("runningTotal = "), initializer));
+        Doc brokenAfterEquals = Doc.group(
+            Doc.concat(Doc.text("runningTotal ="), Doc.indent(Doc.concat(Doc.LINE, initializer)))
+        );
+        Doc ranked = Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), new int[] { 1, 0 });
+        Doc statement = Doc.concat(Doc.text("var "), Doc.reserving(ranked, 1), Doc.text(";"));
+
+        assertThat(renderer(32).render(statement)).isEqualTo(
+            """
+                var runningTotal =
+                  computedValue;"""
+        );
+    }
 }

@@ -88,10 +88,12 @@ final class TypePrinter {
      * Prints a declaration header clause either attached to the current header line or hard-broken under it.
      *
      * <p>The inline branch is used when a caller has already broken type parameters and still wants the first clause
-     * beside the closing {@code >}. The broken branch ranks the clause's own flat-vs-one-type-per-line shape at the
-     * true rendered column, so wider class, interface, and enum headers still split cleanly. A single type with more
-     * than two generic arguments gets the hard-broken type-argument shape instead of either ranked shape; that keeps
-     * long sealed, implements, and generic-class headers readable without forcing unrelated clause items to split.
+     * beside the closing {@code >}. It ranks flat-attached against the keyword staying attached with each type moved to
+     * its own indented line below, so a long clause list still wraps even though the keyword never gets its own line
+     * here. The broken branch ranks the clause's own flat-vs-one-type-per-line shape at the true rendered column, so
+     * wider class, interface, and enum headers still split cleanly. A single type with more than two generic arguments
+     * gets the hard-broken type-argument shape instead of either ranked shape; that keeps long sealed, implements, and
+     * generic-class headers readable without forcing unrelated clause items to split.
      */
     <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types, boolean breakBeforeClause) {
         if (types.isEmpty()) {
@@ -105,7 +107,13 @@ final class TypePrinter {
             ) {
                 return Optional.of(Doc.concat(Doc.text(" " + keyword + " "), brokenClassOrInterfaceType(type)));
             }
-            return Optional.of(Doc.text(" " + keyword + " " + compactJoinTypeLike(types)));
+            Doc flatAttached = Doc.text(" " + keyword + " " + compactJoinTypeLike(types));
+            if (types.size() == 1) {
+                return Optional.of(flatAttached);
+            }
+            return Optional.of(
+                Doc.bestFittingFirstLine(List.of(flatAttached, attachedOnePerLineClause(keyword, types)), new int[] {1, 0})
+            );
         }
         Doc flatClauseLine = Doc.indent(
             Doc.concat(Doc.HARD_LINE, Doc.text(keyword + " " + compactJoinTypeLike(types)))
@@ -114,6 +122,27 @@ final class TypePrinter {
             ? Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(keyword + " "), brokenClassOrInterfaceType(type)))
             : onePerLineClause(keyword, types);
         return Optional.of(Doc.bestFittingFirstLine(List.of(flatClauseLine, fallback), new int[] {1, 0}));
+    }
+
+    /**
+     * Wraps an attached clause's types one per indented line while the keyword itself stays on the caller's current
+     * line, matching the record header's established {@code implements} wrap convention for an already-attached clause.
+     */
+    private <T extends Node> Doc attachedOnePerLineClause(String keyword, NodeList<T> types) {
+        return Doc.concat(
+            Doc.text(" " + keyword),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        types.stream()
+                                .map(type -> Doc.text(compactTypeLike.apply(type)))
+                                .toList()
+                    )
+                )
+            )
+        );
     }
 
     private <T extends Node> Doc onePerLineClause(String keyword, NodeList<T> types) {

@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Prints shared type-like declaration clauses and breakable generic type bodies.
@@ -89,30 +88,15 @@ final class TypePrinter {
      * Prints a declaration header clause either attached to the current header line or hard-broken under it.
      *
      * <p>The inline branch is used when a caller has already broken type parameters and still wants the first clause
-     * beside the closing {@code >}. The broken branch is used for wider class, interface, and enum headers so
-     * each clause starts from the same continuation shape. A single type with more than two generic arguments gets the
-     * hard-broken type-argument shape even when the clause keyword stays inline; that keeps long sealed, implements,
-     * and generic-class headers readable without forcing unrelated clause items to split.
+     * beside the closing {@code >}. The broken branch ranks the clause's own flat-vs-one-type-per-line shape at the
+     * true rendered column, so wider class, interface, and enum headers still split cleanly. A single type with more
+     * than two generic arguments gets the hard-broken type-argument shape instead of either ranked shape; that keeps
+     * long sealed, implements, and generic-class headers readable without forcing unrelated clause items to split.
      */
     <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types, boolean breakBeforeClause) {
-        return typeClause(
-            keyword,
-            types,
-            breakBeforeClause,
-            text -> text.length() + options.indentUnit().length()
-        );
-    }
-
-    <T extends Node> Optional<Doc> typeClause(
-            String keyword,
-            NodeList<T> types,
-            boolean breakBeforeClause,
-            ToIntFunction<String> width
-    ) {
         if (types.isEmpty()) {
             return Optional.empty();
         }
-        String flat = keyword + " " + compactJoinTypeLike(types);
         if (!breakBeforeClause) {
             if (
                 types.size() == 1
@@ -121,40 +105,30 @@ final class TypePrinter {
             ) {
                 return Optional.of(Doc.concat(Doc.text(" " + keyword + " "), brokenClassOrInterfaceType(type)));
             }
-            return Optional.of(Doc.text(" " + flat));
+            return Optional.of(Doc.text(" " + keyword + " " + compactJoinTypeLike(types)));
         }
-        if (width.applyAsInt(flat) <= options.lineWidth()) {
-            return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(flat))));
-        }
-        if (
-            types.size() == 1
-            && types.get(0) instanceof ClassOrInterfaceType type
-            && typeArgumentCount(type) > 2
-        ) {
-            return Optional.of(
+        Doc flatClauseLine = Doc.indent(
+            Doc.concat(Doc.HARD_LINE, Doc.text(keyword + " " + compactJoinTypeLike(types)))
+        );
+        Doc fallback = types.size() == 1 && types.get(0) instanceof ClassOrInterfaceType type && typeArgumentCount(type) > 2
+            ? Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(keyword + " "), brokenClassOrInterfaceType(type)))
+            : onePerLineClause(keyword, types);
+        return Optional.of(Doc.bestFittingFirstLine(List.of(flatClauseLine, fallback), new int[] {1, 0}));
+    }
+
+    private <T extends Node> Doc onePerLineClause(String keyword, NodeList<T> types) {
+        return Doc.indent(
+            Doc.concat(
+                Doc.HARD_LINE,
+                Doc.text(keyword),
                 Doc.indent(
                     Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.text(keyword + " "),
-                        brokenClassOrInterfaceType(type)
-                    )
-                )
-            );
-        }
-        return Optional.of(
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    Doc.text(keyword),
-                    Doc.indent(
-                        Doc.concat(
-                            Doc.HARD_LINE,
-                            Doc.join(
-                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                types.stream()
-                                        .map(type -> Doc.text(compactTypeLike.apply(type)))
-                                        .toList()
-                            )
+                        Doc.join(
+                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                            types.stream()
+                                    .map(type -> Doc.text(compactTypeLike.apply(type)))
+                                    .toList()
                         )
                     )
                 )

@@ -154,17 +154,6 @@ final class CallableSignaturePrinter {
         );
     }
 
-    boolean parametersFitOnContinuation(CallableDeclaration<?> declaration) {
-        // The compact continuation renders every parameter on one line from comment-free flat text, so a leading line
-        // comment would be dropped there; refuse the continuation when any parameter has one (the caller falls back to
-        // the broken list, which gives the comment its own line). Block-comment-only parameters stay eligible.
-        if (parametersHaveLeadingLineComment(declaration)) {
-            return false;
-        }
-        String continuationLine = options.indentUnit().repeat(2) + callableParameterText(declaration);
-        return currentIndentedWidth(continuationLine) <= options.lineWidth();
-    }
-
     /**
      * Ranks the parameter list's flat, compact-continuation, and one-per-line shapes at the true rendered column,
      * reserving {@code suffixLength} columns of trailing same-line content (a throws clause or the body/semicolon
@@ -176,7 +165,8 @@ final class CallableSignaturePrinter {
      * survives, mangling it. {@link Doc#flatCandidate} guards the same hazard for a parameter whose own content (an
      * annotation preserving a source multi-line shape) carries a hard line of its own: it drops the flat shape from
      * the ranking instead of forcing a mangled hybrid. {@code compactContinuationEligible} lets a caller such as a
-     * broken-return-type method opt the continuation shape out entirely.
+     * broken-return-type method opt the continuation shape out entirely; when eligible the continuation is always
+     * offered and the ranking's own fit gate drops it in favor of the broken shape if it overflows.
      */
     Doc rankedParameters(CallableDeclaration<?> declaration, boolean compactContinuationEligible, int suffixLength) {
         if (declaration.getParameters().isEmpty() && declaration.getReceiverParameter().isEmpty()) {
@@ -189,7 +179,7 @@ final class CallableSignaturePrinter {
         }
         Optional<Doc> flat = Doc.flatCandidate(parameters(declaration, false));
         Doc broken = parameters(declaration, true);
-        Optional<Doc> continuation = compactContinuationEligible && parametersFitOnContinuation(declaration)
+        Optional<Doc> continuation = compactContinuationEligible
             ? Optional.of(compactContinuationParameters(declaration))
             : Optional.empty();
         List<Doc> alternatives = new ArrayList<>();

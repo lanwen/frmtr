@@ -205,7 +205,6 @@ final class DeclarationPrinters {
             context.sourceShapePolicy,
             rawSource,
             rawPreservedSource,
-            options,
             new CommentedInterfacePrinter(),
             callableSignatures,
             declarationPrefixes::annotations,

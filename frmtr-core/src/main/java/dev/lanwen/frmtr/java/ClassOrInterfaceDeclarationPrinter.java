@@ -1,21 +1,17 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Prints class and interface declarations after body dispatch has selected the class-or-interface branch.
@@ -48,8 +44,6 @@ final class ClassOrInterfaceDeclarationPrinter {
 
     private final RawPreservedSource rawPreservedSource;
 
-    private final FormatterOptions options;
-
     private final CommentedInterfacePrinter commentedInterfaces;
 
     private final CallableSignaturePrinter callableSignatures;
@@ -73,7 +67,6 @@ final class ClassOrInterfaceDeclarationPrinter {
             SourceShapePolicy sourceShapePolicy,
             RawSource rawSource,
             RawPreservedSource rawPreservedSource,
-            FormatterOptions options,
             CommentedInterfacePrinter commentedInterfaces,
             CallableSignaturePrinter callableSignatures,
             Function<NodeWithAnnotations<?>, Doc> annotations,
@@ -88,7 +81,6 @@ final class ClassOrInterfaceDeclarationPrinter {
         this.sourceShapePolicy = sourceShapePolicy;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
-        this.options = options;
         this.commentedInterfaces = commentedInterfaces;
         this.callableSignatures = callableSignatures;
         this.annotations = annotations;
@@ -222,29 +214,11 @@ final class ClassOrInterfaceDeclarationPrinter {
         }
         boolean breakClauses = classOrInterfaceHeaderClauses(declaration) > 1 || !breakTypeParameters;
         header.add(clauseLeadingBlockComment(declaration.getExtendedTypes()));
-        typeClause.print(
-                    "extends",
-                    declaration.getExtendedTypes(),
-                    breakClauses,
-                    text -> classOrInterfaceClauseWidth(declaration, text)
-                )
-                .ifPresent(header::add);
+        typeClause.print("extends", declaration.getExtendedTypes(), breakClauses).ifPresent(header::add);
         header.add(clauseLeadingBlockComment(declaration.getImplementedTypes()));
-        typeClause.print(
-                    "implements",
-                    declaration.getImplementedTypes(),
-                    breakClauses,
-                    text -> classOrInterfaceClauseWidth(declaration, text)
-                )
-                .ifPresent(header::add);
+        typeClause.print("implements", declaration.getImplementedTypes(), breakClauses).ifPresent(header::add);
         header.add(clauseLeadingBlockComment(declaration.getPermittedTypes()));
-        typeClause.print(
-                    "permits",
-                    declaration.getPermittedTypes(),
-                    breakClauses,
-                    text -> classOrInterfaceClauseWidth(declaration, text)
-                )
-                .ifPresent(header::add);
+        typeClause.print("permits", declaration.getPermittedTypes(), breakClauses).ifPresent(header::add);
         header.add(Doc.text(" "));
         header.add(memberBlockDoc);
         return Doc.concat(header);
@@ -298,30 +272,8 @@ final class ClassOrInterfaceDeclarationPrinter {
         return clauses;
     }
 
-    private int classOrInterfaceClauseWidth(ClassOrInterfaceDeclaration declaration, String text) {
-        return classOrInterfaceIndentWidth(declaration) + options.indentUnit().length() + text.length();
-    }
-
-    private int classOrInterfaceIndentWidth(ClassOrInterfaceDeclaration declaration) {
-        int enclosingTypes = 0;
-        Optional<Node> parent = declaration.getParentNode();
-        while (parent.isPresent()) {
-            Node node = parent.orElseThrow();
-            if (node instanceof TypeDeclaration<?>) {
-                enclosingTypes++;
-            }
-            parent = node.getParentNode();
-        }
-        return enclosingTypes * options.indentUnit().length();
-    }
-
     @FunctionalInterface
     interface TypeClausePrinter {
-        Optional<Doc> print(
-                String keyword,
-                NodeList<ClassOrInterfaceType> types,
-                boolean breakBeforeClause,
-                ToIntFunction<String> width
-        );
+        Optional<Doc> print(String keyword, NodeList<ClassOrInterfaceType> types, boolean breakBeforeClause);
     }
 }

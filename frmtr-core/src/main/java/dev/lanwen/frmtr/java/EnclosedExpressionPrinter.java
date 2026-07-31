@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -44,8 +45,6 @@ final class EnclosedExpressionPrinter {
 
     private final Function<Node, String> compactFlat;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
     private final ToIntFunction<String> continuationStatementWidth;
 
     private final ToIntFunction<Expression> nestedCastDepth;
@@ -64,7 +63,6 @@ final class EnclosedExpressionPrinter {
             Function<BinaryExpr, Doc> binaryLinesWithComments,
             Function<Node, String> compact,
             Function<Node, String> compactFlat,
-            ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<Expression> nestedCastDepth,
             Function<LambdaExpr, Doc> parenthesizedLambdaBreak,
@@ -78,7 +76,6 @@ final class EnclosedExpressionPrinter {
         this.binaryLinesWithComments = binaryLinesWithComments;
         this.compact = compact;
         this.compactFlat = compactFlat;
-        this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.nestedCastDepth = nestedCastDepth;
         this.parenthesizedLambdaBreak = parenthesizedLambdaBreak;
@@ -94,8 +91,8 @@ final class EnclosedExpressionPrinter {
      * use the assignment-style conditional break when the compact parenthesized text overflows continuation width, or
      * when a branch is a chain that fans by the canonical chain rule regardless of width. A lambda used as a whole
      * expression statement needs the lambda-specific parenthesized break so the body does not collapse into a compact
-     * parenthesized expression statement. If none of those cases applies, compact parentheses win when they fit at the
-     * current indentation.
+     * parenthesized expression statement. If none of those cases applies, compact parentheses are ranked against a
+     * broken fallback at the true rendered column.
      */
     Doc enclosedExpression(EnclosedExpr expression) {
         if (expression.getInner() instanceof CastExpr) {
@@ -128,12 +125,9 @@ final class EnclosedExpressionPrinter {
         ) {
             return parenthesizedLambdaBreak.apply(lambdaExpr);
         }
-        if (currentIndentedWidth.applyAsInt(compact.apply(expression)) <= options.lineWidth()) {
-            // Verdict measured on the dirty compact text; emit the space-before-dot-cleaned form (never wider) so a
-            // source-broken chain operand does not leak a stray {@code x .foo()} into the committed flat line.
-            return Doc.text(compactFlat.apply(expression));
-        }
-        return Doc.concat(Doc.text("("), rendering.render(expression.getInner()), Doc.text(")"));
+        Doc flat = Doc.text(compactFlat.apply(expression));
+        Doc broken = Doc.concat(Doc.text("("), rendering.render(expression.getInner()), Doc.text(")"));
+        return Doc.conditionalGroup(List.of(flat, broken));
     }
 
     /**

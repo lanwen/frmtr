@@ -177,13 +177,9 @@ final class ExpressionPrinters {
             CommentIndex::startsOnSameLine
         );
         this.casts = new CastExpressionPrinter(
-            options,
             rendering,
             compactSource::compactTypeLike,
-            compactSource::compact,
-            types::typeBody,
-            context.layoutWidth::currentIndented,
-            context.layoutWidth::continuationStatement
+            types::typeBody
         );
         this.classExpressions = new ClassExpressionPrinter(compactSource::compactTypeLike);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
@@ -194,7 +190,6 @@ final class ExpressionPrinters {
             binaries::linesWithComments,
             compactSource::compact,
             compactSource::compactFlat,
-            context.layoutWidth::currentIndented,
             context.layoutWidth::continuationStatement,
             casts::nestedCastDepth,
             lambdas::parenthesizedLambdaBreak,

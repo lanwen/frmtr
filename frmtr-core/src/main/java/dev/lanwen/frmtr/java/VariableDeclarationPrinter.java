@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.ToIntFunction;
 
 /**
  * Renders local variable declaration expressions after statement dispatch has selected declaration syntax.
@@ -54,8 +53,6 @@ final class VariableDeclarationPrinter {
 
     private final BiFunction<VariableDeclarator, String, Doc> terminatedVariable;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
     VariableDeclarationPrinter(
             FormatterOptions options,
             Function<NodeWithAnnotations<?>, Doc> annotations,
@@ -64,8 +61,7 @@ final class VariableDeclarationPrinter {
             Function<Type, Doc> typeBody,
             Predicate<Type> typeCanBreak,
             BiFunction<VariableDeclarator, String, Doc> variable,
-            BiFunction<VariableDeclarator, String, Doc> terminatedVariable,
-            ToIntFunction<String> currentIndentedWidth
+            BiFunction<VariableDeclarator, String, Doc> terminatedVariable
     ) {
         this.options = options;
         this.annotations = annotations;
@@ -75,7 +71,6 @@ final class VariableDeclarationPrinter {
         this.typeCanBreak = typeCanBreak;
         this.variable = variable;
         this.terminatedVariable = terminatedVariable;
-        this.currentIndentedWidth = currentIndentedWidth;
     }
 
     /**
@@ -99,48 +94,59 @@ final class VariableDeclarationPrinter {
         docs.add(annotations.apply(declaration));
         docs.add(Doc.text(modifiers.apply(declaration)));
         String declarationPrefix = modifiers.apply(declaration);
-        if (!declaration.getVariables().isEmpty()) {
-            Type type = CStyleArrayDeclarators.sharedPrefixType(declaration.getVariables());
-            String flatType = compactTypeLike.apply(type) + " ";
-            declarationPrefix += flatType;
-            if (localVariableTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
-                Doc variables = Doc.joinComma(
-                    declaration.getVariables()
-                            .stream()
-                            .map(variable -> variableDoc(
-                                    variable,
-                                    localVariableDeclarationPrefix(variable, ""),
-                                    statementTerminator && isLastVariable(declaration, variable)
-                            ))
-                            .toList()
-                );
-                docs.add(Doc.group(Doc.concat(typeBody.apply(type), Doc.text(" "), variables)));
-                return Doc.concat(docs);
-            }
-            docs.add(Doc.text(flatType));
-        }
-        String variableDeclarationPrefix = declarationPrefix;
-        if (localVariableDeclaratorsShouldBreak(declaration.getVariables())) {
-            docs.add(
-                Doc.indent(
-                    Doc.join(
-                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        declaration.getVariables()
-                                .stream()
-                                .map(variable -> variableDoc(
-                                        variable,
-                                        localVariableDeclarationPrefix(variable, variableDeclarationPrefix),
-                                        statementTerminator && isLastVariable(declaration, variable)
-                                ))
-                                .toList()
-                    )
-                )
-            );
+        if (declaration.getVariables().isEmpty()) {
+            docs.add(declaratorList(declaration, declarationPrefix, statementTerminator));
             return Doc.concat(docs);
         }
-        docs.add(
-            Doc.group(
-                Doc.joinComma(
+        Type type = CStyleArrayDeclarators.sharedPrefixType(declaration.getVariables());
+        String flatType = compactTypeLike.apply(type) + " ";
+        String variableDeclarationPrefix = declarationPrefix + flatType;
+        docs.add(typeAndVariables(declaration, type, flatType, variableDeclarationPrefix, statementTerminator));
+        return Doc.concat(docs);
+    }
+
+    /**
+     * Ranks the flat type-prefixed declarator list against the type-body-broken, bare-declarator list at the true
+     * rendered column (skipped when the type cannot break). Flat keeps priority so a further-exploding initializer
+     * cannot win the broken type body on the fewer-lines tie-break.
+     */
+    private Doc typeAndVariables(
+            VariableDeclarationExpr declaration,
+            Type type,
+            String flatType,
+            String variableDeclarationPrefix,
+            boolean statementTerminator
+    ) {
+        Doc flatTail = Doc.concat(
+            Doc.text(flatType),
+            declaratorList(declaration, variableDeclarationPrefix, statementTerminator)
+        );
+        if (!typeCanBreak.test(type)) {
+            return flatTail;
+        }
+        Doc brokenVariables = Doc.joinComma(
+            declaration.getVariables()
+                    .stream()
+                    .map(variable -> variableDoc(
+                            variable,
+                            localVariableDeclarationPrefix(variable, ""),
+                            statementTerminator && isLastVariable(declaration, variable)
+                    ))
+                    .toList()
+        );
+        Doc brokenTail = Doc.group(Doc.concat(typeBody.apply(type), Doc.text(" "), brokenVariables));
+        return Doc.bestFittingFirstLine(List.of(flatTail, brokenTail), new int[] {1, 0});
+    }
+
+    /**
+     * Joins the already-prefixed declarator list, hard-breaking one-per-line when
+     * {@link #localVariableDeclaratorsShouldBreak} forces it and otherwise leaving the comma list groupable.
+     */
+    private Doc declaratorList(VariableDeclarationExpr declaration, String variableDeclarationPrefix, boolean statementTerminator) {
+        if (localVariableDeclaratorsShouldBreak(declaration.getVariables())) {
+            return Doc.indent(
+                Doc.join(
+                    Doc.concat(Doc.text(","), Doc.HARD_LINE),
                     declaration.getVariables()
                             .stream()
                             .map(variable -> variableDoc(
@@ -150,9 +156,20 @@ final class VariableDeclarationPrinter {
                             ))
                             .toList()
                 )
+            );
+        }
+        return Doc.group(
+            Doc.joinComma(
+                declaration.getVariables()
+                        .stream()
+                        .map(variable -> variableDoc(
+                                variable,
+                                localVariableDeclarationPrefix(variable, variableDeclarationPrefix),
+                                statementTerminator && isLastVariable(declaration, variable)
+                        ))
+                        .toList()
             )
         );
-        return Doc.concat(docs);
     }
 
     private Doc variableDoc(VariableDeclarator variable, String declarationPrefix, boolean statementTerminator) {
@@ -173,28 +190,6 @@ final class VariableDeclarationPrinter {
      */
     private boolean localVariableDeclaratorsShouldBreak(NodeList<VariableDeclarator> variables) {
         return variables.size() > 1 && variables.stream().anyMatch(variable -> variable.getInitializer().isPresent());
-    }
-
-    /**
-     * Chooses the breakable type-body path only when the type printer can break the type and at least one
-     * declaration-prefix-plus-name combination would overflow the configured line width.
-     *
-     * <p>The check deliberately ignores initializer text; initializer wrapping remains with the shared variable
-     * declarator renderer after the type/body fork has been chosen.
-     */
-    private boolean localVariableTypeShouldBreak(
-            Type type,
-            NodeList<VariableDeclarator> variables,
-            String declarationPrefix
-    ) {
-        return (
-            typeCanBreak.test(type)
-            && variables.stream()
-                    .anyMatch(variable -> currentIndentedWidth.applyAsInt(
-                            declarationPrefix + variable.getNameAsString()
-                        ) > options.lineWidth()
-                    )
-        );
     }
 
     /**

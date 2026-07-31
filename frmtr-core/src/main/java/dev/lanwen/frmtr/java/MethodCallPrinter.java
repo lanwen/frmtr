@@ -456,23 +456,33 @@ final class MethodCallPrinter {
         if (commentedArguments.isPresent()) {
             return withTailText(commentedArguments.orElseThrow(), tailText);
         }
+        Doc call = explodedArgumentList(prefix, expression.getArguments(), tailText, breakMode);
+        if (breakMode.isForced()) {
+            recordArgumentListWidthBreak(expression, prefix);
+        }
+        return call;
+    }
+
+    /**
+     * Builds the generic one-argument-per-line fallback every earlier huggable/single-argument branch declines
+     * into. Takes {@code prefix}/{@code tailText} rather than a {@link MethodCallExpr} so a caller already holding
+     * those pieces — e.g. a chain segment — can reuse this exact shape without re-deriving call context.
+     */
+    Doc explodedArgumentList(String prefix, NodeList<Expression> arguments, String tailText, MethodCallBreakMode breakMode) {
+        boolean heavy = argumentHeaviness.isHeavy(arguments, false);
         Doc call = Doc.concat(
             heavy ? Doc.BREAK_PARENT : Doc.EMPTY,
             Doc.text(prefix + "("),
             Doc.indent(
                 Doc.concat(
                     methodCallLine(breakMode),
-                    methodCallArgumentList(prefix, expression.getArguments(), Doc.LINE)
+                    methodCallArgumentList(prefix, arguments, Doc.LINE)
                 )
             ),
             methodCallLine(breakMode),
             Doc.text(")" + tailText)
         );
-        if (breakMode.isForced()) {
-            recordArgumentListWidthBreak(expression, prefix);
-            return call;
-        }
-        return Doc.group(call);
+        return breakMode.isForced() ? call : Doc.group(call);
     }
 
     /**

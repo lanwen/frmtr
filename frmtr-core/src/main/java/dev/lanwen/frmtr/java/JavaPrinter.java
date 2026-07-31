@@ -1,12 +1,16 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import dev.lanwen.frmtr.doc.PrinterWrap;
+import java.util.List;
 
 final class JavaPrinter {
 
@@ -61,8 +65,16 @@ final class JavaPrinter {
      * <p>Valid only after {@link #print(CompilationUnit)}; it lets explain recover the printer-side width arithmetic
      * the renderer never sees, without rebuilding the document.
      */
-    java.util.List<dev.lanwen.frmtr.doc.PrinterWrap> layoutDecisions() {
+    List<PrinterWrap> layoutDecisions() {
         return context.layoutDecisions.wraps();
+    }
+
+    /**
+     * Exposes the method-call ladder's exploded-argument-list builder so a test can call it directly against a node
+     * from a compilation unit this printer already formatted, without rebuilding the whole printer graph by hand.
+     */
+    Doc explodedArgumentList(String prefix, NodeList<Expression> arguments, String tailText, MethodCallBreakMode breakMode) {
+        return expressions.explodedArgumentList(prefix, arguments, tailText, breakMode);
     }
 
     private Doc body(BodyDeclaration<?> declaration) {

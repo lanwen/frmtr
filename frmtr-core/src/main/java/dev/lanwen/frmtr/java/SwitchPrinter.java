@@ -84,8 +84,6 @@ final class SwitchPrinter {
 
     private final ToIntFunction<String> currentIndentedWidth;
 
-    private final ToIntFunction<String> blockStatementWidth;
-
     private final SwitchCaseLabelLayout caseLabelLayout;
 
     /**
@@ -140,8 +138,7 @@ final class SwitchPrinter {
             ControlConditionPrinter controlConditions,
             Function<Expression, Doc> binaryExpressionLinesRenderer,
             Function<NodeWithModifiers<?>, String> modifiers,
-            ToIntFunction<String> currentIndentedWidth,
-            ToIntFunction<String> blockStatementWidth
+            ToIntFunction<String> currentIndentedWidth
     ) {
         this.comments = context.comments;
         this.rawSource = context.rawSource;
@@ -163,7 +160,6 @@ final class SwitchPrinter {
         this.statementCommentInterleaver = new SourceOrderedCommentInterleaver<>(context.comments);
         this.modifiers = modifiers;
         this.currentIndentedWidth = currentIndentedWidth;
-        this.blockStatementWidth = blockStatementWidth;
         this.caseLabelLayout = new SwitchCaseLabelLayout(
             context.rawSource,
             context.compactSource,
@@ -189,12 +185,7 @@ final class SwitchPrinter {
             return Doc.concat(
                 prefix,
                 Doc.text("switch "),
-                controlConditions.controlCondition(
-                    statement.getSelector(),
-                    "switch (",
-                    ") {}",
-                    blockStatementWidth
-                ),
+                controlConditions.controlCondition(statement.getSelector(), ") {}"),
                 switchBlockPrefix(selectorTrailingLineComment),
                 Doc.text("{"),
                 Doc.HARD_LINE,
@@ -204,12 +195,7 @@ final class SwitchPrinter {
         return Doc.concat(
             prefix,
             Doc.text("switch "),
-            controlConditions.controlCondition(
-                statement.getSelector(),
-                "switch (",
-                ") {}",
-                blockStatementWidth
-            ),
+            controlConditions.controlCondition(statement.getSelector(), ") {}"),
             switchBlockPrefix(selectorTrailingLineComment),
             switchBlock(statement, statement.getEntries())
         );
@@ -249,12 +235,7 @@ final class SwitchPrinter {
         Doc selectorTrailingLineComment = selectorTrailingLineComment(expression.getSelector());
         return Doc.concat(
             Doc.text("switch "),
-            controlConditions.controlCondition(
-                expression.getSelector(),
-                "switch (",
-                ") {}",
-                blockStatementWidth
-            ),
+            controlConditions.controlCondition(expression.getSelector(), ") {}"),
             switchBlockPrefix(selectorTrailingLineComment),
             switchBlock(expression, expression.getEntries())
         );

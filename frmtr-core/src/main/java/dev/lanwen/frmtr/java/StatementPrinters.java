@@ -78,8 +78,7 @@ final class StatementPrinters {
             controlConditions,
             expressions::binaryLines,
             declarations::modifiers,
-            this::currentIndentedWidth,
-            this::blockStatementWidth
+            this::currentIndentedWidth
         );
         this.statements = new StatementPrinter(
             comments,

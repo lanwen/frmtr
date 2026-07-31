@@ -214,7 +214,6 @@ final class DeclarationPrinters {
             types::implementsTypes,
             types::permitsTypes,
             types::typeClause,
-            types::flatTypeParameters,
             declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body)
         );
         this.constructors = new ConstructorDeclarationPrinter(

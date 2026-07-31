@@ -9,6 +9,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -60,8 +61,6 @@ final class ControlConditionPrinter {
 
     private final ToIntFunction<String> currentIndentedWidth;
 
-    private final ToIntFunction<String> blockStatementWidth;
-
     private final LayoutWidth layoutWidth;
 
     private final LayoutDecisionLog layoutDecisions;
@@ -80,7 +79,6 @@ final class ControlConditionPrinter {
             Function<Expression, Doc> brokenExpressionLines,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             ToIntFunction<String> currentIndentedWidth,
-            ToIntFunction<String> blockStatementWidth,
             LayoutWidth layoutWidth,
             LayoutDecisionLog layoutDecisions
     ) {
@@ -97,16 +95,13 @@ final class ControlConditionPrinter {
         this.brokenExpressionLines = brokenExpressionLines;
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.currentIndentedWidth = currentIndentedWidth;
-        this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
         this.layoutDecisions = layoutDecisions;
         this.methodCallLayout = new ControlConditionMethodCallLayout(
             sourceShapePolicy,
-            options,
             expressionRenderer,
             compact,
-            compactJoin,
-            blockStatementWidth
+            compactJoin
         );
         this.commentLayout = new ControlConditionCommentLayout(
             comments,
@@ -163,11 +158,12 @@ final class ControlConditionPrinter {
         }
         String flat = compact.apply(expression);
         int flatWidth = ifConditionLineWidth(expression, "if (" + flat + ") {}");
-        if (expression instanceof MethodCallExpr methodCall && marginPreemptsMultiArgBreak(methodCall, flatWidth)) {
-            Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
-            if (brokenMethodCall.isPresent()) {
-                return brokenMethodCall.orElseThrow();
-            }
+        if (
+            expression instanceof MethodCallExpr methodCall
+            && marginPreemptsMultiArgBreak(methodCall, flatWidth)
+            && methodCallLayout.brokenConditionEligible(methodCall)
+        ) {
+            return brokenVerdict(expression);
         }
         // flatWidth still feeds explain attribution (recordIfConditionWidthBreak) as a deliberate diagnostics decouple;
         // the render verdict below ranks flat-vs-broken at the true rendered column instead.
@@ -194,21 +190,28 @@ final class ControlConditionPrinter {
     }
 
     /**
-     * Builds the broken candidate once from the existing fallback chain: a broken method-call condition, else a
-     * complemented method-call chain, else the generic broken condition — in that preference order.
+     * Ranks the broken candidates by whether their own opener fits the true rendered column — a broken method-call
+     * condition, else a complemented method-call chain, else the generic broken condition, which always fits — instead
+     * of pre-filtering with a {@code blockStatementWidth} text estimate. Every candidate forces its own line break, so
+     * {@link Doc#bestFittingFirstLine(List, int[])} (first-line fit, not whole-doc flat fit) is the combinator that can
+     * actually distinguish between them; {@link Doc#conditionalGroup} cannot, since a forced break never fits flat.
      */
     private Doc brokenVerdict(Expression expression) {
-        if (expression instanceof MethodCallExpr methodCall) {
-            Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
-            if (brokenMethodCall.isPresent()) {
-                return brokenMethodCall.orElseThrow();
-            }
+        List<Doc> alternatives = new ArrayList<>();
+        List<Integer> priorities = new ArrayList<>();
+        if (expression instanceof MethodCallExpr methodCall && methodCallLayout.brokenConditionEligible(methodCall)) {
+            alternatives.add(methodCallLayout.brokenCondition(methodCall));
+            priorities.add(2);
         }
-        Optional<Doc> complementedMethodCallChain = complementedMethodCallChainCondition(expression);
-        if (complementedMethodCallChain.isPresent()) {
-            return complementedMethodCallChain.orElseThrow();
-        }
-        return brokenCondition(expression);
+        complementedMethodCallChainCondition(expression).ifPresent(chain -> {
+            alternatives.add(chain);
+            priorities.add(1);
+        });
+        alternatives.add(brokenCondition(expression));
+        priorities.add(0);
+        return alternatives.size() == 1
+            ? alternatives.getFirst()
+            : Doc.bestFittingFirstLine(alternatives, priorities.stream().mapToInt(Integer::intValue).toArray());
     }
 
     private Optional<Doc> complementedMethodCallChainCondition(Expression expression) {
@@ -274,13 +277,6 @@ final class ControlConditionPrinter {
             layoutWidth.nodeLine(expression, line),
             currentIndentedWidth.applyAsInt(line)
         );
-    }
-
-    private Optional<Doc> brokenMethodCallCondition(MethodCallExpr expression) {
-        if (expression.getArguments().isEmpty() || sourceShapePolicy.hasContainedComments(expression)) {
-            return Optional.empty();
-        }
-        return methodCallLayout.brokenCondition(expression);
     }
 
     private Doc brokenCondition(Expression expression) {

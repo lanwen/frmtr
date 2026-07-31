@@ -3,12 +3,9 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Owns method-call operand layout inside parenthesized control conditions.
@@ -23,41 +20,39 @@ final class ControlConditionMethodCallLayout {
 
     private final SourceShapePolicy sourceShapePolicy;
 
-    private final FormatterOptions options;
-
     private final Function<Expression, Doc> expressionRenderer;
 
     private final Function<Expression, String> compact;
 
     private final Function<List<? extends Node>, String> compactJoin;
 
-    private final ToIntFunction<String> blockStatementWidth;
-
     ControlConditionMethodCallLayout(
             SourceShapePolicy sourceShapePolicy,
-            FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
-            Function<List<? extends Node>, String> compactJoin,
-            ToIntFunction<String> blockStatementWidth
+            Function<List<? extends Node>, String> compactJoin
     ) {
         this.sourceShapePolicy = sourceShapePolicy;
-        this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
         this.compactJoin = compactJoin;
-        this.blockStatementWidth = blockStatementWidth;
     }
 
-    Optional<Doc> brokenCondition(MethodCallExpr expression) {
-        if (expression.getArguments().isEmpty() || sourceShapePolicy.hasContainedComments(expression)) {
-            return Optional.empty();
-        }
-        String prefix = methodCallPrefix(expression);
-        if (blockStatementWidth.applyAsInt("if (" + prefix + "(") > options.lineWidth()) {
-            return Optional.empty();
-        }
-        return Optional.of(parenthesizedBrokenMethodCall(expression, prefix));
+    /**
+     * Whether a method-call condition can offer the broken one-argument-per-line shape at all: needs at least one
+     * argument, and must be comment-free so building the shape unconditionally never double-claims a comment.
+     */
+    boolean brokenConditionEligible(MethodCallExpr expression) {
+        return !expression.getArguments().isEmpty() && !sourceShapePolicy.hasContainedComments(expression);
+    }
+
+    /**
+     * Builds the broken one-argument-per-line method-call condition unconditionally; callers rank it against sibling
+     * shapes at the true rendered column instead of pre-filtering by an estimated opener width. Only valid once
+     * {@link #brokenConditionEligible(MethodCallExpr)} holds.
+     */
+    Doc brokenCondition(MethodCallExpr expression) {
+        return parenthesizedBrokenMethodCall(expression, methodCallPrefix(expression));
     }
 
     boolean hasComplexArgument(MethodCallExpr expression) {

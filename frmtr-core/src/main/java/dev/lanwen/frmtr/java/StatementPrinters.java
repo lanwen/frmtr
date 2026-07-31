@@ -65,7 +65,6 @@ final class StatementPrinters {
                     : expressions.binaryConditionLines(expression, true),
             expressions::forcedMethodCallChain,
             this::currentIndentedWidth,
-            this::blockStatementWidth,
             context.layoutWidth,
             context.layoutDecisions
         );
@@ -155,9 +154,5 @@ final class StatementPrinters {
 
     private int currentIndentedWidth(String text) {
         return context.layoutWidth.currentIndented(text);
-    }
-
-    private int blockStatementWidth(String text) {
-        return context.layoutWidth.blockStatement(text);
     }
 }

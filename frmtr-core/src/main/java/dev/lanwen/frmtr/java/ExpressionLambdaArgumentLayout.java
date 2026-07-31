@@ -14,7 +14,9 @@ import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -79,6 +81,11 @@ final class ExpressionLambdaArgumentLayout {
     private final TextBlockArgumentSourceLayout textBlockArguments;
 
     private final LambdaBodyChainFanLayout chainFan;
+
+    // One printer instance is built per top-level format run (see JavaFormatContext), so this cache never
+    // outlives or crosses a run; keyed on bodyExpression identity since the candidate Docs it builds are a
+    // pure function of that node alone, collapsing repeated candidate-arm re-entry into the same nested chain body.
+    private final Map<Expression, Doc> huggableExpressionLambdaBodyMemo = new IdentityHashMap<>();
 
     ExpressionLambdaArgumentLayout(
             SourceShapePolicy sourceShapePolicy,
@@ -392,7 +399,7 @@ final class ExpressionLambdaArgumentLayout {
                     )
                 );
             }
-            Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression, columnWidth);
+            Doc bodyDoc = huggableExpressionLambdaBody(bodyExpression);
             return Optional.of(
                 Doc.concat(
                     Doc.text(prefix + "("),
@@ -413,7 +420,7 @@ final class ExpressionLambdaArgumentLayout {
                 )
             );
         }
-        Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression, columnWidth);
+        Doc bodyDoc = huggableExpressionLambdaBody(bodyExpression);
         Optional<Doc> negatedLogicalBody = negatedLogicalBodyWithOpener(firstLine, bodyExpression);
         if (negatedLogicalBody.isPresent()) {
             return negatedLogicalBody;
@@ -678,11 +685,17 @@ final class ExpressionLambdaArgumentLayout {
         return Optional.of(plan);
     }
 
-    private Doc huggableExpressionLambdaBody(
-            String firstLine,
-            Expression bodyExpression,
-            ToIntFunction<String> columnWidth
-    ) {
+    private Doc huggableExpressionLambdaBody(Expression bodyExpression) {
+        Doc memoized = huggableExpressionLambdaBodyMemo.get(bodyExpression);
+        if (memoized != null) {
+            return memoized;
+        }
+        Doc built = buildHuggableExpressionLambdaBody(bodyExpression);
+        huggableExpressionLambdaBodyMemo.put(bodyExpression, built);
+        return built;
+    }
+
+    private Doc buildHuggableExpressionLambdaBody(Expression bodyExpression) {
         Optional<Doc> logicalBody = logicalBinaryBodyDoc(bodyExpression);
         if (logicalBody.isPresent()) {
             return logicalBody.orElseThrow();

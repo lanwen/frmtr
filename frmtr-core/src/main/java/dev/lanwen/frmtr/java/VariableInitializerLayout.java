@@ -375,12 +375,7 @@ final class VariableInitializerLayout {
             compactArrayInitializerWithSourceSpacing,
             this.compactJoin
         );
-        this.castLayout = new InitializerCastLayout(
-            this.options,
-            this.layoutWidth,
-            this.expression,
-            context.compactSource::compactTypeLike
-        );
+        this.castLayout = new InitializerCastLayout(this.expression);
         this.conditionalLayout = new InitializerConditionalLayout(
             this.options,
             this.layoutWidth,
@@ -1120,7 +1115,7 @@ final class VariableInitializerLayout {
     ) {
         boolean overWidth = forceBroken || layoutWidth.variableInitializer(variable, flat) > options.lineWidth();
         return renderBrokenOrFlat(
-            classifyBrokenOrFlat(initializer, overWidth, declarationPrefix + variable.getNameAsString()),
+            classifyBrokenOrFlat(initializer, overWidth),
             variable,
             initializer,
             name,
@@ -1136,7 +1131,7 @@ final class VariableInitializerLayout {
      * {@link InitializerLayoutArm#METHOD_CALL_BROKEN}, and {@link InitializerLayoutArm#LAMBDA} are resolved by
      * {@link #renderBrokenOrFlat}, not here.
      */
-    private InitializerLayoutArm classifyBrokenOrFlat(Expression initializer, boolean overWidth, String flatName) {
+    private InitializerLayoutArm classifyBrokenOrFlat(Expression initializer, boolean overWidth) {
         if (!overWidth) {
             return InitializerLayoutArm.FLAT;
         }
@@ -1146,7 +1141,7 @@ final class VariableInitializerLayout {
             case MethodCallExpr methodCall -> InitializerLayoutArm.METHOD_CALL_BROKEN;
             case CastExpr cast when cast.getExpression() instanceof MethodCallExpr && !initializerHasOwnBreak(cast) ->
                 InitializerLayoutArm.CAST_METHOD_CALL_BREAK;
-            case CastExpr cast when castLayout.castTypeNeedsBreak(flatName, cast.getType()) && !initializerHasOwnBreak(cast) ->
+            case CastExpr cast when castLayout.castTypeNeedsBreak(cast.getType()) && !initializerHasOwnBreak(cast) ->
                 InitializerLayoutArm.CAST_TYPE_BREAK;
             case ConditionalExpr conditional when !initializerHasOwnBreak(conditional) ->
                 InitializerLayoutArm.CONDITIONAL;

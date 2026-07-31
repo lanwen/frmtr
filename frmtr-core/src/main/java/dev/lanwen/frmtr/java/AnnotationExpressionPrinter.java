@@ -104,39 +104,25 @@ final class AnnotationExpressionPrinter {
     }
 
     /**
-     * Renders a parameter or record-component annotation, breaking it structured when it cannot stay flat at its true
-     * rendered column.
-     *
-     * <p>The break is width-driven at the real column: {@link LayoutContext#leftEdgePrefix()} carries the annotation's
-     * first-line text ahead of it and {@link LayoutContext#trailingContent()} the {@code " Type name"} the caller emits
-     * after it. When the flat annotation plus that context overflows, it renders structured so its {@code )} carries the
-     * type/name onto a relieved line; otherwise it stays flat.
+     * Renders a parameter or record-component annotation, ranking the flat form against a structured break at the true
+     * rendered column. {@link LayoutContext#trailingContent()} (the {@code " Type name"} the caller emits after it) is
+     * reserved so the ranking sees the same same-line tail a build-time estimate used to measure explicitly. A marker
+     * annotation ({@code @Name}) is never ranked because it has no parenthesized body to break.
      */
     Doc annotationPreservingSourceBreaks(AnnotationExpr annotation, LayoutContext layout) {
-        if (!annotationOverflowsAtColumn(annotation, layout)) {
-            return annotation(annotation);
+        Doc flat = annotation(annotation);
+        if (!(annotation instanceof NormalAnnotationExpr) && !(annotation instanceof SingleMemberAnnotationExpr)) {
+            return flat;
         }
-        return switch (annotation) {
+        Doc broken = switch (annotation) {
             case NormalAnnotationExpr normalAnnotation -> brokenNormalAnnotation(normalAnnotation);
             case SingleMemberAnnotationExpr singleMemberAnnotation -> brokenSingleMemberValue(
                 "@" + compact.apply(singleMemberAnnotation.getName()),
                 singleMemberAnnotation.getMemberValue()
             );
-            default -> annotation(annotation);
+            default -> flat;
         };
-    }
-
-    /**
-     * Whether the flat annotation, rendered at its true column and followed by the caller's same-line trailing content,
-     * exceeds the line width. A marker annotation ({@code @Name}) is never broken because it has no parenthesized body to
-     * break; only normal and single-member annotations carry a group the structured shape can open.
-     */
-    private boolean annotationOverflowsAtColumn(AnnotationExpr annotation, LayoutContext layout) {
-        if (!(annotation instanceof NormalAnnotationExpr) && !(annotation instanceof SingleMemberAnnotationExpr)) {
-            return false;
-        }
-        String firstLine = layout.leftEdgePrefix() + annotationFlatText(annotation) + layout.trailingContent();
-        return currentIndentedWidth.applyAsInt(firstLine) > options.lineWidth();
+        return Doc.reserving(Doc.conditionalGroup(List.of(flat, broken)), layout.trailingContent().length());
     }
 
     /**

@@ -98,7 +98,7 @@ public final class DocRenderer {
     private void render(Doc doc, int indent, GroupMode mode, DocWidths.Measurement widths) {
         switch (doc) {
             case Doc.Text text -> append(text.value());
-            case Doc.Concat concat -> concat.docs().forEach(child -> render(child, indent, mode, widths));
+            case Doc.Concat concat -> renderConcat(concat.docs(), indent, mode, widths);
             case Doc.Line ignored -> {
                 if (mode == GroupMode.FLAT) {
                     append(" ");
@@ -156,6 +156,23 @@ public final class DocRenderer {
                 lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode));
             }
         }
+    }
+
+    /**
+     * Renders a {@link Doc.Concat}'s children in order, restricting the pending reservation to the last child — the one
+     * whose own last line the caller's same-line tail actually follows — exactly as {@link Doc#reserving(Doc, int)}'s
+     * tree-rewrite already scopes it for a plain (non-ranked) concat. An earlier child never sees the reservation, so a
+     * ranked node's restored {@code reservedColumns} cannot leak past a sibling that only happens to precede the winner's
+     * true last line.
+     */
+    private void renderConcat(List<Doc> docs, int indent, GroupMode mode, DocWidths.Measurement widths) {
+        int enclosing = reservedColumns;
+        int lastIndex = docs.size() - 1;
+        for (int i = 0; i <= lastIndex; i++) {
+            reservedColumns = i == lastIndex ? enclosing : 0;
+            render(docs.get(i), indent, mode, widths);
+        }
+        reservedColumns = enclosing;
     }
 
     /**

@@ -1155,4 +1155,34 @@ final class DocRendererTest {
                   computedValue;"""
         );
     }
+
+    @Test
+    void bestFittingRestoredReservationDoesNotLeakPastAnEarlierConcatChild() {
+        // Mirrors the object-creation-initializer shape: the break-after-`=` arm's value is itself a multi-argument
+        // call. The outer statement's trailing `;` reservation belongs only to the value's LAST child — an EARLIER
+        // argument's own group must not lose a column to a reservation that never lands on its line.
+        Doc firstArgument = Doc.group(
+            Doc.concat(
+                Doc.text("resolveHost("),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("hostname"))),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc value = Doc.concat(firstArgument, Doc.text(", "), Doc.text("lookupPort()"));
+        // "endpointUrl = resolveHost(" alone already overflows lineWidth 23, so attach's first line never fits even if
+        // firstArgument's own SOFT_LINEs break — the first-line gate must pick brokenAfterEquals on that alone.
+        Doc attached = Doc.concat(Doc.text("endpointUrl = "), value);
+        Doc brokenAfterEquals = Doc.concat(Doc.text("endpointUrl ="), Doc.indent(Doc.concat(Doc.HARD_LINE, value)));
+        Doc ranked = Doc.bestFittingFirstLine(List.of(attached, brokenAfterEquals), new int[] { 1, 0 });
+        Doc statement = Doc.concat(Doc.reserving(ranked, 1), Doc.text(";"));
+
+        // firstArgument's flat width (21) is an exact fit at column 2 with lineWidth 23 and nothing reserved; a leaked
+        // reservation would push it one column over and explode it across its SOFT_LINEs.
+        assertThat(renderer(23).render(statement)).isEqualTo(
+            """
+                endpointUrl =
+                  resolveHost(hostname), lookupPort();"""
+        );
+    }
 }

@@ -121,10 +121,17 @@ public final class DocExplainRenderer {
                     return Builder.leaf();
                 }
                 case Doc.Concat concat -> {
+                    // Mirrors DocRenderer.renderConcat: only the LAST child sits on the line the caller's reservation
+                    // actually follows, so an earlier child must not inherit a ranked ancestor's restored reservation.
                     Builder structural = Builder.structural();
-                    for (Doc child : concat.docs()) {
-                        structural.add(render(child, indent, mode, enclosingLabel));
+                    List<Doc> docs = concat.docs();
+                    int enclosing = reservedColumns;
+                    int lastIndex = docs.size() - 1;
+                    for (int i = 0; i <= lastIndex; i++) {
+                        reservedColumns = i == lastIndex ? enclosing : 0;
+                        structural.add(render(docs.get(i), indent, mode, enclosingLabel));
                     }
+                    reservedColumns = enclosing;
                     return structural;
                 }
                 case Doc.Fill fill -> {
@@ -252,7 +259,12 @@ public final class DocExplainRenderer {
                         Optional.ofNullable(bestFitting.groupId()),
                         ranked
                     ));
+                    // Mirrors DocRenderer.renderBestFitting: re-supply the reservation for the winner's own trace,
+                    // exactly as the ranking measured it, rather than leaving it spent for whatever the winner contains.
+                    int enclosingReserved = reservedColumns;
+                    reservedColumns = reserved;
                     structural.add(render(alternatives.get(chosen), indent, GroupMode.BREAK, enclosingLabel));
+                    reservedColumns = enclosingReserved;
                     return structural;
                 }
                 case Doc.Line ignored -> {

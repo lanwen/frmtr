@@ -1245,17 +1245,11 @@ final class VariableInitializerLayout {
 
     /**
      * The {@link InitializerLayoutArm#GENERIC_BROKEN} arm (and the fall-through target of the method-call and lambda
-     * sub-cascades): break after {@code =} and render the value indented on its own continuation line.
-     *
-     * <p>Stays unconditional rather than ranked against attach (unlike {@link #attachOrBreakAfterEquals}): nesting a
-     * ranked node here, under the outer object-creation {@code Doc.bestFitting} carve-out, flips an unrelated nested
-     * method call's own argument-explosion choice via reservation bookkeeping between the two ranked layers.
+     * sub-cascades): ranks attach against break-after-{@code =}, the same {@link #attachOrBreakAfterEquals} template
+     * CAST/CONDITIONAL/STRING_LITERAL use, over the shared value's own broken shape.
      */
     private Doc genericBrokenInitializer(VariableDeclarator variable, Expression initializer, String name) {
-        return Doc.concat(
-            Doc.text(name + " ="),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(variable, initializer)))
-        );
+        return attachOrBreakAfterEquals(name, brokenInitializer(variable, initializer));
     }
 
     /**

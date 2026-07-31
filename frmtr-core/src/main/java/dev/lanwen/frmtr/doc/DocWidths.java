@@ -501,7 +501,7 @@ final class DocWidths {
             private void walk(Doc doc, int indent, GroupMode mode) {
                 switch (doc) {
                     case Doc.Text text -> advance(text.value());
-                    case Doc.Concat concat -> concat.docs().forEach(child -> walk(child, indent, mode));
+                    case Doc.Concat concat -> walkConcat(concat.docs(), indent, mode);
                     case Doc.Line ignored -> {
                         if (mode == GroupMode.FLAT) {
                             advance(" ");
@@ -531,12 +531,18 @@ final class DocWidths {
                     case Doc.Fill fill -> walkFill(fill.parts(), indent);
                     case Doc.ConditionalGroup conditionalGroup -> walkConditionalGroup(conditionalGroup.alternatives(), indent);
                     case Doc.BestFitting bestFitting -> {
+                        int spent = takeReserved();
                         int chosen =
-                            chooseBestFitting(bestFitting, indent, column, lineWidth, takeReserved(), groupModes);
+                            chooseBestFitting(bestFitting, indent, column, lineWidth, spent, groupModes);
                         if (bestFitting.groupId() != null) {
                             groupModes.put(bestFitting.groupId(), verdictOf(chosen));
                         }
+                        // Mirrors DocRenderer.renderBestFitting: re-supply the reservation for the winner's own walk,
+                        // exactly as ranking measured it, rather than leaving it spent for whatever the winner contains.
+                        int enclosing = reserved;
+                        reserved = spent;
                         walk(bestFitting.alternatives().get(chosen), indent, GroupMode.BREAK);
+                        reserved = enclosing;
                     }
                     case Doc.Reserve reserve -> {
                         int enclosing = reserved;
@@ -554,6 +560,21 @@ final class DocWidths {
                     case Doc.LineSuffix lineSuffix ->
                         lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode));
                 }
+            }
+
+            /**
+             * Mirrors {@link DocRenderer#renderConcat}: restricts the pending reservation to the last child, the one
+             * whose own last line the caller's same-line tail actually follows, so an earlier child never inherits a
+             * ranked ancestor's restored reservation.
+             */
+            private void walkConcat(List<Doc> docs, int indent, GroupMode mode) {
+                int enclosing = reserved;
+                int lastIndex = docs.size() - 1;
+                for (int i = 0; i <= lastIndex; i++) {
+                    reserved = i == lastIndex ? enclosing : 0;
+                    walk(docs.get(i), indent, mode);
+                }
+                reserved = enclosing;
             }
 
             /** Mirrors {@link DocRenderer#renderFill}: greedy per-separator packing via the shared fit authority. */

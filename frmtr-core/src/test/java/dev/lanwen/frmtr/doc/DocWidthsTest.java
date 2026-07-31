@@ -249,6 +249,26 @@ final class DocWidthsTest {
         assertThat(measurement().measureLineCount(group, 0, 0, 32, 1).lines()).isEqualTo(1);
     }
 
+    @Test
+    void measureLineCountRestrictsAReservationToAConcatsLastChildNotAnEarlierOne() {
+        // Mirrors the object-creation-initializer shape: firstArgument is an EARLIER child of the concat, so a
+        // reservation charged against the whole concat (as a BestFitting winner re-supplies to its render) belongs only
+        // to the LAST child (lookupPort's line) and must not push firstArgument's own group into breaking.
+        Doc firstArgument = Doc.group(
+            Doc.concat(
+                Doc.text("resolveHost("),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("hostname"))),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc value = Doc.concat(firstArgument, Doc.text(", "), Doc.text("lookupPort()"));
+
+        // firstArgument's flat width (21) is an exact fit at column 2 with lineWidth 23 and nothing reserved; a leaked
+        // reservation would push it one column over and explode it across its SOFT_LINEs, adding lines.
+        assertThat(measurement().measureLineCount(value, 0, 2, 23, 1).lines()).isEqualTo(0);
+    }
+
     /**
      * A ranking sees the verdicts its caller already published: the same arm measured with an outer decision flat and
      * with it broken yields different line counts, because the conditional content inside it resolves differently.
@@ -393,6 +413,50 @@ final class DocWidthsTest {
             Doc.text("compactcompactcompact"),
             Doc.concat(Doc.text("wide("), Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("payloadpayload"))), Doc.SOFT_LINE, Doc.text(")"))
         ));
+        // Mirrors the object-creation-initializer shape: a ranked break-after-`=` arm whose value is a multi-argument
+        // call, under the statement's own trailing-`;` reservation. The reservation belongs only to the value's LAST
+        // argument, never an earlier one, so this pins that the simulation and the renderer agree on which argument
+        // actually feels it.
+        Doc firstArgument = Doc.group(
+            Doc.concat(
+                Doc.text("resolveHost("),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("hostname"))),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc multiArgumentValue = Doc.concat(firstArgument, Doc.text(", "), Doc.text("lookupPort()"));
+        Doc reservationAcrossConcatChildren = Doc.concat(
+            Doc.reserving(
+                Doc.bestFittingFirstLine(
+                    List.of(
+                        Doc.concat(Doc.text("endpointUrl = "), multiArgumentValue),
+                        Doc.concat(
+                            Doc.text("endpointUrl ="),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, multiArgumentValue))
+                        )
+                    ),
+                    new int[] { 1, 0 }
+                ),
+                1
+            ),
+            Doc.text(";")
+        );
+        // A reservation must survive a nested single-alternative best-fitting node (which short-circuits its own
+        // ranking) to reach a group inside its sole alternative, exactly as DocRenderer.renderBestFitting re-supplies it.
+        Doc reservationThroughNestedBestFitting = new Doc.Reserve(
+            Doc.bestFitting(List.of(
+                Doc.group(
+                    Doc.concat(
+                        Doc.text("call("),
+                        Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("value"))),
+                        Doc.SOFT_LINE,
+                        Doc.text(")")
+                    )
+                )
+            )),
+            1
+        );
 
         List<Doc> docs = List.of(
             argList,
@@ -402,7 +466,9 @@ final class DocWidthsTest {
             bestFitting,
             nestedBestFitting,
             publishedVerdict,
-            conditional
+            conditional,
+            reservationAcrossConcatChildren,
+            reservationThroughNestedBestFitting
         );
         List<org.junit.jupiter.params.provider.Arguments> cases = new java.util.ArrayList<>();
         // Sweep several line widths (20 is the configured minimum) so both the fitting (flat) and overflowing (broken)

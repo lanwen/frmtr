@@ -9,7 +9,6 @@ import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -67,8 +66,6 @@ final class ClassOrInterfaceDeclarationPrinter {
 
     private final TypeClausePrinter typeClause;
 
-    private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
-
     private final Function<ClassOrInterfaceDeclaration, Doc> memberBlock;
 
     ClassOrInterfaceDeclarationPrinter(
@@ -85,7 +82,6 @@ final class ClassOrInterfaceDeclarationPrinter {
             Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlineImplementsTypes,
             Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlinePermitsTypes,
             TypeClausePrinter typeClause,
-            Function<NodeList<TypeParameter>, String> flatTypeParameters,
             Function<ClassOrInterfaceDeclaration, Doc> memberBlock
     ) {
         this.comments = comments;
@@ -101,7 +97,6 @@ final class ClassOrInterfaceDeclarationPrinter {
         this.inlineImplementsTypes = inlineImplementsTypes;
         this.inlinePermitsTypes = inlinePermitsTypes;
         this.typeClause = typeClause;
-        this.flatTypeParameters = flatTypeParameters;
         this.memberBlock = memberBlock;
     }
 
@@ -174,14 +169,47 @@ final class ClassOrInterfaceDeclarationPrinter {
     /**
      * Prints the broken header selected after the compact header no longer fits.
      *
-     * <p>Type parameters may break before clauses so long generic heads stay readable. Multiple clauses force each
-     * clause to start from the same broken-header shape instead of attaching the first clause to the type-parameter
-     * block and making later clauses look unrelated.
+     * <p>When type parameters exist and their attach-vs-break choice is not structurally forced, both header shapes are
+     * built and ranked at the true rendered column, nested inside this alternative's own slot in the outer flat-vs-broken
+     * rank (see {@link #classOrInterface}).
      */
     private Doc brokenClassOrInterface(ClassOrInterfaceDeclaration declaration, Doc prefix, Doc memberBlockDoc) {
+        if (declaration.getTypeParameters().isEmpty()) {
+            return brokenClassOrInterfaceHeader(declaration, prefix, memberBlockDoc, false);
+        }
+        if (typeParametersMustBreak(declaration)) {
+            return brokenClassOrInterfaceHeader(declaration, prefix, memberBlockDoc, true);
+        }
+        return Doc.bestFittingFirstLine(
+            List.of(
+                brokenClassOrInterfaceHeader(declaration, prefix, memberBlockDoc, false),
+                brokenClassOrInterfaceHeader(declaration, prefix, memberBlockDoc, true)
+            ),
+            new int[] {1, 0}
+        );
+    }
+
+    /**
+     * Forces type parameters to break before clauses even when the attached form would fit: a single-clause header
+     * with more than two type parameters is easier to read with each parameter on its own line. Multi-clause headers
+     * carry no such structural override — their attach-vs-break choice is always ranked.
+     */
+    private boolean typeParametersMustBreak(ClassOrInterfaceDeclaration declaration) {
+        return classOrInterfaceHeaderClauses(declaration) <= 1 && declaration.getTypeParameters().size() > 2;
+    }
+
+    /**
+     * Builds one complete broken-header candidate for a fixed type-parameter attach-vs-break choice; clauses break
+     * whenever there is more than one, or the type parameters did not, so a lone clause always has a shape to attach to.
+     */
+    private Doc brokenClassOrInterfaceHeader(
+            ClassOrInterfaceDeclaration declaration,
+            Doc prefix,
+            Doc memberBlockDoc,
+            boolean breakTypeParameters
+    ) {
         List<Doc> header = new ArrayList<>();
         header.add(prefix);
-        boolean breakTypeParameters = classOrInterfaceTypeParametersBreak(declaration);
         if (breakTypeParameters) {
             header.add(
                 callableSignatures.brokenTypeParameters(
@@ -220,34 +248,6 @@ final class ClassOrInterfaceDeclarationPrinter {
         header.add(Doc.text(" "));
         header.add(memberBlockDoc);
         return Doc.concat(header);
-    }
-
-    /**
-     * Decides whether the {@code <...>} section should break before header clauses are printed.
-     *
-     * <p>Long multi-clause headers first try to keep the declaration head flat; if the head itself overflows, the type
-     * parameters must break before the clauses. For single-clause headers, more than two type parameters or an
-     * {@code extends} type with its own arguments make the type-parameter list easier to read when it breaks first.
-     */
-    private boolean classOrInterfaceTypeParametersBreak(ClassOrInterfaceDeclaration declaration) {
-        if (declaration.getTypeParameters().isEmpty()) {
-            return false;
-        }
-        if (classOrInterfaceHeaderClauses(declaration) > 1) {
-            String headerHead = modifiers.apply(declaration)
-                + (declaration.isInterface() ? "interface " : "class ")
-                + declaration.getNameAsString()
-                + flatTypeParameters.apply(declaration.getTypeParameters());
-            return classOrInterfaceHeaderWidth(declaration, headerHead) > options.lineWidth();
-        }
-        if (declaration.getTypeParameters().size() > 2) {
-            return true;
-        }
-        String headerHead = modifiers.apply(declaration)
-            + (declaration.isInterface() ? "interface " : "class ")
-            + declaration.getNameAsString()
-            + flatTypeParameters.apply(declaration.getTypeParameters());
-        return classOrInterfaceHeaderWidth(declaration, headerHead) > options.lineWidth();
     }
 
     /**
@@ -296,10 +296,6 @@ final class ClassOrInterfaceDeclarationPrinter {
             clauses++;
         }
         return clauses;
-    }
-
-    private int classOrInterfaceHeaderWidth(ClassOrInterfaceDeclaration declaration, String text) {
-        return classOrInterfaceIndentWidth(declaration) + text.length();
     }
 
     private int classOrInterfaceClauseWidth(ClassOrInterfaceDeclaration declaration, String text) {

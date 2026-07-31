@@ -72,6 +72,8 @@ final class MethodCallPrinter {
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
 
+    private final BiFunction<String, NodeList<Expression>, Optional<Doc>> eligibleBlockLambdaHug;
+
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
 
     private final ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments huggableExpressionLambdaArguments;
@@ -98,6 +100,7 @@ final class MethodCallPrinter {
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             Function<ObjectCreationExpr, String> objectCreationPrefix,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
+            BiFunction<String, NodeList<Expression>, Optional<Doc>> eligibleBlockLambdaHug,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableMethodChainBlockLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> explodedMethodChainBlockLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
@@ -156,6 +159,7 @@ final class MethodCallPrinter {
             methodChains::binaryFansChainOperand
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
+        this.eligibleBlockLambdaHug = eligibleBlockLambdaHug;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
         this.expressionLambdaArgumentPlan = expressionLambdaArgumentPlan;
@@ -289,6 +293,18 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         return huggableBlockLambdaArguments.apply(prefix, arguments);
+    }
+
+    /**
+     * As {@link #eligibleBlockLambdaHugArm}, but width-ungated: the caller ranks the returned candidate against its
+     * own fallback at the true rendered column (see {@link MethodCallChainPrinter}'s decline gate) instead of a
+     * fixed-probe decline.
+     */
+    Optional<Doc> eligibleBlockLambdaHugCandidate(String prefix, NodeList<Expression> arguments) {
+        if (argumentHeaviness.isHeavy(arguments, false)) {
+            return Optional.empty();
+        }
+        return eligibleBlockLambdaHug.apply(prefix, arguments);
     }
 
     /**

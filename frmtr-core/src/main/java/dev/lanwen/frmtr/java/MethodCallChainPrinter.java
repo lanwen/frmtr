@@ -649,7 +649,12 @@ final class MethodCallChainPrinter {
     ) {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         boolean rootObjectCreationNeedsBreak = methodChainPlanner.rootObjectCreationNeedsBreak(analysis);
-        if (
+        if (!breakMode.isForced() && chainRootIsTrivialReceiver(expression)) {
+            Optional<Doc> rankedFinalBlockLambdaSegment = rankedFinalBlockLambdaSegmentHug(expression, finalSegmentSuffix);
+            if (rankedFinalBlockLambdaSegment.isPresent()) {
+                return rankedFinalBlockLambdaSegment;
+            }
+        } else if (
             !breakMode.isForced()
             && finalBlockLambdaSegmentCanStayCompact(expression, lineWidth)
         ) {
@@ -1374,6 +1379,11 @@ final class MethodCallChainPrinter {
             && !chainComments.methodCallSegmentHasNameComment(methodRoot);
     }
 
+    /**
+     * The fixed-probe decline kept for a non-trivial (method-call/object-creation) chain root: such a root has its own
+     * promoted-fan alternative ({@link #rankedFinalBlockLambdaSegmentHug} only models hug-vs-exploded, not the fan), so
+     * ranking it here would starve that richer shape of a candidate it can win against.
+     */
     private boolean finalBlockLambdaSegmentCanStayCompact(
             MethodCallExpr expression,
             ToIntFunction<String> lineWidth
@@ -1385,6 +1395,32 @@ final class MethodCallChainPrinter {
         return huggableBlockLambdaFirstLine.apply(callPrefix, expression.getArguments())
                 .filter(firstLine -> lineWidth.applyAsInt(firstLine) <= options.lineWidth())
                 .isPresent();
+    }
+
+    /**
+     * Ranks the sole selector's block-lambda hug against {@code MethodCallPrinter}'s real exploded-argument-list
+     * fallback at the true rendered column, for a TRIVIAL chain root ({@link #chainRootIsTrivialReceiver}) only — a
+     * non-trivial root has its own promoted/fan alternative this narrow ranking does not model (see
+     * {@link #finalBlockLambdaSegmentCanStayCompact}, kept for that case). Declines (empty) exactly where the old
+     * estimate always declined too — no block-lambda argument, a comment, a heavy argument list, or a structurally
+     * ineligible hug — so those cases fall through unchanged to the chain-shape ladder below.
+     */
+    private Optional<Doc> rankedFinalBlockLambdaSegmentHug(
+            MethodCallExpr expression,
+            MethodCallChainTail finalSegmentSuffix
+    ) {
+        if (!methodCallSegmentHasBlockLambdaArgument(expression) || chainComments.methodCallSegmentHasComment(expression)) {
+            return Optional.empty();
+        }
+        String prefix = calls.methodCallPrefix(expression);
+        NodeList<Expression> arguments = expression.getArguments();
+        Optional<Doc> hug = calls.eligibleBlockLambdaHugCandidate(prefix, arguments);
+        if (hug.isEmpty()) {
+            return Optional.empty();
+        }
+        Doc exploded = calls.explodedArgumentList(prefix, arguments, "", MethodCallBreakMode.AUTO);
+        Doc ranked = Doc.bestFittingFirstLine(List.of(hug.orElseThrow(), exploded), new int[] {1, 0});
+        return Optional.of(Doc.followedBy(ranked, finalSegmentSuffix.doc()));
     }
 
     /**

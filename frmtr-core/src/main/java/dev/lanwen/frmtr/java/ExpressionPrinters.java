@@ -475,6 +475,10 @@ final class ExpressionPrinters {
         return methodCalls.methodCallArgumentList(arguments, line);
     }
 
+    Doc explodedArgumentList(String prefix, NodeList<Expression> arguments, String tailText, MethodCallBreakMode breakMode) {
+        return methodCalls.explodedArgumentList(prefix, arguments, tailText, breakMode);
+    }
+
     private Optional<Doc> commentedMethodCallArgumentList(String prefix, MethodCallExpr call) {
         return methodCalls.commentedArgumentList(prefix, call);
     }

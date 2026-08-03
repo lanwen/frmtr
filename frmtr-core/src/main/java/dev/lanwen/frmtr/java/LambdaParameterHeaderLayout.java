@@ -110,9 +110,22 @@ final class LambdaParameterHeaderLayout {
         if (haveComments(expression)) {
             return commentedForHeader(expression);
         }
-        if (!forceBreak && !shouldBreak(expression, flatParameters)) {
+        if (forceBreak) {
+            return brokenHeader(expression);
+        }
+        // Single-param bare lambdas stay flat: breaking adds parens that flip isEnclosingParameters()
+        // in the next pass, which changes chain-layout decisions and causes oscillation.
+        if (expression.getParameters().size() <= 1) {
             return Doc.text(flatParameters);
         }
+        // Rank flat vs broken at the true rendered column, reserving room for ` -> {` on the same line.
+        return Doc.reserving(
+            Doc.conditionalGroup(List.of(Doc.text(flatParameters), brokenHeader(expression))),
+            " -> {".length()
+        );
+    }
+
+    private Doc brokenHeader(LambdaExpr expression) {
         return Doc.concat(
             Doc.text("("),
             Doc.indent(

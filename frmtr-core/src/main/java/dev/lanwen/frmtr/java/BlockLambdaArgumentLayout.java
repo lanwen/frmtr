@@ -195,6 +195,18 @@ final class BlockLambdaArgumentLayout {
             return sourceMultilineParameters;
         }
         if (firstLineWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
+            // For multi-param lambdas, forHeader's conditionalGroup may break the header at render
+            // time, making the effective opener just prefix + "((" — offer HUG when that shorter
+            // opener fits so the flat-source and source-multiline passes converge on the same shape.
+            if (argument.lambdaExpr().getParameters().size() > 1
+                    && firstLineWidth.applyAsInt(
+                            prefix
+                            + "("
+                            + (argument.leadingArguments().isEmpty() ? "" : argument.leadingArguments() + ", ")
+                            + "("
+                    ) <= options.lineWidth()) {
+                return Optional.of(buildHug(prefix, arguments, argument, lambdaRenderer));
+            }
             return Optional.empty();
         }
         return Optional.of(buildHug(prefix, arguments, argument, lambdaRenderer));

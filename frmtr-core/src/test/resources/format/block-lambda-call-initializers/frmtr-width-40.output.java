@@ -29,15 +29,16 @@ class BlockLambdaCallInitializersSample {
             Subject subject
     ) {
         var partitioned = entries
-                .partition(
-                    (_, entry) -> {
-                        return request.mode() == SelectionMode.ANY
-                            && entry.state()
-                                    .shouldPrioritize(
-                                        subject.owner()
-                                    );
-                    }
-                );
+                .partition((
+                    _,
+                    entry
+                ) -> {
+                    return request.mode() == SelectionMode.ANY
+                        && entry.state()
+                                .shouldPrioritize(
+                                    subject.owner()
+                                );
+                });
         publishSelection(
             subject,
             request.mode(),
@@ -52,17 +53,19 @@ class BlockLambdaCallInitializersSample {
             Subject subject
     ) {
         var partitioned = entries
-                .partition(
-                    (_, entry, cursor) -> {
-                        return request.mode() == SelectionMode.ANY
-                            && entry.state()
-                                    .shouldPrioritize(
-                                        subject.owner(
-                                            cursor
-                                        )
-                                    );
-                    }
-                );
+                .partition((
+                    _,
+                    entry,
+                    cursor
+                ) -> {
+                    return request.mode() == SelectionMode.ANY
+                        && entry.state()
+                                .shouldPrioritize(
+                                    subject.owner(
+                                        cursor
+                                    )
+                                );
+                });
         publishSelection(
             subject,
             request.mode(),

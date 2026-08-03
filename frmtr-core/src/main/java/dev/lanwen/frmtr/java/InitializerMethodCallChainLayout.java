@@ -327,6 +327,15 @@ final class InitializerMethodCallChainLayout {
             return sourceMultilineBlockLambdaCall.orElseThrow();
         }
         String fallbackFlatName = declarationPrefix + variable.getNameAsString();
+        Optional<Doc> rankedBlockLambdaChain = rankedCommentFreeBlockLambdaInitializerChain(
+            variable,
+            name,
+            fallbackFlatName,
+            methodCall
+        );
+        if (rankedBlockLambdaChain.isPresent()) {
+            return rankedBlockLambdaChain.orElseThrow();
+        }
         Optional<Doc> forcedChain = forcedMethodCallChain(variable, methodCall, fallbackFlatName)
             .map(chain -> variableWithMethodCallChainRanked(variable, name, fallbackFlatName, methodCall, chain, new int[] { 1, 0 }));
         if (forcedChain.isPresent()) {
@@ -1121,6 +1130,53 @@ final class InitializerMethodCallChainLayout {
             return Optional.empty();
         }
         return variableWithBrokenMethodCallArguments(variable, name, flatName, methodCall, false);
+    }
+
+    /**
+     * Ranks the block-lambda hug against the fan (attached and break-after-{@code =}) by true rendered first line.
+     * Comment-free and method-call-scoped only: comment chains keep the cascade below to preserve comment slot ownership,
+     * and name/this/super scopes attach via {@link #methodCallHasAttachableScope} before reaching this ranker.
+     */
+    private Optional<Doc> rankedCommentFreeBlockLambdaInitializerChain(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        if (
+            !methodCallHasBlockLambdaArgument(methodCall)
+            || methodCallChainInitializerShape.apply(methodCall).singleCall()
+            || methodCallHasOwnComment(methodCall)
+            || sourceShapePolicy.hasContainedComments(methodCall)
+            || !trailingCommentLayout.methodCallFinalTrailingLineComments(methodCall).isEmpty()
+        ) {
+            return Optional.empty();
+        }
+        // Only for method-call scopes — name/this/super/fieldAccess scopes attach via methodCallHasAttachableScope.
+        if (methodCall.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()) {
+            return Optional.empty();
+        }
+        String callPrefix = methodCallPrefix.apply(methodCall);
+        // Structural hug candidate: skip the fixed-width check (text -> 0 always fits the lineWidth guard),
+        // deferring to the first-line ranker to decide at the true rendered column instead.
+        Optional<Doc> eligibleHug = huggableBlockLambdaArguments.render(callPrefix, methodCall.getArguments(), text -> 0);
+        if (eligibleHug.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Doc> fan = forcedMethodCallChain(variable, methodCall, flatName);
+        if (fan.isEmpty()) {
+            return Optional.empty();
+        }
+        Doc hugDoc = Doc.concat(Doc.text(name + " = "), eligibleHug.orElseThrow());
+        Doc fanDoc = fan.orElseThrow();
+        Doc fanAttachedDoc = Doc.concat(Doc.text(name + " = "), fanDoc);
+        Doc fanBrokenAfterEqualsDoc = Doc.concat(
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, fanDoc))
+        );
+        return Optional.of(
+            Doc.bestFittingFirstLine(List.of(hugDoc, fanAttachedDoc, fanBrokenAfterEqualsDoc), new int[] { 2, 1, 0 })
+        );
     }
 
     /**

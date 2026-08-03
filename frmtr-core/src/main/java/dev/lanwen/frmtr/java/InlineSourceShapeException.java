@@ -34,9 +34,9 @@ enum InlineSourceShapeException {
         "InitializerMethodCallChainLayout#methodCallScopeEndsOnNameLine",
         Mechanism.LINE_COMPARE,
         "reads whether the author kept the receiver and the call name on one source line",
-        "G3: LEFT — decides attach-vs-fan for a sub-threshold chain-scoped initializer; forcing the structural constant "
-        + "true (always attach) laterally moves the curated method-chain-block-lambda golden off its fanned shape (no "
-        + "clear improvement) and forcing false regresses three goldens; no clean width/AST partition. Defer on leftEdgePrefix."
+        "Comment-free multi-call chains over a method-call scope now rank hug-vs-fan via "
+        + "rankedCommentFreeBlockLambdaInitializerChain, scoped away from this read. Remains for comment-bearing chains: "
+        + "forcing the structural constant true or false regresses three goldens with no clean width/AST partition."
     );
 
     /** How the inline read consults source shape — the mechanism the guard scans for. */

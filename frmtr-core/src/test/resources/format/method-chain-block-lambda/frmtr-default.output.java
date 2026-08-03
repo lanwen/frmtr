@@ -14,11 +14,10 @@ class Demo {
             // keep comment inside block lambda
             runSecondStep();
         });
-        TaskProvider<Task> format = project.getTasks()
-                .register("formatSource", task -> {
-                    task.setGroup("formatting");
-                    task.setDescription("Formats source files with tool.");
-                });
+        TaskProvider<Task> format = project.getTasks().register("formatSource", task -> {
+            task.setGroup("formatting");
+            task.setDescription("Formats source files with tool.");
+        });
         TaskProvider<SourceBundleFormatTask> bundleFormat = workspace.getActions()
                 .register("sourceBundleFormat", SourceBundleFormatTask.class, action -> {
                     action.setGroup("formatting");

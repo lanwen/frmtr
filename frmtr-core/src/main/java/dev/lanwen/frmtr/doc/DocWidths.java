@@ -514,7 +514,12 @@ final class DocWidths {
                             newline(indent);
                         }
                     }
-                    case Doc.HardLine ignored -> newline(indent);
+                    case Doc.HardLine ignored -> {
+                        newline(indent);
+                        // Mirrors DocRenderer: a hard break starts a new line; the reservation no longer applies to
+                        // content on the new line, so extinguish it exactly as the renderer does.
+                        reserved = 0;
+                    }
                     case Doc.BreakParent ignored -> {
                         // Emits nothing and advances no column, exactly like DocRenderer.
                     }
@@ -563,15 +568,16 @@ final class DocWidths {
             }
 
             /**
-             * Mirrors {@link DocRenderer#renderConcat}: restricts the pending reservation to the last child, the one
-             * whose own last line the caller's same-line tail actually follows, so an earlier child never inherits a
-             * ranked ancestor's restored reservation.
+             * Mirrors {@link DocRenderer#renderConcat}: restricts the pending reservation to the last child only when
+             * no newline was emitted before it — a hard break puts the last child on a different line, so it cannot
+             * share the caller's reserved tail. Uses the walk-wide {@code lines} counter so nested breaks count too.
              */
             private void walkConcat(List<Doc> docs, int indent, GroupMode mode) {
                 int enclosing = reserved;
                 int lastIndex = docs.size() - 1;
+                int linesAtStart = lines;
                 for (int i = 0; i <= lastIndex; i++) {
-                    reserved = i == lastIndex ? enclosing : 0;
+                    reserved = (i == lastIndex && lines == linesAtStart) ? enclosing : 0;
                     walk(docs.get(i), indent, mode);
                 }
                 reserved = enclosing;

@@ -85,7 +85,7 @@ final class StatementRuleEnvelope {
         Doc body = statementContent.format(statement, LayoutContext.root());
         return label(
             statement,
-            Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing))
+            Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.lineSuffix(Doc.concat(Doc.text(" "), trailing)))
         );
     }
 

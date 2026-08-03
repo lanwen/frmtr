@@ -94,6 +94,9 @@ public final class DocExplainRenderer {
 
         private int column;
 
+        /** Mirrors {@link DocRenderer}'s newline counter so the Concat case can extinguish a reservation after a break. */
+        private int newlines;
+
         /** Mirrors {@link DocRenderer}'s take-once reserved-columns cursor so a decision is traced at the same budget. */
         private int reservedColumns;
 
@@ -121,14 +124,15 @@ public final class DocExplainRenderer {
                     return Builder.leaf();
                 }
                 case Doc.Concat concat -> {
-                    // Mirrors DocRenderer.renderConcat: only the LAST child sits on the line the caller's reservation
-                    // actually follows, so an earlier child must not inherit a ranked ancestor's restored reservation.
+                    // Mirrors DocRenderer.renderConcat: the reservation reaches the last child only when no newline was
+                    // emitted before it — a break puts the last child on a different line, past the caller's tail.
                     Builder structural = Builder.structural();
                     List<Doc> docs = concat.docs();
                     int enclosing = reservedColumns;
                     int lastIndex = docs.size() - 1;
+                    int newlinesAtStart = newlines;
                     for (int i = 0; i <= lastIndex; i++) {
-                        reservedColumns = i == lastIndex ? enclosing : 0;
+                        reservedColumns = (i == lastIndex && newlines == newlinesAtStart) ? enclosing : 0;
                         structural.add(render(docs.get(i), indent, mode, enclosingLabel));
                     }
                     reservedColumns = enclosing;
@@ -283,6 +287,9 @@ public final class DocExplainRenderer {
                 }
                 case Doc.HardLine ignored -> {
                     newline(indent);
+                    // Mirrors DocRenderer: extinguish the pending reservation at a hard break so content on the new
+                    // line is not charged the tail's budget.
+                    reservedColumns = 0;
                     if (enclosingLabel != null) {
                         enclosingLabel.forcedLineBreaks++;
                     }
@@ -373,6 +380,7 @@ public final class DocExplainRenderer {
             int lastLineBreak = value.lastIndexOf('\n');
             if (lastLineBreak >= 0) {
                 column = value.length() - lastLineBreak - 1;
+                newlines++;
             } else {
                 column += value.length();
             }
@@ -383,6 +391,7 @@ public final class DocExplainRenderer {
             // (Line, SoftLine, HardLine) replays suffix content on the line being closed rather than the next one.
             flushLineSuffixes();
             column = options.indentUnit().length() * indent;
+            newlines++;
         }
     }
 

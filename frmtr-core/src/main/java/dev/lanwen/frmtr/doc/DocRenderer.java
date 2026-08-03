@@ -49,6 +49,9 @@ public final class DocRenderer {
      */
     private int reservedColumns;
 
+    /** Structural newline count, incremented by {@link #newline} and by {@link #append} for text-block embedded breaks. */
+    private int newlines;
+
     public DocRenderer(FormatterOptions options) {
         this.options = options;
     }
@@ -76,6 +79,7 @@ public final class DocRenderer {
     private RenderedSource renderInternal(Doc doc, boolean tracking) {
         out.setLength(0);
         column = 0;
+        newlines = 0;
         lineSuffixes.clear();
         groupModes.clear();
         lineIndents.clear();
@@ -111,7 +115,12 @@ public final class DocRenderer {
                     newline(indent, widths);
                 }
             }
-            case Doc.HardLine ignored -> newline(indent, widths);
+            case Doc.HardLine ignored -> {
+                newline(indent, widths);
+                // A hard break starts a new line; any pending reservation for content on the old last line no longer
+                // applies — the tail cannot share the new line's content.
+                reservedColumns = 0;
+            }
             case Doc.BreakParent ignored -> {
                 // Emits nothing: the break it forces already happened when the enclosing group measured this marker
                 // and chose BREAK mode (see DocWidths, where BreakParent yields NO_FIT exactly like HardLine).
@@ -159,17 +168,17 @@ public final class DocRenderer {
     }
 
     /**
-     * Renders a {@link Doc.Concat}'s children in order, restricting the pending reservation to the last child — the one
-     * whose own last line the caller's same-line tail actually follows — exactly as {@link Doc#reserving(Doc, int)}'s
-     * tree-rewrite already scopes it for a plain (non-ranked) concat. An earlier child never sees the reservation, so a
-     * ranked node's restored {@code reservedColumns} cannot leak past a sibling that only happens to precede the winner's
-     * true last line.
+     * Renders a {@link Doc.Concat}'s children in order, restricting the pending reservation to the last child only when
+     * no newline was emitted before it — a hard break (or any mode-driven break) puts the last child on a different
+     * line, so it cannot share the caller's reserved tail. Uses the render-wide {@link #newlines} counter so breaks
+     * nested inside earlier children (not just direct hard-line siblings) also extinguish the reservation.
      */
     private void renderConcat(List<Doc> docs, int indent, GroupMode mode, DocWidths.Measurement widths) {
         int enclosing = reservedColumns;
         int lastIndex = docs.size() - 1;
+        int newlinesAtStart = newlines;
         for (int i = 0; i <= lastIndex; i++) {
-            reservedColumns = i == lastIndex ? enclosing : 0;
+            reservedColumns = (i == lastIndex && newlines == newlinesAtStart) ? enclosing : 0;
             render(docs.get(i), indent, mode, widths);
         }
         reservedColumns = enclosing;
@@ -268,6 +277,7 @@ public final class DocRenderer {
         int lastLineBreak = value.lastIndexOf('\n');
         if (lastLineBreak >= 0) {
             column = value.length() - lastLineBreak - 1;
+            newlines++;
         } else {
             column += value.length();
         }
@@ -287,6 +297,7 @@ public final class DocRenderer {
         out.append(options.lineEnding().value())
                 .repeat(options.indentUnit(), indent);
         column = options.indentUnit().length() * indent;
+        newlines++;
         // The line just opened begins with a structural indent of exactly this many levels — the tab-width-independent
         // fact the finished text cannot recover.
         recordLineStart(true, indent);

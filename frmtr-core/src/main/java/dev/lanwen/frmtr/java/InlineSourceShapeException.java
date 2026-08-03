@@ -22,8 +22,8 @@ package dev.lanwen.frmtr.java;
  * and no stale entry (a retired read forces its enum value's deletion, which is progress). Every value below is a
  * {@code RETIREMENT_TARGET}: a "preserve the author's line breaks" read the formatter overwrites.
  *
- * <p>The two entries here are genuinely load-bearing: each preserves an author-intent line shape that no clean width/AST
- * rule reproduces without regressing the corpus or a curated golden, so they stay deferred on the enclosing-column /
+ * <p>The remaining entry is genuinely load-bearing: it preserves an author-intent line shape that no clean width/AST
+ * rule reproduces without regressing the corpus or a curated golden, so it stays deferred on the enclosing-column /
  * {@code leftEdgePrefix} foundation (proposal {@code left-edge-prefix-foundation.md}) that also blocks the last
  * {@link SourceShapePolicy} retirements.
  */
@@ -37,16 +37,6 @@ enum InlineSourceShapeException {
         "G3: LEFT — decides attach-vs-fan for a sub-threshold chain-scoped initializer; forcing the structural constant "
         + "true (always attach) laterally moves the curated method-chain-block-lambda golden off its fanned shape (no "
         + "clear improvement) and forcing false regresses three goldens; no clean width/AST partition. Defer on leftEdgePrefix."
-    ),
-
-    /** "were the lambda parameters written across multiple source lines?" ({@code parameterText(...).contains(newline)}). */
-    SOURCE_MULTILINE_LAMBDA_PARAMETERS(
-        "LambdaParameterHeaderLayout#hasSourceMultilineParameters",
-        Mechanism.RAW_SOURCE_SHAPE,
-        "reads whether the author spread the lambda parameter list across source lines to force the broken header",
-        "G3: LEFT — the block-lambda hug path has no param-header width-break, so this read keeps a wide block-lambda "
-        + "parameter header within width; retiring it produces a 122-column over-width header. A width-driven replacement "
-        + "must measure the header at the true rendered column, which is the deferred leftEdgePrefix foundation."
     );
 
     /** How the inline read consults source shape — the mechanism the guard scans for. */

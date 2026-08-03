@@ -14,9 +14,9 @@ import java.util.function.ToIntFunction;
  * Renders lambda parameter text and the header fragment before a lambda arrow.
  *
  * <p>This helper owns the canonical lambda parameter spelling used by lambda expression rendering and call-layout
- * helpers: parenthesis policy, source-comment reconstruction inside parameter lists, source-multiline parameter
- * detection, and width-triggered header breaks. The boundary exists so callers can choose the surrounding body or call
- * shape without duplicating lambda syntax decisions.
+ * helpers: parenthesis policy, source-comment reconstruction inside parameter lists, and width-triggered header breaks.
+ * The boundary exists so callers can choose the surrounding body or call shape without duplicating lambda syntax
+ * decisions.
  *
  * <p>Callers still decide whether the lambda is rendered as an expression body, a block body, or a method-call
  * argument. This helper only returns parameter/header text or docs for the lambda syntax before {@code ->}.
@@ -91,27 +91,8 @@ final class LambdaParameterHeaderLayout {
     }
 
     Doc forHeader(LambdaExpr expression, String flatParameters) {
-        return forHeader(expression, flatParameters, false);
-    }
-
-    Doc sourceMultilineForHeader(LambdaExpr expression) {
-        return forHeader(expression, parameters(expression), true);
-    }
-
-    boolean hasSourceMultilineParameters(LambdaExpr expression) {
-        return parameterText(expression).filter(parameterText -> parameterText.contains("\n")).isPresent();
-    }
-
-    private Doc forHeader(
-            LambdaExpr expression,
-            String flatParameters,
-            boolean forceBreak
-    ) {
         if (haveComments(expression)) {
             return commentedForHeader(expression);
-        }
-        if (forceBreak) {
-            return brokenHeader(expression);
         }
         // Single-param bare lambdas stay flat: breaking adds parens that flip isEnclosingParameters()
         // in the next pass, which changes chain-layout decisions and causes oscillation.

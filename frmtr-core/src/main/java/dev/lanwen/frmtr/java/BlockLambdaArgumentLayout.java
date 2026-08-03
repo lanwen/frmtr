@@ -28,10 +28,9 @@ import java.util.function.ToIntFunction;
  * method-chain variant whose block renders through the chain block renderer ({@link #huggableMethodChainBlockLambdaArguments}),
  * and the bare first-line probe callers width-check before committing ({@link #huggableBlockLambdaFirstLine}) — all off
  * one eligibility gate ({@code huggableBlockLambdaArgument}) so the probe and the render never disagree. It also owns
- * the suppression rules that keep the hug from producing a worse
- * shape: a middle-position lambda or a second lambda argument, source-multiline lambda parameters (delegated to
- * {@link SourceMultilineLambdaCallLayout}), and a non-lambda argument whose object-creation chain root is heavy
- * ({@link ArgumentHeaviness}) or too wide to stay compact ({@link ObjectCreationLayoutPolicy}).
+ * the suppression rules that keep the hug from producing a worse shape: a middle-position lambda or a second lambda
+ * argument, and a non-lambda argument whose object-creation chain root is heavy ({@link ArgumentHeaviness}) or too wide
+ * to stay compact ({@link ObjectCreationLayoutPolicy}).
  *
  * <p>The boundary exists because a block lambda is reached both by ordinary expression dispatch and as an argument that
  * reshapes method-call, object-creation, field-declaration, and chain layout, so those callers need one authority for
@@ -170,10 +169,6 @@ final class BlockLambdaArgumentLayout {
             return Optional.empty();
         }
         HuggableBlockLambdaArgument argument = huggable.orElseThrow();
-        Optional<Doc> sourceMultilineParameters = sourceMultilineParameters(prefix, arguments, argument, blockRenderer);
-        if (sourceMultilineParameters.isPresent()) {
-            return sourceMultilineParameters;
-        }
         return Optional.of(buildHug(prefix, arguments, argument, lambdaExpression));
     }
 
@@ -189,15 +184,10 @@ final class BlockLambdaArgumentLayout {
             return Optional.empty();
         }
         HuggableBlockLambdaArgument argument = huggable.orElseThrow();
-        Optional<Doc> sourceMultilineParameters =
-            sourceMultilineParameters(prefix, arguments, argument, lambdaBlockRenderer);
-        if (sourceMultilineParameters.isPresent()) {
-            return sourceMultilineParameters;
-        }
         if (firstLineWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
             // For multi-param lambdas, forHeader's conditionalGroup may break the header at render
             // time, making the effective opener just prefix + "((" — offer HUG when that shorter
-            // opener fits so the flat-source and source-multiline passes converge on the same shape.
+            // opener fits so the first-line ranker can still pick it.
             if (argument.lambdaExpr().getParameters().size() > 1
                     && firstLineWidth.applyAsInt(
                             prefix
@@ -210,24 +200,6 @@ final class BlockLambdaArgumentLayout {
             return Optional.empty();
         }
         return Optional.of(buildHug(prefix, arguments, argument, lambdaRenderer));
-    }
-
-    private Optional<Doc> sourceMultilineParameters(
-            String prefix,
-            NodeList<Expression> arguments,
-            HuggableBlockLambdaArgument argument,
-            JavaFormatRule<BlockStmt> lambdaBlockRenderer
-    ) {
-        return SourceMultilineLambdaCallLayout.blockLambdaArgumentWithSourceMultilineParameters(
-            prefix,
-            arguments,
-            argument.lambdaIndex(),
-            argument.lambdaExpr(),
-            argument.leadingArguments(),
-            compactJoin,
-            lambdaParameterHeaders,
-            lambdaBlockRenderer
-        );
     }
 
     private Doc buildHug(

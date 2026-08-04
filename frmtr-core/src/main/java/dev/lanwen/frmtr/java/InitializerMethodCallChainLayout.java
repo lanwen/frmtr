@@ -665,10 +665,8 @@ final class InitializerMethodCallChainLayout {
      * whose canonical-fan route emits {@code chainFanOut} for a fan-threshold, comment-free chain. {@code chainFanOut}
      * builds the root plus one dotted selector per line purely from the AST, so a flat-source initializer and its
      * already-fanned re-format both rebuild the identical fan. Emitting it here — ahead of the object-creation,
-     * source-multiline, and {@code methodCallHasAttachableScope} argument-break branches — is what removes the source
-     * dependence those branches introduce (the attachable-scope branch reads whether the outer selector's scope ends on
-     * the name line, a source-shape fact that flips once the chain is fanned), the direct cause of the flat↔fan
-     * oscillation this seam closes.
+     * source-multiline, and {@code methodCallHasAttachableScope} argument-break branches — removes the source
+     * dependence those branches introduce, the direct cause of the flat↔fan oscillation this seam closes.
      */
     private Optional<Doc> variableInitializerCanonicalFan(
             VariableDeclarator variable,
@@ -894,6 +892,7 @@ final class InitializerMethodCallChainLayout {
 
     /**
      * Identifies receiver-call initializers where the assignment opener should be tried before chain fallback.
+     * A method-call scope attaches only when the chain is a single selector; multi-selector chains are ranked below.
      */
     private boolean methodCallHasAttachableScope(MethodCallExpr methodCall) {
         return methodCall.getScope()
@@ -902,12 +901,7 @@ final class InitializerMethodCallChainLayout {
                         || scope.isSuperExpr()
                         || (scope instanceof MethodCallExpr scopedCall
                             && !sourceShapePolicy.hasContainedComments(scopedCall)
-                            // A single-selector chain over a method-call root ({@code root().collect(args)}) attaches
-                            // whether or not source kept the selector on the root's line: only the argument list breaks,
-                            // and the downstream opener-fit gate decides whether it stays on the assignment line. A
-                            // multi-selector chain keeps the source-line gate so it still fans one selector per line.
-                            && (methodCallChainInitializerShape.apply(methodCall).singleCall()
-                                || methodCallScopeEndsOnNameLine(scopedCall, methodCall)))
+                            && methodCallChainInitializerShape.apply(methodCall).singleCall())
                 )
                 .isPresent();
     }
@@ -916,9 +910,7 @@ final class InitializerMethodCallChainLayout {
      * Reports a two-selector chain over a plain (non type-like, non object-creation) receiver
      * ({@code env.adminClient().alterStreamsGroupOffsets(args)}, {@code keys.stream().collect(...)}): the first selector's
      * own scope is the receiver root and is not itself a call, so the whole chain is exactly two links. Such a chain fans
-     * one dotted selector per line when it overflows, on BOTH a flat-source and a pre-broken-source pass, so the layout
-     * keys on this AST shape rather than {@link #methodCallScopeEndsOnNameLine}'s source-line read — the source-neutral
-     * fixpoint that closes the flat↔fan reshape.
+     * one dotted selector per line on both flat-source and pre-broken passes — the source-neutral fixpoint.
      *
      * <p>Withheld above the canonical link-count threshold ({@code chainBreaksByRule} — the 3+/call-root fan already owns
      * those), for a block-lambda argument (its hugged fan keeps the block on the last selector's line, which the generic
@@ -945,15 +937,6 @@ final class InitializerMethodCallChainLayout {
                 .flatMap(MethodCallExpr::getScope)
                 .filter(root -> !(root instanceof MethodCallExpr))
                 .isPresent();
-    }
-
-    private boolean methodCallScopeEndsOnNameLine(MethodCallExpr scope, MethodCallExpr methodCall) {
-        return scope.getRange()
-                .flatMap(scopeRange -> methodCall.getName()
-                            .getRange()
-                            .map(nameRange -> scopeRange.end.line == nameRange.begin.line)
-                )
-                .orElse(false);
     }
 
     private boolean methodCallHasOwnComment(MethodCallExpr methodCall) {
@@ -1133,9 +1116,9 @@ final class InitializerMethodCallChainLayout {
     }
 
     /**
-     * Ranks the block-lambda hug against the fan (attached and break-after-{@code =}) by true rendered first line.
-     * Comment-free and method-call-scoped only: comment chains keep the cascade below to preserve comment slot ownership,
-     * and name/this/super scopes attach via {@link #methodCallHasAttachableScope} before reaching this ranker.
+     * Ranks the block-lambda hug, open shape (sole argument), and fan (attached/break-after-{@code =}) by true rendered
+     * first line. Comment-free and method-call-scoped only: the hug and open arms render the receiver as compact text and
+     * carry no comment slot, so the comment-free gate is load-bearing.
      */
     private Optional<Doc> rankedCommentFreeBlockLambdaInitializerChain(
             VariableDeclarator variable,
@@ -1174,9 +1157,26 @@ final class InitializerMethodCallChainLayout {
             Doc.text(name + " ="),
             Doc.indent(Doc.concat(Doc.HARD_LINE, fanDoc))
         );
+        Optional<Doc> openArm = soleBlockLambdaArgumentOpenArm(name, methodCall, callPrefix);
+        if (openArm.isPresent()) {
+            return Optional.of(
+                Doc.bestFittingFirstLine(
+                    List.of(hugDoc, openArm.orElseThrow(), fanAttachedDoc, fanBrokenAfterEqualsDoc),
+                    new int[] { 3, 2, 1, 0 }
+                )
+            );
+        }
         return Optional.of(
             Doc.bestFittingFirstLine(List.of(hugDoc, fanAttachedDoc, fanBrokenAfterEqualsDoc), new int[] { 2, 1, 0 })
         );
+    }
+
+    /** The open shape — receiver compact, argument list broken — when the sole argument is the block lambda. */
+    private Optional<Doc> soleBlockLambdaArgumentOpenArm(String name, MethodCallExpr methodCall, String callPrefix) {
+        if (methodCall.getArguments().size() != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
     }
 
     /**

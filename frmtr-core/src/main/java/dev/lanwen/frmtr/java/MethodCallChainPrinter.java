@@ -951,6 +951,27 @@ final class MethodCallChainPrinter {
                     )
                 );
             }
+            // When the selector attached to the root close would overflow and the root carries no trailing comment,
+            // rank the compact-broken and fan shapes so the renderer picks the shorter one at the real column.
+            if (
+                rootTrailingComment == Doc.EMPTY
+                && compactRootFinalSegmentLineOverflows(
+                    methodRoot, calls.getFirst(), finalSegmentSuffix, lineWidth, layout
+                )
+            ) {
+                Optional<Doc> ranked = rankedSingleSegmentChain(
+                    methodRoot,
+                    calls.getFirst(),
+                    finalSegmentSuffix,
+                    MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER,
+                    analysis,
+                    lineWidth,
+                    layout
+                );
+                if (ranked.isPresent()) {
+                    return ranked;
+                }
+            }
             return Optional.of(
                 Doc.concat(
                     rootDoc,

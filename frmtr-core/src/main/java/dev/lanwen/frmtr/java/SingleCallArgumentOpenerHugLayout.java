@@ -13,15 +13,8 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * Hugs a single inner call/creation argument onto a wrapping call's opener
- * ({@code when(sharePartition.acquire(} ⏎ arguments ⏎ {@code ))}, {@code List.of(new TopicData<>(} ⏎ …) instead of
- * stranding {@code inner(} on its own indented line. Extracted from {@link MethodCallPrinter} so the hug is a
- * self-contained, named {@link BreakRule} rather than an imperative branch in that already-large printer.
- *
- * <p>The caller ({@code MethodCallPrinter}'s single-argument dispatch) still decides whether this shape is reached; this
- * helper owns only the applicability test and the renderer-ranked broken shape, and leans back on the caller's
- * prefix / argument-list / broken-call renderers (method-call or object-creation) so the hugged arguments render exactly
- * as the ordinary call path would.
+ * Hugs a single inner call/creation onto its wrapping call's opener ({@code wrap(inner(} ⏎ args ⏎ {@code ))}) when the
+ * flat form overflows, via a renderer-ranked {@link Doc#bestFitting} so the exploded fallback remains available.
  */
 final class SingleCallArgumentOpenerHugLayout {
 
@@ -116,21 +109,8 @@ final class SingleCallArgumentOpenerHugLayout {
     }
 
     /**
-     * Whether the opener-hug owns this call: a single inner call/creation argument with its own arguments, no comments on
-     * either the wrapping call or the inner argument, and no inner lambda argument (those keep their own layouts). The hug
-     * decision is structural and indent-independent — the single argument ({@code inner(…)} or {@code new Type<>(…)}) is
-     * "the single entity" a wrapping call keeps on its opener line — but only a <em>short</em> wrapping call
-     * ({@code List.of}, {@code when}, {@code verify}: selector name under {@link #SHORT_CALL_NAME_LIMIT} symbols) reads
-     * well as a {@code short(inner(} opener when the inner argument is itself a method call; a longer wrapper keeps the
-     * exploded list there. A nested <em>constructor</em> argument ({@code spawnStubPool(new Worker(…))}) reads as one
-     * entity regardless of the wrapper's name length, so the short-name gate is withheld for {@link ObjectCreationExpr}
-     * inner arguments — hugging a single nested {@code new Type(} is never worse than exploding both openers. Such a
-     * nested constructor also hugs when {@link ArgumentHeaviness} would force ITS OWN argument list onto separate lines on
-     * structural density alone, even though the flat text still fits under the width
-     * ({@code spawnStubPool(new Worker(a.formatted(b), c(d)))} is dense enough to force {@code new Worker(}'s own break well
-     * under 120 columns) — the constructor breaks either way, so hugging its opener costs nothing. A constructor whose own
-     * list stays flat (not heavy) is left to the generic path, which already keeps it on one un-hugged continuation line
-     * when it fits. A pure function of the AST (no source-shape read), so the verdict is a fixpoint across passes.
+     * Applies when the sole argument is an inner call or creation (no comments, no lambda args) and the flat form
+     * overflows the line width. A heavy nested constructor forces its own argument break regardless of width.
      */
     private boolean applies(Request request) {
         MethodCallExpr expression = request.expression();
@@ -147,9 +127,6 @@ final class SingleCallArgumentOpenerHugLayout {
         }
         Expression innerNode = inner.orElseThrow().node();
         boolean innerIsConstructor = innerNode instanceof ObjectCreationExpr;
-        if (!innerIsConstructor && expression.getNameAsString().length() >= SHORT_CALL_NAME_LIMIT) {
-            return false;
-        }
         if (
             innerIsConstructor
             && argumentHeaviness.isHeavy(((ObjectCreationExpr) innerNode).getArguments(), true)

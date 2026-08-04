@@ -9,6 +9,7 @@
     "gradle",
     "gradle-wrapper"
   ],
+  "allowedUnsafeExecutions": ["gradleWrapper"],
   "minimumReleaseAge": "14 days",
   "minimumReleaseAgeBehaviour": "timestamp-required"
 }

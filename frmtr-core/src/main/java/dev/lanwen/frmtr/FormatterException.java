@@ -99,12 +99,11 @@ public final class FormatterException extends RuntimeException {
     }
 
     /**
-     * Source-oriented context for one formatter failure, separated from the exception message so adapters can choose
-     * their own display format.
-     *
-     * <p>{@code location} is the parser's exact position when available, {@code enclosingUnitLine} is the closest
-     * enclosing declaration or source unit line used as orientation, and {@code contextLines} is the cropped source
-     * window intended for human diagnostics.
+     * Source-oriented context for one formatter failure, so adapters can choose their own display format.
+     * @param message failure description
+     * @param location parser's exact position, when available
+     * @param enclosingUnitLine nearest enclosing declaration line, for orientation
+     * @param contextLines cropped source window for human diagnostics, may be empty
      */
     public record SourceProblem(
         String message,
@@ -122,6 +121,8 @@ public final class FormatterException extends RuntimeException {
 
     /**
      * One-based source position reported by the parser.
+     * @param line one-based line number
+     * @param column one-based column number
      */
     public record SourceLocation(int line, int column) {
         public SourceLocation {
@@ -135,8 +136,10 @@ public final class FormatterException extends RuntimeException {
     }
 
     /**
-     * One displayed source line. {@code startColumn} is one-based and records where {@code text} starts in the original
-     * line when a long line has been cropped.
+     * One displayed source line, potentially cropped from the original.
+     * @param lineNumber one-based line number in the source file
+     * @param startColumn one-based offset of {@code text} within the original line
+     * @param text the displayed text, potentially a crop of the full source line
      */
     public record SourceLine(int lineNumber, int startColumn, String text) {
         public SourceLine {

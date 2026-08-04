@@ -443,15 +443,9 @@ public sealed interface Doc
     }
 
     /**
-     * Tells the layout decision at the tail of {@code doc} that {@code columns} more columns of the caller's content
-     * follow on the same line, so a candidate measured at exactly the line width is judged against the space that will
-     * actually be left. Without it a statement's {@code ;}, or a signature's {@code {}, is invisible to the ranking and
-     * an arm that measures 120 renders at 121.
-     *
-     * <p>The reservation is placed on the trailing {@link ConditionalGroup}/{@link BestFitting} — the one node whose last
-     * line is the line the caller's tail lands on — and is consumed there, so it can never re-break content the tail does
-     * not actually follow. Content with no such trailing decision (a doc closing on its own {@code )} line, say) is
-     * returned unchanged.
+     * Reserves {@code columns} for trailing same-line caller content (e.g. a {@code ;} or an opening
+     * <code>{</code>), so ranked decisions inside see the true remaining width. Attaches to the last trailing
+     * {@link ConditionalGroup} or {@link BestFitting}; passthrough if no such node exists.
      */
     static Doc reserving(Doc doc, int columns) {
         if (columns <= 0) {
@@ -609,10 +603,6 @@ public sealed interface Doc
 
     record Label(String label, Doc doc) implements Doc {}
 
-    /**
-     * Renders {@code doc} unchanged while reserving {@code columns} of the current line for the caller's following
-     * same-line content, so ranked decisions inside see the true remaining space. See {@link #reserving(Doc, int)}.
-     */
     record Reserve(Doc doc, int columns) implements Doc {}
 
     record LineSuffix(Doc content) implements Doc {}

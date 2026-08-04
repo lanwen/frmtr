@@ -10,6 +10,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 /**
  * Owns how a {@code switch} entry's {@code case} / {@code default} label renders for {@link SwitchPrinter} — the label's
@@ -120,26 +121,19 @@ final class SwitchCaseLabelLayout {
     }
 
     /**
-     * The wrapped shape for a comma-separated label list: {@code case} plus the first label stay on the
-     * header line and the rest wrap at {@code +2}, so a block arm's body sits one level shallower and labels and body
-     * never share a column. Emitted as the break arm of {@link CaseLabel.Ranked}; the renderer chooses it only when the
+     * The wrapped shape for a comma-separated label list: labels pack greedily via {@link Doc#fill} at {@code +2}
+     * continuation indent. Emitted as the break arm of {@link CaseLabel.Ranked}; the renderer chooses it only when the
      * flat one-liner overflows.
      */
     private Doc wrappedLabelList(List<Expression> labels) {
-        return Doc.concat(
-            Doc.text("case " + switchLabelText(labels.get(0)) + ","),
-            Doc.indent(
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            labels.stream().skip(1).map(label -> Doc.text(switchLabelText(label))).toList()
-                        )
-                    )
-                )
-            )
-        );
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        List<Doc> fillParts = Stream.concat(
+            Stream.of(Doc.text("case " + switchLabelText(labels.get(0)))),
+            labels.stream()
+                .skip(1)
+                .flatMap(label -> Stream.of(separator, Doc.text(switchLabelText(label))))
+        ).toList();
+        return Doc.indent(Doc.indent(Doc.fill(fillParts)));
     }
 
     /**

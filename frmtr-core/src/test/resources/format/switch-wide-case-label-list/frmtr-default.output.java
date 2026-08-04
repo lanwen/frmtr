@@ -24,17 +24,11 @@ public class OrderEventRouter {
 
     OrderStatus route(OrderEvent event) {
         return switch (event) {
-            case PaymentAuthorized _,
-                    ShipmentDispatched _,
-                    CustomerCancellationRequested _,
-                    RefundSettlementCompleted _,
+            case PaymentAuthorized _, ShipmentDispatched _, CustomerCancellationRequested _, RefundSettlementCompleted _,
                     ChargebackDisputeOpened _ -> {
                 yield OrderStatus.progressed();
             }
-            case InventoryReserved _,
-                    FraudReviewRequested _,
-                    BackorderThresholdExceeded _,
-                    SupplierRestockConfirmed _,
+            case InventoryReserved _, FraudReviewRequested _, BackorderThresholdExceeded _, SupplierRestockConfirmed _,
                     WarehouseTransferInitiated _ -> OrderStatus.unchanged();
             default -> OrderStatus.ignored();
         };

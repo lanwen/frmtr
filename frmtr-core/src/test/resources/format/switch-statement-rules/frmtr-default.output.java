@@ -155,26 +155,8 @@ class Switch {
         switch (routingMode) {
             case LOCAL -> System.out.println("Local route!");
             case REMOTE, HYBRID -> System.out.println("Not local!");
-            case REMOTE,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID,
-                    HYBRID -> System.out.println("Not local!");
+            case REMOTE, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID,
+                    HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID, HYBRID -> System.out.println("Not local!");
         }
     }
 

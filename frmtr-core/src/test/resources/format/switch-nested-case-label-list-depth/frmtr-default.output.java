@@ -33,22 +33,13 @@ public class FrameRouter {
         return switch (linkState) {
             case ESTABLISHED -> {
                 yield switch (requestKind) {
-                    case PRODUCE,
-                            FETCH,
-                            LIST_OFFSETS,
-                            METADATA,
-                            OFFSET_COMMIT,
-                            OFFSET_FETCH,
-                            FIND_COORDINATOR,
+                    case PRODUCE, FETCH, LIST_OFFSETS, METADATA, OFFSET_COMMIT, OFFSET_FETCH, FIND_COORDINATOR,
                             JOIN_GROUP -> {
                         yield RoutingDecision.forwarded(requestKind);
                     }
-                    case DESCRIBE_GROUPS,
-                            LIST_GROUPS,
-                            SASL_HANDSHAKE,
-                            API_VERSIONS,
-                            CREATE_TOPICS,
-                            DELETE_TOPICS -> registry.dispatch(request);
+                    case DESCRIBE_GROUPS, LIST_GROUPS, SASL_HANDSHAKE, API_VERSIONS, CREATE_TOPICS, DELETE_TOPICS -> registry.dispatch(
+                        request
+                    );
                     case HEARTBEAT -> RoutingDecision.local();
                     default -> RoutingDecision.rejected();
                 };

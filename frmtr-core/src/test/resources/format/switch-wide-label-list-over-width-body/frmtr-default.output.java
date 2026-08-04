@@ -14,10 +14,7 @@ public class OrderEventClassifier {
 
     OrderStatus classify(OrderEvent event) {
         return switch (event) {
-            case PaymentAuthorized _,
-                    ShipmentDispatched _,
-                    CustomerCancellationRequested _,
-                    RefundSettlementCompleted _,
+            case PaymentAuthorized _, ShipmentDispatched _, CustomerCancellationRequested _, RefundSettlementCompleted _,
                     ChargebackDisputeOpened _ -> {
                 yield OrderStatus.of(
                     "an unbreakable status literal token that clearly runs past one hundred and twenty columns wide here now"

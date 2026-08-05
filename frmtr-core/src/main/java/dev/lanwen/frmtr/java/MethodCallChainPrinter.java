@@ -367,6 +367,28 @@ final class MethodCallChainPrinter {
         return chainFan.lambdaBodyChainFansByCanonicalRule(expression);
     }
 
+    /**
+     * Fan doc for a call-rooted width-driven two-selector chain in a lambda-body position. Applies the same
+     * carve-outs as the width-driven block: comment-free, no block-lambda arguments, no segment comments.
+     * Scoped to {@code MethodCallExpr} roots only — trivial-receiver chains keep their existing paths.
+     */
+    Optional<Doc> widthDrivenLambdaBodyFanChain(MethodCallExpr expression) {
+        if (expression.getScope().isEmpty()) {
+            return Optional.empty();
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
+        if (
+            !(analysis.root() instanceof MethodCallExpr)
+            || !chainFan.chainIsWidthDrivenTwoSelectorFan(analysis)
+            || analysis.hasComments()
+            || analysis.hasBlockLambdaArgument()
+            || analysis.calls().stream().anyMatch(chainComments::methodCallSegmentHasComment)
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(chainFanOut(analysis.root(), analysis.calls(), MethodCallChainTail.EMPTY, LayoutContext.root()));
+    }
+
     Optional<Doc> forcedMethodCallChain(MethodCallExpr expression) {
         // A prefix-less forced chain measures the fixed-baseline lineWidth and the first-line width at the same
         // current-member indentation, which is exactly what the firstLineWidth overload below computes when handed

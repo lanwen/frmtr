@@ -14,10 +14,9 @@ final class LambdaBodyChainDottedFan {
     }
 
     void fansScopedRootChainInCanonicalFan(RouteVerifier verifier) {
-        verifier.assertEachRoute(handler -> journalWriter.atInfo()
-                .addValue("handler", handler.identifier())
-                .log("checked handler")
-        );
+        verifier.assertEachRoute(handler -> journalWriter.atInfo().addValue("handler", handler.identifier()).log(
+                "checked handler"
+        ));
     }
 
     List<VotersEndpoint> keepsObjectCreationRootedLambdaBodyPacked(Map<ListenerName, InetSocketAddress> listeners) {
@@ -34,10 +33,9 @@ final class LambdaBodyChainDottedFan {
         return metrics.metrics()
                 .entrySet()
                 .stream()
-                .filter(entry -> entry.getKey()
-                        .description()
-                        .contains("The number of active connections for this listener")
-                )
+                .filter(entry -> entry.getKey().description().contains(
+                        "The number of active connections for this listener"
+                ))
                 .map(Map.Entry::getValue)
                 .collect(Collectors.toList());
     }

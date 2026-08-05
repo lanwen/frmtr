@@ -85,9 +85,8 @@ final class LambdaExpressionArgumentOpener {
 
     ResponseSpec keepsSourceMultilineChainLambda(WebClient client, Map<String, String> query, String account) {
         return client.get()
-                .uri(spec -> spec.path("/metrics/{account}/summary")
-                        .queryParams(MultiValueMap.fromSingleValue(query))
-                        .build(account)
+                .uri(spec -> spec.path("/metrics/{account}/summary").queryParams(MultiValueMap.fromSingleValue(query))
+                            .build(account)
                 )
                 .exchange();
     }
@@ -164,10 +163,10 @@ final class LambdaExpressionArgumentOpener {
     StubFlow keepsLoggingBodyUnderLimit(StubFlow source, Logger log, String itemId) {
         return source.prepare()
                 .then(source.expire(itemId, DEFAULT_TTL))
-                .doOnError(error -> log.atError()
-                        .addValue("item.id", itemId)
-                        .log("Failed to persist buffered event for item", error)
-                )
+                .doOnError(error -> log.atError().addValue("item.id", itemId).log(
+                        "Failed to persist buffered event for item",
+                        error
+                ))
                 .then();
     }
 

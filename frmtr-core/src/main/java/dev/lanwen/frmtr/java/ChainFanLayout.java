@@ -285,11 +285,11 @@ final class ChainFanLayout {
      * the shapes {@code chainBreaksByRule} does NOT already claim structurally.
      *
      * <ul>
-     *   <li><strong>Trivial-receiver two-selector.</strong> A bare {@code NameExpr}/{@code FieldAccessExpr}/
-     *       {@code this}/{@code super} receiver ({@link #chainRootIsTrivialReceiver}) with exactly two selectors
+     *   <li><strong>Trivial-receiver two- or three-selector.</strong> A bare {@code NameExpr}/{@code FieldAccessExpr}/
+     *       {@code this}/{@code super} receiver ({@link #chainRootIsTrivialReceiver}) with exactly two or three selectors
      *       ({@code dataMap.computeIfAbsent(k).put(v)}, {@code orderEvent.validateOrder().deliveryPlan()},
-     *       {@code x.stream().collect(...)}). Two links is below the canonical link-count threshold, so the width-driven
-     *       arm fans it when the flat line overflows and keeps it flat otherwise.</li>
+     *       {@code x.stream().collect(...)}). Both counts are below the canonical link-count threshold, so the
+     *       width-driven arm fans when the flat line overflows and keeps it flat otherwise.</li>
      *   <li><strong>Call-rooted two-selector.</strong> A {@link MethodCallExpr} root with exactly two selectors
      *       ({@code expectThat(result).as("round-trip").isNotNull()},
      *       {@code service.resolve(req).as("snapshot").isPresent()}). Below the call-root threshold (three), so the
@@ -304,10 +304,10 @@ final class ChainFanLayout {
      * The arm gates the fan itself on WIDTH (the {@code bestFitting} flat-vs-fan choice), which is the point: these
      * families fan by width, not by source shape.
      */
-    boolean chainIsWidthDrivenTwoSelectorFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+    boolean chainIsWidthDrivenFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
         Expression root = analysis.root();
         int links = analysis.calls().size();
-        if (chainRootIsTrivialReceiver(root) && links == 2) {
+        if (chainRootIsTrivialReceiver(root) && (links == 2 || links == 3)) {
             return true;
         }
         if (root instanceof MethodCallExpr && links == 2) {
@@ -319,7 +319,7 @@ final class ChainFanLayout {
     /**
      * Reports whether {@code argument} is a lambda whose body forces its own multi-line layout — a block lambda (its
      * {@code { ... }} always breaks) or an expression lambda whose body itself nests a lambda. The width-driven two-selector
-     * fan ({@link #chainIsWidthDrivenTwoSelectorFan}) keeps such a chain on the {@link Doc#bestFitting} arm rather than
+     * fan ({@link #chainIsWidthDrivenFan}) keeps such a chain on the {@link Doc#bestFitting} arm rather than
      * {@link Doc#conditionalGroup}: the body can never render flat, so a conditionalGroup would fan the receiver on every
      * pass while the standalone lambda-body renderer still shapes the body from the author's line breaks (the deferred
      * lambda-arrow keystone), and the two would oscillate. Keeping bestFitting preserves the pre-change shape.

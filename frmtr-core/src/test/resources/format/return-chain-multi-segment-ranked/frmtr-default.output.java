@@ -13,8 +13,6 @@ class ReturnChainMultiSegmentRankedSample {
     }
 
     ExecutionResult submitForExecution(TaskScheduler taskScheduler, WorkloadDescriptor workloadDescriptor) {
-        return taskScheduler.enqueuePending(workloadDescriptor)
-                .awaitScheduledStart()
-                .collectExecutionResult();
+        return taskScheduler.enqueuePending(workloadDescriptor).awaitScheduledStart().collectExecutionResult();
     }
 }

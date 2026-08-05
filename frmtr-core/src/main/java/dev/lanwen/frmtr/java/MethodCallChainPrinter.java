@@ -327,11 +327,11 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * Reports whether a chain fans by WIDTH rather than the author's line breaks — a trivial-receiver two-selector chain
-     * or an enclosed/cast-rooted fanning chain. Delegates to {@link ChainFanLayout}.
+     * Reports whether a chain fans by WIDTH rather than the author's line breaks — a trivial-receiver two- or
+     * three-selector chain, or an enclosed/cast-rooted fanning chain. Delegates to {@link ChainFanLayout}.
      */
-    private boolean chainIsWidthDrivenTwoSelectorFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
-        return chainFan.chainIsWidthDrivenTwoSelectorFan(analysis);
+    private boolean chainIsWidthDrivenFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+        return chainFan.chainIsWidthDrivenFan(analysis);
     }
 
     /**
@@ -379,7 +379,7 @@ final class MethodCallChainPrinter {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         if (
             !(analysis.root() instanceof MethodCallExpr)
-            || !chainFan.chainIsWidthDrivenTwoSelectorFan(analysis)
+            || !chainFan.chainIsWidthDrivenFan(analysis)
             || analysis.hasComments()
             || analysis.calls().stream().anyMatch(chainComments::methodCallSegmentHasComment)
         ) {
@@ -752,8 +752,8 @@ final class MethodCallChainPrinter {
             chainWidthBreakExplain.record(expression, analysis, layout);
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
-        // The two chain families the canonical link-count/root-kind rule does NOT claim — a trivial-receiver TWO-selector
-        // chain and an enclosed/cast-rooted fanning chain ({@link #chainIsWidthDrivenTwoSelectorFan}) — fan by WIDTH, not
+        // The two chain families the canonical link-count/root-kind rule does NOT claim — a trivial-receiver two- or
+        // three-selector chain and an enclosed/cast-rooted fanning chain ({@link #chainIsWidthDrivenFan}) — fan by WIDTH, not
         // by the author's line breaks. Route them through a WIDTH-driven {@link Doc#bestFitting}: the flat compact form
         // when it fits, the source-neutral {@code chainFanOut} on overflow. The fan arm is a pure function of the AST (root
         // + one selector per dotted line), so both passes rebuild the identical fan — a fixpoint. The enclosed/cast family
@@ -764,7 +764,7 @@ final class MethodCallChainPrinter {
         // {@link Doc#conditionalGroup}), which correctly fans when the flat compact overflows. Same last-selector-trailing-
         // line relaxation ({@code chainCommentsAreOnlyTrailingLine}) as the canonical route: admitted but forced to fan.
         if (
-            chainIsWidthDrivenTwoSelectorFan(analysis)
+            chainIsWidthDrivenFan(analysis)
             && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {

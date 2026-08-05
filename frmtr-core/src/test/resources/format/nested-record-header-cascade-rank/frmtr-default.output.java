@@ -11,9 +11,13 @@ class CatalogWarehouse {
         void audit() {}
     }
 
-    record ShipmentAuditRecordWithExtendedRetentionMetadata(ShipmentId shipmentId, LedgerEntry entry) implements
+    record ShipmentAuditRecordWithExtendedRetentionMetadata(
+        ShipmentId shipmentId,
+        LedgerEntry entry
+    ) implements
         VeryLongAuditableInterfaceForComplianceTrackingAndArchival,
-        VeryLongSerializableInterfaceForRetentionAndReplay {
+        VeryLongSerializableInterfaceForRetentionAndReplay
+    {
         void audit() {}
     }
 

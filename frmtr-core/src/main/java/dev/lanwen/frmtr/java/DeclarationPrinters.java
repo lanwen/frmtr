@@ -264,6 +264,7 @@ final class DeclarationPrinters {
             declarationPrefixes::annotations,
             declarationPrefixes::modifiers,
             callableSignatures::typeParameters,
+            types::flatTypeParameters,
             compactSource::compact,
             compactSource::compactJoin,
             types::compactJoinTypeLike,

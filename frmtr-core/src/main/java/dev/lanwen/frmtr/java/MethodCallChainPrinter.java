@@ -672,6 +672,7 @@ final class MethodCallChainPrinter {
         boolean rootObjectCreationNeedsBreak = methodChainPlanner.rootObjectCreationNeedsBreak(analysis);
         if (
             !breakMode.isForced()
+            && !chainIsWidthDrivenTwoSelectorFan(analysis)
             && finalBlockLambdaSegmentCanStayCompact(expression, lineWidth)
         ) {
             return Optional.empty();

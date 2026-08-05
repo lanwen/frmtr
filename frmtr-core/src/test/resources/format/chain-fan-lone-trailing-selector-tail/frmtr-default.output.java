@@ -3,9 +3,7 @@ package sample;
 final class ChainFanLoneTrailingSelectorTail {
 
     OrderPipeline keepsFanWhenMultipleTrailingSelectorsRemain(OrderPipeline orderPipeline) {
-        return orderPipeline.stage(FulfillmentStage.INTAKE)
-                .validate()
-                .commit();
+        return orderPipeline.stage(FulfillmentStage.INTAKE).validate().commit();
     }
 
     StepProbe hugsTrailingSelectorWithArgumentsWhenFlatFits(

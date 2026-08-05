@@ -157,8 +157,6 @@ public class MethodChainSamples {
     }
 
     void methodReferences() {
-        userRecords.stream()
-                .map(UserRecord::toString)
-                .forEach(auditLog::info);
+        userRecords.stream().map(UserRecord::toString).forEach(auditLog::info);
     }
 }

@@ -2,11 +2,7 @@ class FactoryRootSingleArgumentChain {
 
     void optionalOfChainInStatementCondition(TopicDescription description, int partition, int replicaId) {
         actualLeader.set(
-            Optional.of(
-                description.partitions()
-                        .get(partition)
-                        .leader()
-            )
+            Optional.of(description.partitions().get(partition).leader())
                     .map(Node::id)
                     .orElse(-1)
         );

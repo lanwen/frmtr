@@ -35,9 +35,7 @@ class MethodChainSegmentCommentSample {
 
     void returnsSorted(MockServer server, List<Member> members) {
         server.reply(Response.listUsers(
-            members.reversed()
-                    .subList(0, MemberService.DEFAULT_PAGE_SIZE)
-                    .toArray(new Member[0])
+            members.reversed().subList(0, MemberService.DEFAULT_PAGE_SIZE).toArray(new Member[0])
         )); // entries are returned newest first
     }
 }

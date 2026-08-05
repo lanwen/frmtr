@@ -327,11 +327,11 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * Reports whether a chain fans by WIDTH rather than the author's line breaks — a trivial-receiver two-selector chain
-     * or an enclosed/cast-rooted fanning chain. Delegates to {@link ChainFanLayout}.
+     * Reports whether a chain fans by WIDTH rather than the author's line breaks — a trivial-receiver two- or
+     * three-selector chain, or an enclosed/cast-rooted fanning chain. Delegates to {@link ChainFanLayout}.
      */
-    private boolean chainIsWidthDrivenTwoSelectorFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
-        return chainFan.chainIsWidthDrivenTwoSelectorFan(analysis);
+    private boolean chainIsWidthDrivenFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+        return chainFan.chainIsWidthDrivenFan(analysis);
     }
 
     /**
@@ -379,7 +379,7 @@ final class MethodCallChainPrinter {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         if (
             !(analysis.root() instanceof MethodCallExpr)
-            || !chainFan.chainIsWidthDrivenTwoSelectorFan(analysis)
+            || !chainFan.chainIsWidthDrivenFan(analysis)
             || analysis.hasComments()
             || analysis.calls().stream().anyMatch(chainComments::methodCallSegmentHasComment)
         ) {
@@ -693,6 +693,12 @@ final class MethodCallChainPrinter {
                 // the source-neutral `chainFanOut` builder (the early canonical-fan route below), not the imperative
                 // ladder downstream.
                 && !chainBreaksByRule(analysis)
+                // A trivial-receiver three-selector chain ({@link ChainFanLayout#chainIsWidthDrivenFan}) picks flat
+                // vs. fan via a {@code conditionalGroup} at the real rendered column. The flat probe below is
+                // column-blind (e.g. unaware of a lambda-body position), so skip it and let the
+                // {@code conditionalGroup} decide. Two-selector chains are exempt: they predate this change and pass
+                // through the flat probe correctly in the contexts that existed before.
+                && !(chainRootIsTrivialReceiver(expression) && analysis.calls().size() == 3)
                 && !rootObjectCreationNeedsBreak
                 // The stay-flat probe must measure the chain at the same line position it will actually occupy. When the
                 // chain shares its line with a prefix (an assignment target plus operator, an initializer name, etc.) the
@@ -752,8 +758,8 @@ final class MethodCallChainPrinter {
             chainWidthBreakExplain.record(expression, analysis, layout);
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
-        // The two chain families the canonical link-count/root-kind rule does NOT claim — a trivial-receiver TWO-selector
-        // chain and an enclosed/cast-rooted fanning chain ({@link #chainIsWidthDrivenTwoSelectorFan}) — fan by WIDTH, not
+        // The two chain families the canonical link-count/root-kind rule does NOT claim — a trivial-receiver two- or
+        // three-selector chain and an enclosed/cast-rooted fanning chain ({@link #chainIsWidthDrivenFan}) — fan by WIDTH, not
         // by the author's line breaks. Route them through a WIDTH-driven {@link Doc#bestFitting}: the flat compact form
         // when it fits, the source-neutral {@code chainFanOut} on overflow. The fan arm is a pure function of the AST (root
         // + one selector per dotted line), so both passes rebuild the identical fan — a fixpoint. The enclosed/cast family
@@ -764,7 +770,7 @@ final class MethodCallChainPrinter {
         // {@link Doc#conditionalGroup}), which correctly fans when the flat compact overflows. Same last-selector-trailing-
         // line relaxation ({@code chainCommentsAreOnlyTrailingLine}) as the canonical route: admitted but forced to fan.
         if (
-            chainIsWidthDrivenTwoSelectorFan(analysis)
+            chainIsWidthDrivenFan(analysis)
             && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
@@ -789,6 +795,12 @@ final class MethodCallChainPrinter {
             }
             Doc fanOut = chainFanOut(root, calls, finalSegmentSuffix, layout);
             if (rootIsEnclosedFanningChain(root)) {
+                return Optional.of(fanOut);
+            }
+            // Three-selector trivial-receiver chains in forced (lambda-body) position always fan — the
+            // width-driven flat/fan choice would stay flat at shallow lambda-body columns, but lambda-body
+            // position warrants the stable canonical shape (matching lambdaBodyChainFansByCanonicalRule).
+            if (breakMode.isForced() && calls.size() == 3) {
                 return Optional.of(fanOut);
             }
             // A chain admitted only via the trailing-line-comment relaxation ({@code chainCommentsAreOnlyTrailingLine})

@@ -285,11 +285,11 @@ final class ChainFanLayout {
      * the shapes {@code chainBreaksByRule} does NOT already claim structurally.
      *
      * <ul>
-     *   <li><strong>Trivial-receiver two-selector.</strong> A bare {@code NameExpr}/{@code FieldAccessExpr}/
-     *       {@code this}/{@code super} receiver ({@link #chainRootIsTrivialReceiver}) with exactly two selectors
+     *   <li><strong>Trivial-receiver two- or three-selector.</strong> A bare {@code NameExpr}/{@code FieldAccessExpr}/
+     *       {@code this}/{@code super} receiver ({@link #chainRootIsTrivialReceiver}) with exactly two or three selectors
      *       ({@code dataMap.computeIfAbsent(k).put(v)}, {@code orderEvent.validateOrder().deliveryPlan()},
-     *       {@code x.stream().collect(...)}). Two links is below the canonical link-count threshold, so the width-driven
-     *       arm fans it when the flat line overflows and keeps it flat otherwise.</li>
+     *       {@code x.stream().collect(...)}). Both counts are below the canonical link-count threshold, so the
+     *       width-driven arm fans when the flat line overflows and keeps it flat otherwise.</li>
      *   <li><strong>Call-rooted two-selector.</strong> A {@link MethodCallExpr} root with exactly two selectors
      *       ({@code expectThat(result).as("round-trip").isNotNull()},
      *       {@code service.resolve(req).as("snapshot").isPresent()}). Below the call-root threshold (three), so the
@@ -304,10 +304,10 @@ final class ChainFanLayout {
      * The arm gates the fan itself on WIDTH (the {@code bestFitting} flat-vs-fan choice), which is the point: these
      * families fan by width, not by source shape.
      */
-    boolean chainIsWidthDrivenTwoSelectorFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+    boolean chainIsWidthDrivenFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
         Expression root = analysis.root();
         int links = analysis.calls().size();
-        if (chainRootIsTrivialReceiver(root) && links == 2) {
+        if (chainRootIsTrivialReceiver(root) && (links == 2 || links == 3)) {
             return true;
         }
         if (root instanceof MethodCallExpr && links == 2) {
@@ -319,7 +319,7 @@ final class ChainFanLayout {
     /**
      * Reports whether {@code argument} is a lambda whose body forces its own multi-line layout — a block lambda (its
      * {@code { ... }} always breaks) or an expression lambda whose body itself nests a lambda. The width-driven two-selector
-     * fan ({@link #chainIsWidthDrivenTwoSelectorFan}) keeps such a chain on the {@link Doc#bestFitting} arm rather than
+     * fan ({@link #chainIsWidthDrivenFan}) keeps such a chain on the {@link Doc#bestFitting} arm rather than
      * {@link Doc#conditionalGroup}: the body can never render flat, so a conditionalGroup would fan the receiver on every
      * pass while the standalone lambda-body renderer still shapes the body from the author's line breaks (the deferred
      * lambda-arrow keystone), and the two would oscillate. Keeping bestFitting preserves the pre-change shape.
@@ -481,30 +481,29 @@ final class ChainFanLayout {
 
 
     /**
-     * The lambda-body position of the canonical fan: reports whether a chain that IS an expression-lambda
-     * body should fan by the canonical rule ({@link #chainFansByCanonicalRule}), <em>and</em> its root is one the
-     * lambda-body fan renders idempotently.
-     *
-     * <p>The lambda-body fan hugs the chain root on the lambda-header line and fans the selectors below it, rendering
-     * through {@code huggedLambdaBodyChain} → {@code forcedMethodCallChain} with the header threaded as
-     * {@link LayoutContext#leftEdgePrefix()}. That path re-renders the chain root through {@code chainFanOut} at
-     * {@link LayoutContext#root()} (column zero) regardless of the header's real column — fine for a root whose rendering
-     * is column-invariant (a bare {@code NameExpr}/{@code FieldAccessExpr}/{@code this} receiver, or an unscoped bare call
-     * whose flat form is atomic), but NOT for an {@link ObjectCreationExpr} root: {@code new X()} hugs its first selector
-     * on a flat-source pass and breaks onto its own line on a source-multiline pass, so a {@code new X().setA(...).setB(...)}
-     * lambda body fanned here oscillates between {@code new X().setA(} and {@code new X()}⏎{@code .setA(} forever (the
-     * kafka {@code Endpoints}/{@code ProduceResponse} {@code .map(x -> new Record()....)} shapes). Object-creation-rooted
-     * lambda-body chains are therefore withheld from the fan and left on the packed / opener-breaking shapes below, which
-     * are already source-shape-stable for them; they remain the deferred slice here (the nested-root gap the
-     * chain-path-unification plan calls out for {@code chainFanOut} rendering a non-name root at {@code root()}).
-     *
-     * <p>A chain-selector-hosted lambda body ({@code stream.filter(e -> e.getKey()...)}) still fans — the arrow hugs its
-     * root, so no arrow strands above a wrapping body — because {@code chainFanOut} renders source-neutrally at
-     * {@code root()}, immune to the hosting call's column.
+     * Lambda-body position gate: reports whether a chain in an expression-lambda body should fan one selector per
+     * line. Covers the structural-threshold family ({@link #chainFansByCanonicalRule}) and three-selector
+     * trivial-receiver chains, which fan unconditionally here even when flat would fit at the rendered column —
+     * lambda-body position warrants the stable canonical shape. Object-creation roots are excluded because
+     * {@code chainFanOut} renders them at column zero and oscillates across passes.
      */
     boolean lambdaBodyChainFansByCanonicalRule(MethodCallExpr expression) {
-        return chainFansByCanonicalRule(expression)
-            && !(methodCallChainAnalysis.apply(expression).root() instanceof ObjectCreationExpr);
+        if (expression.getScope().isEmpty()) {
+            return false;
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis.apply(expression);
+        Expression root = analysis.root();
+        if (root instanceof ObjectCreationExpr) {
+            return false;
+        }
+        if (chainRootIsTrivialReceiver(root)
+                && analysis.calls().size() == 3
+                && !analysis.hasComments()
+                && !analysis.hasBlockLambdaArgument()
+                && analysis.calls().stream().noneMatch(methodCallSegmentHasComment)) {
+            return true;
+        }
+        return chainFansByCanonicalRule(expression);
     }
 
     /**

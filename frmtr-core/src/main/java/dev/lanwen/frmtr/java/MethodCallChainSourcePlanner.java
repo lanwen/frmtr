@@ -327,8 +327,9 @@ final class MethodCallChainSourcePlanner {
      *   <li><b>Static / factory root → threshold 2 selectors after the factory call.</b> A type-like qualifier surfaces
      *   as {@code analysis.root()} with the factory call as the first entry of {@code calls()}; count selectors after
      *   it.</li>
-     *   <li><b>Plain receiver root → threshold 3.</b> A variable / field access / {@code this} / {@code super}; three or
-     *   more selectors hang off it before the chain fans.</li>
+     *   <li><b>Plain receiver root → threshold 4.</b> A variable / field access / {@code this} / {@code super}; four or
+     *   more selectors hang off it before the chain fans. Two- and three-selector chains exit through the width-driven
+     *   route ({@link ChainFanLayout#chainIsWidthDrivenFan}) and fan only when their flat form overflows.</li>
      * </ul>
      */
     boolean chainBreaksByRule(MethodCallChainAnalysis analysis) {
@@ -348,7 +349,8 @@ final class MethodCallChainSourcePlanner {
             return callRootedLinks - 1 >= 2;
         }
         // Plain receiver root (variable / field / this / super / lowercase name): selectors hang directly off it.
-        return callRootedLinks >= 3;
+        // Two- and three-selector chains exit through the width-driven route instead.
+        return callRootedLinks >= 4;
     }
 
     /**

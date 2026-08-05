@@ -76,13 +76,7 @@ class ConditionalExpression {
     }
 
     void ternaryInParentheses() {
-        select(
-            featureEnabled
-                ? quotaAvailable
-                : regionAvailable.planReady()
-                        .fallbackReady()
-                        .policyReady()
-        );
+        select(featureEnabled ? quotaAvailable : regionAvailable.planReady().fallbackReady().policyReady());
     }
 
     void assignment() {

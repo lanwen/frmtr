@@ -9,7 +9,9 @@ class MethodChainTwoSelectorCallRootWidthSample {
                 .as("snapshot for session %s", sessionId)
                 .isPresent();
 
-        // Block-lambda selector on a call-root chain — stays flat when the compact form fits.
-        getPayload(jobId).fields().forEach(field -> { index.add(field.key(), field.value()); });
+        // Block-lambda selector on a call-root chain — chain stays flat, block body expands.
+        getPayload(jobId).fields().forEach(field -> {
+            index.add(field.key(), field.value());
+        });
     }
 }

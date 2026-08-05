@@ -244,9 +244,7 @@ final class RecordDeclarationPrinter {
                     )
                 );
             }
-            layouts.add(
-                new RecordComponentLayout(recordComponent(parameter, trailing, forceBreak), separator, gapComments)
-            );
+            layouts.add(new RecordComponentLayout(recordComponent(parameter, trailing), separator, gapComments));
         }
         return layouts;
     }
@@ -282,25 +280,20 @@ final class RecordDeclarationPrinter {
      * Prints one record component, including leading component comments, annotation line-break decisions, and a
      * line-comment attached to the component type.
      */
-    private Doc recordComponent(Parameter parameter, Doc trailing, boolean forceBreak) {
+    private Doc recordComponent(Parameter parameter, Doc trailing) {
         List<Doc> parts = new ArrayList<>();
         Doc leading = comments.leading(parameter);
         if (leading != Doc.EMPTY) {
             parts.add(leading);
         }
-        if (recordComponentAnnotationsShouldBreak(parameter)) {
-            // Each annotation is on its own component-indented line here, so its only same-line context is the extra
-            // indent past the member baseline when this candidate actually broke; a wide annotation still breaks
-            // internally when it overflows that column.
-            LayoutContext stackedLayout = LayoutContext.root()
-                    .withLeftEdgePrefix(forceBreak ? options.indentUnit() : "");
-            parameter.getAnnotations()
-                    .stream()
-                    .map(node -> annotation.format(node, stackedLayout))
-                    .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
-                    .forEach(parts::add);
-        } else if (!parameter.getAnnotations().isEmpty()) {
-            parts.add(recordComponentAnnotationPrefix(parameter, forceBreak));
+        if (!parameter.getAnnotations().isEmpty()) {
+            // Annotations whose compact form overflows the line break internally; the inline context handles them.
+            // All others go through a fill so the renderer places as many on each line as fit greedily.
+            if (recordComponentHasWidthDrivenMultilineAnnotation(parameter)) {
+                parts.add(recordComponentAnnotationPrefix(parameter));
+            } else {
+                parts.add(recordComponentAnnotationFillPrefix(parameter));
+            }
         }
         Doc typeComment = comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment);
         if (typeComment != Doc.EMPTY) {
@@ -378,26 +371,40 @@ final class RecordDeclarationPrinter {
                 .orElse(true);
     }
 
-    private boolean recordComponentAnnotationsShouldBreak(Parameter parameter) {
-        if (parameter.getAnnotations().isEmpty()) {
-            return false;
+    /**
+     * Greedily places component annotations using a {@link Doc#fill}: the renderer breaks at each {@link Doc#LINE}
+     * separator only when the next annotation would no longer fit on the current line.
+     *
+     * <p>When the last annotation carries a same-line trailing line comment the type/name must start on the next
+     * physical line; {@link Doc#HARD_LINE} is used instead of a space so the tail stays outside the comment body.
+     */
+    private Doc recordComponentAnnotationFillPrefix(Parameter parameter) {
+        LayoutContext context = LayoutContext.root().withLeftEdgePrefix(options.indentUnit());
+        NodeList<AnnotationExpr> annotations = parameter.getAnnotations();
+        List<Doc> fillParts = new ArrayList<>();
+        for (AnnotationExpr ann : annotations) {
+            if (!fillParts.isEmpty()) {
+                fillParts.add(Doc.LINE);
+            }
+            fillParts.add(annotation.format(ann, context));
         }
-        // A component whose annotations fit inline reprints inline regardless of source shape. A component whose
-        // annotation is itself width-driven-multiline lets that annotation break internally rather than forcing the
-        // whole component prefix to stack.
-        if (recordComponentHasWidthDrivenMultilineAnnotation(parameter)) {
-            return false;
-        }
-        return currentIndentedWidth.applyAsInt(recordComponentFlat(parameter)) > options.lineWidth();
+        AnnotationExpr last = annotations.get(annotations.size() - 1);
+        boolean lastHasInlineComment = commentPlacement.ownComment(
+            last,
+            comment -> comment.isLine()
+                    && comment.startsOnBeginLine(last.getName())
+                    && comment.startsAfterNodeOnSameLine(last.getName())
+        ).isPresent();
+        return Doc.concat(Doc.fill(fillParts), lastHasInlineComment ? Doc.HARD_LINE : Doc.text(" "));
     }
 
-    private Doc recordComponentAnnotationPrefix(Parameter parameter, boolean forceBreak) {
+    private Doc recordComponentAnnotationPrefix(Parameter parameter) {
         List<AnnotationExpr> annotations = parameter.getAnnotations();
         List<Doc> docs = new ArrayList<>();
         for (int index = 0; index < annotations.size(); index++) {
             docs.add(annotation.format(
                 annotations.get(index),
-                recordComponentAnnotationLayout(parameter, annotations, index, forceBreak)
+                recordComponentAnnotationLayout(parameter, annotations, index)
             ));
         }
         return Doc.concat(
@@ -413,20 +420,18 @@ final class RecordDeclarationPrinter {
      * Builds the {@link LayoutContext} that tells a breakable inline record-component annotation where it renders, so its
      * flat/structured choice is width-driven at the real column rather than reading the author's source line breaks.
      *
-     * <p>This candidate's own component list only sits one unit past the member baseline {@link #currentIndentedWidth}
-     * assumes when it actually broke (either forced or self-wrapped); {@code forceBreak} carries that fact so
-     * {@link LayoutContext#leftEdgePrefix()} contributes the extra unit only then, plus every earlier annotation (joined
-     * by the same {@code " "} the render uses). The trailing content is the remaining annotations then the
+     * <p>A broken record header indents its components one unit past the member baseline {@link #currentIndentedWidth}
+     * assumes, so {@link LayoutContext#leftEdgePrefix()} contributes that extra unit plus every earlier annotation
+     * (joined by the same {@code " "} the render uses). The trailing content is the remaining annotations then the
      * {@code " Type name"} tail the component emits after the prefix on the same line, so the annotation breaks only when
      * keeping it flat would push that tail past the width.
      */
     private LayoutContext recordComponentAnnotationLayout(
             Parameter parameter,
             List<AnnotationExpr> annotations,
-            int index,
-            boolean forceBreak
+            int index
     ) {
-        StringBuilder leftEdge = new StringBuilder(forceBreak ? options.indentUnit() : "");
+        StringBuilder leftEdge = new StringBuilder(options.indentUnit());
         for (int before = 0; before < index; before++) {
             leftEdge.append(compact.apply(annotations.get(before))).append(' ');
         }

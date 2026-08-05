@@ -123,8 +123,7 @@ public interface CustomerProjection {
 
 public record Record(
     @JsonSerialize(using = StatusSerializer.class, nullsUsing = NullSerializer.class)
-    @Schema(type = "integer", description = "Some fancy description")
-    Status status,
+    @Schema(type = "integer", description = "Some fancy description") Status status,
 
     @NotNull Integer sequenceNumber,
 
@@ -133,8 +132,7 @@ public record Record(
 
 public record Record(
     @JsonSerialize(using = StatusSerializer.class, nullsUsing = NullSerializer.class)
-    @Schema(type = "integer", description = "Some fancy description")
-    // comment
+    @Schema(type = "integer", description = "Some fancy description") // comment
     Status status,
     // comment
     @NotNull Integer sequenceNumber

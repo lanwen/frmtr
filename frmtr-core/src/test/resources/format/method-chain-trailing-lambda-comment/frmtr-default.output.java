@@ -9,9 +9,7 @@ class MethodChainTrailingLambdaComment {
                         candidate -> candidate.remoteProviderState() == ExternalProviderState.TRANSITIONING
                 )) // keep polling while external state settles
                 .assertNext(items -> {
-                    assertThat(items)
-                            .extracting(Item::state)
-                            .containsOnly(State.READY);
+                    assertThat(items).extracting(Item::state).containsOnly(State.READY);
                 });
     }
 }

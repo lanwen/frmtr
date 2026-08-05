@@ -319,9 +319,11 @@ final class MethodCallChainSourcePlanner {
      * printer graph).
      *
      * <ul>
-     *   <li><b>Call / constructor root → threshold 2.</b> An {@link ObjectCreationExpr} or {@link MethodCallExpr} root
-     *   folds the leading invocation into {@code analysis.root()}, so every entry in {@code analysis.calls()} is a
-     *   selector after that invocation; two or more selectors fan the chain.</li>
+     *   <li><b>Constructor root → threshold 2.</b> An {@link ObjectCreationExpr} root folds the leading constructor
+     *   into {@code analysis.root()}; two or more selectors always fan (the one-per-line convention).</li>
+     *   <li><b>Call root → threshold 3.</b> A {@link MethodCallExpr} root folds its invocation into
+     *   {@code analysis.root()}; two-selector call-rooted chains are width-driven (see
+     *   {@code ChainFanLayout.chainIsWidthDrivenTwoSelectorFan}), so only three or more selectors fan by rule.</li>
      *   <li><b>Static / factory root → threshold 2 selectors after the factory call.</b> A type-like qualifier surfaces
      *   as {@code analysis.root()} with the factory call as the first entry of {@code calls()}; count selectors after
      *   it.</li>
@@ -332,9 +334,13 @@ final class MethodCallChainSourcePlanner {
     boolean chainBreaksByRule(MethodCallChainAnalysis analysis) {
         Expression root = analysis.root();
         int callRootedLinks = analysis.calls().size();
-        if (root instanceof ObjectCreationExpr || root instanceof MethodCallExpr) {
-            // Constructor or no-scope-call root: every selector in calls() is a link applied after the invocation root.
+        if (root instanceof ObjectCreationExpr) {
+            // Constructor root: folds the leading constructor into root; two or more selectors always fan.
             return callRootedLinks >= 2;
+        }
+        if (root instanceof MethodCallExpr) {
+            // Call root: two-selector chains are width-driven; fan only at three or more.
+            return callRootedLinks >= 3;
         }
         if (promotesFirstCall(root) && !analysis.calls().isEmpty()) {
             // Static/factory root: the type-like qualifier is the root and its first call is the factory invocation, so

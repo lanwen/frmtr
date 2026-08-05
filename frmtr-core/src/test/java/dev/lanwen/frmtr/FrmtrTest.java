@@ -377,7 +377,8 @@ final class FrmtrTest {
         // A chain the developer already split across source lines stays split even at a wide budget, so width is not
         // the cause of the break. The recorder must not manufacture a width wrap for it.
         FormatterOptions wide = FormatterOptions.defaults().withLineWidth(120);
-        String source = "class A{\n void m(){\n  foo()\n   .bar()\n   .baz();\n }\n}\n";
+        // Three selectors: call-root threshold is 3, so this chain fans by rule, not by width.
+        String source = "class A{\n void m(){\n  foo()\n   .bar()\n   .baz()\n   .qux();\n }\n}\n";
 
         ExplainResult result = Frmtr.explain(source, wide);
 

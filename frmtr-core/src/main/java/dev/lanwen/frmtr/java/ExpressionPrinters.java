@@ -559,19 +559,15 @@ final class ExpressionPrinters {
     }
 
     /**
-     * Renders the lambda-body arrow-position fan: the source-neutral {@code chainFanOut} fan of a fan-threshold,
-     * comment/lambda-free lambda-body chain, produced ONCE at {@link LayoutContext#root()} so
-     * {@link LambdaExpressionPrinter} can wrap the identical fan Doc into both arms of its break-after-{@code ->} vs
-     * attach-root-to-{@code ->} {@code Doc.bestFitting}. Empty for a chain the lambda-body fan withholds (object-creation
-     * root or any comment/lambda carrier). Scoped to
-     * {@link #lambdaBodyChainFansByCanonicalRule} for idempotence: the fan renders the root at column zero, so an
-     * object-creation root would oscillate its {@code new X()} hug across passes.
+     * Fan doc for the lambda-body arrow-position: canonical fan chains and width-driven two-selector chains both
+     * produce a source-neutral fan at {@link LayoutContext#root()} so {@link LambdaExpressionPrinter} can rank
+     * attached vs broken arms with {@link Doc#bestFitting}. Empty when neither family claims the chain.
      */
     private Optional<Doc> lambdaBodyCanonicalFanChain(MethodCallExpr expression) {
-        if (!methodCalls.lambdaBodyChainFansByCanonicalRule(expression)) {
-            return Optional.empty();
+        if (methodCalls.lambdaBodyChainFansByCanonicalRule(expression)) {
+            return methodCalls.canonicalFanChain(expression, "", LayoutContext.root());
         }
-        return methodCalls.canonicalFanChain(expression, "", LayoutContext.root());
+        return methodCalls.widthDrivenLambdaBodyFanChain(expression);
     }
 
     Optional<Doc> forcedMethodCallChainAtBaseline(MethodCallExpr expression, ToIntFunction<String> baseline) {

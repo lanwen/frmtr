@@ -11,9 +11,7 @@ class MultilineShapes {
     }
 
     Object chain() {
-        await()
-                .atMost(Duration.ofSeconds(5))
-                .untilAsserted(() -> verify(worker, times(2)).run());
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> verify(worker, times(2)).run());
         Key key = new KeyMaker(Curve.P_256)
                 .algorithm(Algo.ES)
                 .build();

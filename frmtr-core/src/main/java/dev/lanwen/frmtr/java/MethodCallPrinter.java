@@ -1141,6 +1141,12 @@ final class MethodCallPrinter {
         return methodChains.lambdaBodyChainFansByCanonicalRule(expression);
     }
 
+    // Fan doc for width-driven two-selector chains at the lambda-body arrow position; see
+    // {@link MethodCallChainPrinter#widthDrivenLambdaBodyFanChain}.
+    Optional<Doc> widthDrivenLambdaBodyFanChain(MethodCallExpr expression) {
+        return methodChains.widthDrivenLambdaBodyFanChain(expression);
+    }
+
     // Trivial-receiver first-selector attach: reports whether a chain's root is a trivial receiver, so the lambda-body
     // arrow seam keeps such a body anchored on the {@code ->} line. See
     // {@link MethodCallChainPrinter#chainRootIsTrivialReceiver(MethodCallExpr)}.

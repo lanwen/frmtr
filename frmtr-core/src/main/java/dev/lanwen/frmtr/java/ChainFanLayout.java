@@ -281,8 +281,8 @@ final class ChainFanLayout {
     }
 
     /**
-     * Reports whether a chain is one of the two families that fan by WIDTH rather than by the author's line breaks — the
-     * shapes {@code chainBreaksByRule} does NOT already claim structurally.
+     * Reports whether a chain is one of the three families that fan by WIDTH rather than by the author's line breaks —
+     * the shapes {@code chainBreaksByRule} does NOT already claim structurally.
      *
      * <ul>
      *   <li><strong>Trivial-receiver two-selector.</strong> A bare {@code NameExpr}/{@code FieldAccessExpr}/
@@ -290,6 +290,10 @@ final class ChainFanLayout {
      *       ({@code dataMap.computeIfAbsent(k).put(v)}, {@code orderEvent.validateOrder().deliveryPlan()},
      *       {@code x.stream().collect(...)}). Two links is below the canonical link-count threshold, so the width-driven
      *       arm fans it when the flat line overflows and keeps it flat otherwise.</li>
+     *   <li><strong>Call-rooted two-selector.</strong> A {@link MethodCallExpr} root with exactly two selectors
+     *       ({@code expectThat(result).as("round-trip").isNotNull()},
+     *       {@code service.resolve(req).as("snapshot").isPresent()}). Below the call-root threshold (three), so the
+     *       width-driven arm keeps it flat when it fits and fans on overflow.</li>
      *   <li><strong>Enclosed / cast-rooted fanning chain.</strong> A parenthesized (or parenthesized-cast) root
      *       whose inner chain itself fans ({@link #rootIsEnclosedFanningChain}), e.g.
      *       {@code ((OffsetFetchRequestData) res.unsentRequests.get(0)...data()).groups().forEach(...)}. The width-driven
@@ -304,6 +308,9 @@ final class ChainFanLayout {
         Expression root = analysis.root();
         int links = analysis.calls().size();
         if (chainRootIsTrivialReceiver(root) && links == 2) {
+            return true;
+        }
+        if (root instanceof MethodCallExpr && links == 2) {
             return true;
         }
         return rootIsEnclosedFanningChain(root) && links >= 1;

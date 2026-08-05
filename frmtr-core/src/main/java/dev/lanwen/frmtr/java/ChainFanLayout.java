@@ -481,30 +481,29 @@ final class ChainFanLayout {
 
 
     /**
-     * The lambda-body position of the canonical fan: reports whether a chain that IS an expression-lambda
-     * body should fan by the canonical rule ({@link #chainFansByCanonicalRule}), <em>and</em> its root is one the
-     * lambda-body fan renders idempotently.
-     *
-     * <p>The lambda-body fan hugs the chain root on the lambda-header line and fans the selectors below it, rendering
-     * through {@code huggedLambdaBodyChain} → {@code forcedMethodCallChain} with the header threaded as
-     * {@link LayoutContext#leftEdgePrefix()}. That path re-renders the chain root through {@code chainFanOut} at
-     * {@link LayoutContext#root()} (column zero) regardless of the header's real column — fine for a root whose rendering
-     * is column-invariant (a bare {@code NameExpr}/{@code FieldAccessExpr}/{@code this} receiver, or an unscoped bare call
-     * whose flat form is atomic), but NOT for an {@link ObjectCreationExpr} root: {@code new X()} hugs its first selector
-     * on a flat-source pass and breaks onto its own line on a source-multiline pass, so a {@code new X().setA(...).setB(...)}
-     * lambda body fanned here oscillates between {@code new X().setA(} and {@code new X()}⏎{@code .setA(} forever (the
-     * kafka {@code Endpoints}/{@code ProduceResponse} {@code .map(x -> new Record()....)} shapes). Object-creation-rooted
-     * lambda-body chains are therefore withheld from the fan and left on the packed / opener-breaking shapes below, which
-     * are already source-shape-stable for them; they remain the deferred slice here (the nested-root gap the
-     * chain-path-unification plan calls out for {@code chainFanOut} rendering a non-name root at {@code root()}).
-     *
-     * <p>A chain-selector-hosted lambda body ({@code stream.filter(e -> e.getKey()...)}) still fans — the arrow hugs its
-     * root, so no arrow strands above a wrapping body — because {@code chainFanOut} renders source-neutrally at
-     * {@code root()}, immune to the hosting call's column.
+     * Lambda-body position gate: reports whether a chain in an expression-lambda body should fan one selector per
+     * line. Covers the structural-threshold family ({@link #chainFansByCanonicalRule}) and three-selector
+     * trivial-receiver chains, which fan unconditionally here even when flat would fit at the rendered column —
+     * lambda-body position warrants the stable canonical shape. Object-creation roots are excluded because
+     * {@code chainFanOut} renders them at column zero and oscillates across passes.
      */
     boolean lambdaBodyChainFansByCanonicalRule(MethodCallExpr expression) {
-        return chainFansByCanonicalRule(expression)
-            && !(methodCallChainAnalysis.apply(expression).root() instanceof ObjectCreationExpr);
+        if (expression.getScope().isEmpty()) {
+            return false;
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis.apply(expression);
+        Expression root = analysis.root();
+        if (root instanceof ObjectCreationExpr) {
+            return false;
+        }
+        if (chainRootIsTrivialReceiver(root)
+                && analysis.calls().size() == 3
+                && !analysis.hasComments()
+                && !analysis.hasBlockLambdaArgument()
+                && analysis.calls().stream().noneMatch(methodCallSegmentHasComment)) {
+            return true;
+        }
+        return chainFansByCanonicalRule(expression);
     }
 
     /**

@@ -693,6 +693,12 @@ final class MethodCallChainPrinter {
                 // the source-neutral `chainFanOut` builder (the early canonical-fan route below), not the imperative
                 // ladder downstream.
                 && !chainBreaksByRule(analysis)
+                // A trivial-receiver three-selector chain ({@link ChainFanLayout#chainIsWidthDrivenFan}) picks flat
+                // vs. fan via a {@code conditionalGroup} at the real rendered column. The flat probe below is
+                // column-blind (e.g. unaware of a lambda-body position), so skip it and let the
+                // {@code conditionalGroup} decide. Two-selector chains are exempt: they predate this change and pass
+                // through the flat probe correctly in the contexts that existed before.
+                && !(chainRootIsTrivialReceiver(expression) && analysis.calls().size() == 3)
                 && !rootObjectCreationNeedsBreak
                 // The stay-flat probe must measure the chain at the same line position it will actually occupy. When the
                 // chain shares its line with a prefix (an assignment target plus operator, an initializer name, etc.) the
@@ -789,6 +795,12 @@ final class MethodCallChainPrinter {
             }
             Doc fanOut = chainFanOut(root, calls, finalSegmentSuffix, layout);
             if (rootIsEnclosedFanningChain(root)) {
+                return Optional.of(fanOut);
+            }
+            // Three-selector trivial-receiver chains in forced (lambda-body) position always fan — the
+            // width-driven flat/fan choice would stay flat at shallow lambda-body columns, but lambda-body
+            // position warrants the stable canonical shape (matching lambdaBodyChainFansByCanonicalRule).
+            if (breakMode.isForced() && calls.size() == 3) {
                 return Optional.of(fanOut);
             }
             // A chain admitted only via the trailing-line-comment relaxation ({@code chainCommentsAreOnlyTrailingLine})

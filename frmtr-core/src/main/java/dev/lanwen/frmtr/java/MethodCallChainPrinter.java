@@ -381,7 +381,6 @@ final class MethodCallChainPrinter {
             !(analysis.root() instanceof MethodCallExpr)
             || !chainFan.chainIsWidthDrivenTwoSelectorFan(analysis)
             || analysis.hasComments()
-            || analysis.hasBlockLambdaArgument()
             || analysis.calls().stream().anyMatch(chainComments::methodCallSegmentHasComment)
         ) {
             return Optional.empty();
@@ -755,17 +754,13 @@ final class MethodCallChainPrinter {
         // + one selector per dotted line), so both passes rebuild the identical fan — a fixpoint. The enclosed/cast family
         // is ALWAYS-FAN, not bestFitting: its {@code fanRootDoc} renders the enclosed/cast root at {@code root()} (column
         // zero), so a flat arm measured at the real column would flip flat<->fan against the fan arm's column-zero render
-        // and oscillate; an enclosed fanning root also already spans lines, so the flat arm can never win. Carries the
-        // SAME comment/lambda carve-out as the early canonical route above, with the same last-selector-trailing-line
-        // relaxation ({@code chainCommentsAreOnlyTrailingLine}): such a chain is admitted but FORCED to fan below, never
-        // ranked against the {@code flat} arm — that arm is {@code compactSource.compact(expression)}, whose
-        // {@code compactTokenText} would de-indent / merge its {@code //} comment. Every other comment family stays on the
-        // caller's comment-aware routing (kept engaged for an inter-segment line comment by
-        // {@link #methodCallChainIsSourceMultiline}) and never reaches this arm.
+        // and oscillate; an enclosed fanning root also already spans lines, so the flat arm can never win. Block-lambda
+        // selectors are admitted: {@code bodyForcesMultiline} below routes them to {@link Doc#bestFitting} (not
+        // {@link Doc#conditionalGroup}), which correctly fans when the flat compact overflows. Same last-selector-trailing-
+        // line relaxation ({@code chainCommentsAreOnlyTrailingLine}) as the canonical route: admitted but forced to fan.
         if (
             chainIsWidthDrivenTwoSelectorFan(analysis)
             && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
-            && !analysis.hasBlockLambdaArgument()
             && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
             chainWidthBreakExplain.record(expression, analysis, layout);

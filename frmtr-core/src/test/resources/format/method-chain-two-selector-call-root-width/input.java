@@ -6,7 +6,7 @@ class MethodChainTwoSelectorCallRootWidthSample {
         // Two-selector call-rooted chain whose flat form overflows — fans.
         expectThat(service.resolveRegistration(buildSnapshotRequest(coordinator, sessionId))).as("snapshot for session %s", sessionId).isPresent();
 
-        // Block-lambda selector forces the chain off the width-driven path.
+        // Block-lambda selector stays on the width-driven path; fans because the compact form overflows.
         getPayload(message).entries().forEachRemaining(entry -> {
             registry.put(entry.getKey(), normalize(entry.getValue()));
         });

@@ -9,7 +9,7 @@ class MethodChainTwoSelectorCallRootWidthSample {
                 .as("snapshot for session %s", sessionId)
                 .isPresent();
 
-        // Block-lambda selector forces the chain off the width-driven path.
+        // Block-lambda selector stays on the width-driven path; fans because the compact form overflows.
         getPayload(message)
                 .entries()
                 .forEachRemaining(entry -> {

@@ -846,6 +846,18 @@ final class MethodCallChainPrinter {
                 return Optional.of(fanOut);
             }
             boolean collapseArm = bodyForcesMultiline && !bodyIsSourceNeutralFanningChain;
+            // A block-lambda body always breaks deterministically — the rendered shape is stable from the first
+            // pass. Rank the inline chain header (up to the opening {@code {}) against the fan by first-line
+            // fit; the body's width does not influence the selection, so the verdict is idempotent.
+            if (collapseArm && methodCallSegmentHasBlockLambdaArgument(calls.getLast())) {
+                String inlinePrefix = this.calls.methodCallPrefix(calls.getLast());
+                Optional<Doc> inlineHug = this.calls.eligibleBlockLambdaHugCandidate(
+                    inlinePrefix, calls.getLast().getArguments());
+                if (inlineHug.isPresent()) {
+                    Doc inlineArm = appendFinalSegmentSuffix(inlineHug.orElseThrow(), finalSegmentSuffix);
+                    return Optional.of(Doc.bestFittingFirstLine(List.of(inlineArm, fanOut)));
+                }
+            }
             return Optional.of(collapseArm ? Doc.bestFitting(arms) : Doc.conditionalGroup(arms));
         }
         // A chain that must fan ONLY to preserve an inter-segment {@code //} line comment ({@link ChainCommentLayout#chainHasInterSegmentLineComment})

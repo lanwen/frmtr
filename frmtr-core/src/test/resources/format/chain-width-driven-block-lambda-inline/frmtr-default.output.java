@@ -32,11 +32,9 @@ class MetadataRecordIndexer {
     }
 
     void verifiesCommittedBatch(CoordinatorService coordinatorService) {
-        assertThat(coordinatorService.processedBatches())
-                .singleElement()
-                .satisfies(batch -> {
-                    assertThat(batch.status()).isEqualTo(BatchStatus.COMMITTED);
-                    assertThat(batch.offset()).isGreaterThan(0L);
-                });
+        assertThat(coordinatorService.processedBatches()).singleElement().satisfies(batch -> {
+            assertThat(batch.status()).isEqualTo(BatchStatus.COMMITTED);
+            assertThat(batch.offset()).isGreaterThan(0L);
+        });
     }
 }

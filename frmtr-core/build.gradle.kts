@@ -7,6 +7,14 @@ dependencies {
     api(libs.javaparser.core)
 }
 
+tasks.named<JacocoReport>("jacocoTestReport") {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    dependsOn(tasks.withType<Test>())
+}
+
 tasks.withType<Test>().configureEach {
     // Roadmap B3, layer 1: enable AST-equivalence verification for every formatter test (notably the golden fixture
     // suite), so each fixture is also re-parsed and checked for semantic equivalence to its input. This catches a

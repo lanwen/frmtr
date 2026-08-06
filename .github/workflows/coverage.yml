@@ -1,0 +1,61 @@
+name: Coverage
+
+# Runs the full test suite with JaCoCo on every push to main and every PR.
+# Posts a coverage summary comment on the PR (updated in place on re-push).
+# Fails if overall instruction coverage drops below 80% or changed-line
+# coverage drops below 80%.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write   # required to post/update the PR comment
+
+jobs:
+  coverage:
+    name: Test + coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Java
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      - name: Run tests and generate coverage report
+        run: ./gradlew :frmtr-core:test :frmtr-core:jacocoTestReport
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: jacoco-html-${{ github.run_number }}
+          path: frmtr-core/build/reports/jacoco/test/html/
+          retention-days: 30
+
+      - name: Publish coverage to PR
+        uses: Madrapps/jacoco-report@e51ce1f46f7f8b5331593f935e59cbaf44b84920 # v1.8.0
+        with:
+          paths: ${{ github.workspace }}/frmtr-core/build/reports/jacoco/test/jacocoTestReport.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "## Coverage report"
+          update-comment: true
+          min-coverage-overall: 80
+          min-coverage-changed-lines: 80
+          coverage-counter-type: INSTRUCTION
+          skip-if-no-changes: false
+          show-missing-lines: true

@@ -47,12 +47,16 @@ class MethodChainSegmentArgumentsSample {
     }
 
     void inspectShipmentPolicy(RoutePlan routePlan) {
-        assertThat(routePlan.deliveryWindows()).singleElement().satisfies(deliveryWindow -> {
-            assertThat(deliveryWindow.routePolicy().scope()).isEqualTo(ShipmentPlacementScope.AVAILABILITY_ZONE);
-            assertThat(deliveryWindow.routePolicy().selectors())
-                    .containsEntry("region", "eu-central-1")
-                    .containsEntry("delivery-zone", "eu-central-1b");
-        });
+        assertThat(routePlan.deliveryWindows())
+                .singleElement()
+                .satisfies(deliveryWindow -> {
+                    assertThat(deliveryWindow.routePolicy().scope()).isEqualTo(
+                        ShipmentPlacementScope.AVAILABILITY_ZONE
+                    );
+                    assertThat(deliveryWindow.routePolicy().selectors())
+                            .containsEntry("region", "eu-central-1")
+                            .containsEntry("delivery-zone", "eu-central-1b");
+                });
     }
 
     boolean hasExpressionLambdaBeforeFinalSegment(List<RouteCall> calls) {

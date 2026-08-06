@@ -23,4 +23,20 @@ class MetadataRecordIndexer {
             queue.record(publish.payload());
         });
     }
+
+    void publishesWhenOverWidth(SubscriptionRegistry subscriptionRegistry) {
+        subscriptionRegistry.toAsync()
+                .publishes(MessagePublishFilter.FORWARD_ONLY_AND_ACKNOWLEDGED_ONLY, publishEvent -> {
+                    recordingBuffer.capture(publishEvent.payload(), publishEvent.routingKey());
+                });
+    }
+
+    void verifiesCommittedBatch(CoordinatorService coordinatorService) {
+        assertThat(coordinatorService.processedBatches())
+                .singleElement()
+                .satisfies(batch -> {
+                    assertThat(batch.status()).isEqualTo(BatchStatus.COMMITTED);
+                    assertThat(batch.offset()).isGreaterThan(0L);
+                });
+    }
 }

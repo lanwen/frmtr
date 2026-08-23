@@ -62,7 +62,7 @@ jobs:
           ref: main
 
       - name: Set up GraalVM
-        uses: graalvm/setup-graalvm@186d0493a2df5eb62df5ecc498883d18fd58c303 # v1.6.2
+        uses: graalvm/setup-graalvm@5298d94fb55a4f185c602eeac5de1b553882abe2 # v1.6.4
         with:
           distribution: graalvm
           java-version: "25"

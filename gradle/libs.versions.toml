@@ -1,7 +1,7 @@
 [versions]
 assertj = "3.27.7"
 javaparser = "3.28.2"
-jgit = "7.7.0.202606012155-r"
+jgit = "7.7.1.202607240634-r"
 junit-jupiter = "6.0.3"
 graalvm-native-buildtools = "0.11.5"
 gradle-plugin-publish = "2.1.1"

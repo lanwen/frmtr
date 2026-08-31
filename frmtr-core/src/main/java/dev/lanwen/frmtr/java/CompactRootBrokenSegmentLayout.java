@@ -6,6 +6,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.java.MethodCallChainPrinter.MethodCallChainTail;
@@ -139,6 +140,50 @@ final class CompactRootBrokenSegmentLayout {
             && segmentWidth.singleSimpleMethodCallSegmentArgument(call);
     }
 
+    /**
+     * A root argument that is a lambda with a non-empty brace body: compacting the root's own text via
+     * {@code compactSource.compact} would squash that body onto one line, a shape this formatter never emits.
+     */
+    private boolean rootHasNonEmptyBlockLambdaArgument(MethodCallExpr rootCall) {
+        return rootCall.getArguments().stream().anyMatch(this::isNonEmptyBlockLambda);
+    }
+
+    private boolean isNonEmptyBlockLambda(Expression argument) {
+        return argument instanceof LambdaExpr lambda
+            && lambda.getBody().isBlockStmt()
+            && !lambda.getBody().asBlockStmt().getStatements().isEmpty();
+    }
+
+    /**
+     * Keeps the root's block lambda hugged — opener on the root's line, body broken below it — and glues the final
+     * segment onto the lambda's close line, so the body never routes through the compact-root text.
+     *
+     * <p>Declines when the hug is ineligible (an overflowing opener, heavy arguments, a comment-bearing lambda) or a
+     * leading comment is pending, leaving the caller's fan fallback to render the chain.
+     */
+    private Optional<Doc> huggedBlockLambdaRootWithAttachedFinalSegment(
+            MethodCallExpr methodRoot,
+            MethodCallExpr call,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> lineWidth,
+            Doc argumentLeadingComment
+    ) {
+        if (argumentLeadingComment != Doc.EMPTY) {
+            return Optional.empty();
+        }
+        String rootPrefix = calls.methodCallPrefix(methodRoot);
+        Optional<Doc> huggedRoot = calls.eligibleBlockLambdaHugCandidate(rootPrefix, methodRoot.getArguments());
+        if (huggedRoot.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                huggedRoot.orElseThrow(),
+                segmentRenderer.methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix, lineWidth)
+            )
+        );
+    }
+
     private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
         return compactRootWithBrokenFinalSegment(
             root,
@@ -202,6 +247,10 @@ final class CompactRootBrokenSegmentLayout {
         }
         if (refuseOpeningSingleSimpleObjectRootChainTail(root, call)) {
             return Optional.empty();
+        }
+        if (root instanceof MethodCallExpr rootCall && rootHasNonEmptyBlockLambdaArgument(rootCall)) {
+            return huggedBlockLambdaRootWithAttachedFinalSegment(
+                rootCall, call, finalSegmentSuffix, lineWidth, argumentLeadingComment);
         }
         // The object-creation-root compact-root path has no source-shape bail: whether the constructor root stays compact
         // is decided by the width gate below (`compactRootFirstLineFits`), so a source-multiline root converges on the

@@ -56,9 +56,8 @@ class MethodChainSegmentArgumentsSample {
     }
 
     boolean hasExpressionLambdaBeforeFinalSegment(List<RouteCall> calls) {
-        if (calls.stream().limit(Math.max(0, calls.size() - 1)).anyMatch(
-                this::methodCallSegmentHasExpressionLambdaArgument
-            )) {
+        if (calls.stream().limit(Math.max(0, calls.size() - 1))
+                .anyMatch(this::methodCallSegmentHasExpressionLambdaArgument)) {
             return true;
         }
         return false;

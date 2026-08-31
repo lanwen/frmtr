@@ -12,6 +12,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
@@ -55,6 +56,8 @@ final class ControlConditionPrinter {
 
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
 
+    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain;
+
     private final ControlConditionMethodCallLayout methodCallLayout;
 
     private final ControlConditionCommentLayout commentLayout;
@@ -78,6 +81,7 @@ final class ControlConditionPrinter {
             Predicate<Expression> expressionHasParenthesizedNestedBinary,
             Function<Expression, Doc> brokenExpressionLines,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
+            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             ToIntFunction<String> currentIndentedWidth,
             LayoutWidth layoutWidth,
             LayoutDecisionLog layoutDecisions
@@ -94,6 +98,7 @@ final class ControlConditionPrinter {
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
         this.brokenExpressionLines = brokenExpressionLines;
         this.forcedMethodCallChain = forcedMethodCallChain;
+        this.packedMethodCallChain = packedMethodCallChain;
         this.currentIndentedWidth = currentIndentedWidth;
         this.layoutWidth = layoutWidth;
         this.layoutDecisions = layoutDecisions;
@@ -190,15 +195,21 @@ final class ControlConditionPrinter {
     }
 
     /**
-     * Ranks the broken candidates by whether their own opener fits the true rendered column — a broken method-call
-     * condition, else a complemented method-call chain, else the generic broken condition, which always fits — instead
-     * of pre-filtering with a {@code blockStatementWidth} text estimate. Every candidate forces its own line break, so
+     * Ranks the broken candidates by whether their own opener fits the true rendered column — a packed method-call
+     * chain, else a broken method-call condition, else a complemented method-call chain, else the generic broken
+     * condition, which always fits — instead of pre-filtering with a {@code blockStatementWidth} text estimate. The
+     * packed chain outranks the argument-hoisting broken condition so a chain-rooted call splits at a dotted segment
+     * boundary rather than stranding its own argument list. Every candidate forces its own line break, so
      * {@link Doc#bestFittingFirstLine(List, int[])} (first-line fit, not whole-doc flat fit) is the combinator that can
      * actually distinguish between them; {@link Doc#conditionalGroup} cannot, since a forced break never fits flat.
      */
     private Doc brokenVerdict(Expression expression) {
         List<Doc> alternatives = new ArrayList<>();
         List<Integer> priorities = new ArrayList<>();
+        packedMethodCallChainCondition(expression).ifPresent(chain -> {
+            alternatives.add(chain);
+            priorities.add(3);
+        });
         if (expression instanceof MethodCallExpr methodCall && methodCallLayout.brokenConditionEligible(methodCall)) {
             alternatives.add(methodCallLayout.brokenCondition(methodCall));
             priorities.add(2);
@@ -212,6 +223,21 @@ final class ControlConditionPrinter {
         return alternatives.size() == 1
             ? alternatives.getFirst()
             : Doc.bestFittingFirstLine(alternatives, priorities.stream().mapToInt(Integer::intValue).toArray());
+    }
+
+    /**
+     * Offers the packed chain shape for a plain (non-negated) method-call-chain condition: the root plus as many
+     * dotted selectors as fit stay on the opening line, and the final selector's call continues on an indented
+     * continuation line, closing the condition's own paren right after it. Empty when the condition is not a
+     * method-call chain or has nothing to pack.
+     */
+    private Optional<Doc> packedMethodCallChainCondition(Expression expression) {
+        if (!(expression instanceof MethodCallExpr methodCall)) {
+            return Optional.empty();
+        }
+        return packedMethodCallChain
+            .apply(methodCall, text -> ifConditionLineWidth(expression, "if (" + text + ") {}"))
+            .map(chain -> Doc.concat(Doc.text("("), chain, Doc.text(")")));
     }
 
     private Optional<Doc> complementedMethodCallChainCondition(Expression expression) {

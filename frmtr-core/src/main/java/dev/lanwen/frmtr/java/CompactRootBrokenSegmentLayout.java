@@ -10,6 +10,7 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.java.MethodCallChainPrinter.MethodCallChainTail;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -295,9 +296,17 @@ final class CompactRootBrokenSegmentLayout {
             return Optional.empty();
         }
         Doc argumentList = calls.methodCallArgumentList(callPrefix, call.getArguments(), Doc.HARD_LINE);
-        Doc openedArguments = argumentLeadingComment == Doc.EMPTY
-            ? argumentList
-            : Doc.concat(argumentLeadingComment, Doc.HARD_LINE, argumentList);
+        // The argument list above is comment-blind, so a line comment in a single argument's gap needs the separately
+        // recovered gap comments to survive. Riding them alongside keeps the argument on its own width-aware shape,
+        // which the comment-aware list's single-argument path would flatten to one line regardless of width.
+        Doc openedArguments;
+        if (argumentLeadingComment == Doc.EMPTY && call.getArguments().size() == 1) {
+            openedArguments = withArgumentGapComments(argumentList, calls.singleArgumentHugGapComments(call));
+        } else {
+            openedArguments = argumentLeadingComment == Doc.EMPTY
+                ? argumentList
+                : Doc.concat(argumentLeadingComment, Doc.HARD_LINE, argumentList);
+        }
         Doc exploded = Doc.concat(
             Doc.text(prefix),
             Doc.indent(
@@ -318,6 +327,28 @@ final class CompactRootBrokenSegmentLayout {
             return Optional.of(Doc.bestFitting(List.of(hugged, exploded)));
         }
         return Optional.of(exploded);
+    }
+
+    /**
+     * Lays {@code argumentDoc}'s recovered gap comments around it exactly as {@link MethodCallPrinter#textBlockArgument}
+     * does for its own single-argument hug: leading comments above, an inline trailing comment as a line suffix, and
+     * any remaining trailing comment on its own line below.
+     */
+    private Doc withArgumentGapComments(Doc argumentDoc, CommentedExpressionListPrinter.HugGapComments gaps) {
+        List<Doc> parts = new ArrayList<>();
+        for (Doc leading : gaps.leading()) {
+            parts.add(leading);
+            parts.add(Doc.HARD_LINE);
+        }
+        parts.add(argumentDoc);
+        for (Doc inlineTrailing : gaps.inlineTrailing()) {
+            parts.add(Doc.lineSuffix(Doc.concat(Doc.text(" "), inlineTrailing)));
+        }
+        for (Doc trailingLine : gaps.trailingLines()) {
+            parts.add(Doc.HARD_LINE);
+            parts.add(trailingLine);
+        }
+        return Doc.concat(parts);
     }
 
     private boolean compactRootFirstLineFits(

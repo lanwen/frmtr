@@ -1679,6 +1679,15 @@ final class MethodCallPrinter {
         return commentedExpressionLists.parenthesized(prefix, call, call.getArguments());
     }
 
+    /**
+     * The gap comments around {@code call}'s single argument, for a caller that lays that argument out itself (a
+     * width-aware exploded shape) instead of deferring to {@link #commentedArgumentList}'s broken list — whose
+     * single-argument case can flatten a heavy nested-chain argument to one line regardless of width.
+     */
+    CommentedExpressionListPrinter.HugGapComments singleArgumentHugGapComments(MethodCallExpr call) {
+        return commentedExpressionLists.singleArgumentHugGapComments(call, call.getArguments());
+    }
+
     private boolean argumentConsumesSuffix(Expression argument) {
         return argument instanceof ObjectCreationExpr || argument instanceof MethodCallExpr;
     }

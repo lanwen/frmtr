@@ -48,13 +48,11 @@ final class ArgumentHeaviness {
     static final int LARGE_ARGUMENT_COUNT = 5;
 
     /**
-     * The token count at or above which an argument list that contains nested call/constructor arguments breaks. Chosen
-     * so the reviewer's flagged nested cases (a three-argument constructor around a nested factory call; a two-argument
-     * {@code .formatted(...)} around a three-deep call nest; a nested {@code Doc.group(Doc.concat(...))} builder) all
-     * reach it, while a shallow two-call wrapper such as {@code ifBreak(text(a), text(b))} stays under it and keeps its
-     * compact form.
+     * The token count at or above which an argument list that contains nested call/constructor arguments breaks. The
+     * gate is density, not nesting depth: a list dense enough to reach this count is hard to scan on one line, while a
+     * single nested call in an otherwise short list stays compact as long as it fits.
      */
-    static final int HEAVY_TOKEN_THRESHOLD = 8;
+    static final int HEAVY_TOKEN_THRESHOLD = 12;
 
     /**
      * Reports whether {@code arguments} should break one-argument-per-line even when it fits the line width.

@@ -12,14 +12,10 @@ final class StringLiteralInternalWhitespace {
     }
 
     void renderTabs(StringBuilder buffer, List<String> moduleNames, String indent) {
-        buffer.append(
-            moduleNames.stream().map(name -> indent + "			" + name).collect(Collectors.joining(",\n"))
-        );
+        buffer.append(moduleNames.stream().map(name -> indent + "			" + name).collect(Collectors.joining(",\n")));
     }
 
     void renderPlain(StringBuilder buffer, List<String> moduleNames, String indent) {
-        buffer.append(
-            moduleNames.stream().map(name -> indent + " : " + name).collect(Collectors.joining(",\n"))
-        );
+        buffer.append(moduleNames.stream().map(name -> indent + " : " + name).collect(Collectors.joining(",\n")));
     }
 }

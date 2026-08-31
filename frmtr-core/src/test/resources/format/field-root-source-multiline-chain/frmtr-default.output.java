@@ -4,13 +4,7 @@ class Demo {
 
     void method() {
         context.sessionStore.persistence()
-                .recordForReplay(
-                    historyId(context.id()),
-                    List.of(
-                        event(startedState()),
-                        changed(startedState())
-                    )
-                );
+                .recordForReplay(historyId(context.id()), List.of(event(startedState()), changed(startedState())));
         context.sessionStore.persistence()
                 .recordForReplay(
                     historyId(context.id()),

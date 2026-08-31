@@ -64,10 +64,7 @@ class MultilineShapes {
                 "short",
                 "%s/card#code=%s".formatted(props.baseUrl(), record.shortCode()),
                 "long",
-                "%s/card#code=%s".formatted(
-                    props.baseUrl(),
-                    TokenCodec.HASH.encode(Long.parseLong(record.id()))
-                )
+                "%s/card#code=%s".formatted(props.baseUrl(), TokenCodec.HASH.encode(Long.parseLong(record.id())))
             )
         ) {
             {

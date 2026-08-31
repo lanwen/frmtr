@@ -286,25 +286,12 @@ final class RecordDeclarationPrinter {
         if (leading != Doc.EMPTY) {
             parts.add(leading);
         }
-        if (!parameter.getAnnotations().isEmpty()) {
-            // Annotations whose compact form overflows the line break internally; the inline context handles them.
-            // All others go through a fill so the renderer places as many on each line as fit greedily.
-            if (recordComponentHasWidthDrivenMultilineAnnotation(parameter)) {
-                parts.add(recordComponentAnnotationPrefix(parameter));
-            } else {
-                parts.add(recordComponentAnnotationFillPrefix(parameter));
-            }
-        }
         Doc typeComment = comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment);
-        if (typeComment != Doc.EMPTY) {
-            parts.add(typeComment);
-            parts.add(Doc.HARD_LINE);
-        }
         Doc orphanLeading = recordComponentOrphanLeadingLineComments(parameter);
-        if (orphanLeading != Doc.EMPTY) {
-            parts.add(orphanLeading);
-        }
-        parts.add(recordComponentTailDoc(parameter));
+        parts.add(
+            recordComponentAnnotationsAndTailFill(parameter, typeComment, orphanLeading)
+                    .orElseGet(() -> recordComponentAnnotationsThenTail(parameter, typeComment, orphanLeading))
+        );
         Doc trailingBlock = recordComponentTrailingBlockComment(parameter);
         if (trailingBlock != Doc.EMPTY) {
             parts.add(Doc.text(" "));
@@ -372,6 +359,60 @@ final class RecordDeclarationPrinter {
     }
 
     /**
+     * Folds the {@code Type name} tail into the annotation {@link Doc#fill} as its last element, so the renderer wraps
+     * the tail onto its own component-indented line exactly when it no longer fits beside the last annotation.
+     *
+     * <p>Empty unless the fill can own the whole span: annotations that break internally, and any comment landing
+     * between the annotations and the tail, need a hard line the fill's per-separator lookahead cannot account for.
+     */
+    private Optional<Doc> recordComponentAnnotationsAndTailFill(
+            Parameter parameter,
+            Doc typeComment,
+            Doc orphanLeading
+    ) {
+        boolean fillOwnsWholeSpan = !parameter.getAnnotations().isEmpty()
+                && !recordComponentHasWidthDrivenMultilineAnnotation(parameter)
+                && !recordComponentLastAnnotationHasTrailingLineComment(parameter)
+                && typeComment == Doc.EMPTY
+                && orphanLeading == Doc.EMPTY;
+        if (!fillOwnsWholeSpan) {
+            return Optional.empty();
+        }
+        List<Doc> fillParts = recordComponentAnnotationFillParts(parameter);
+        fillParts.add(Doc.LINE);
+        fillParts.add(recordComponentTailDoc(parameter));
+        return Optional.of(Doc.fill(fillParts));
+    }
+
+    /**
+     * Emits the annotations, the comments that force a line before the type, and the component tail in source order —
+     * the shape for components whose tail cannot join the annotation fill.
+     */
+    private Doc recordComponentAnnotationsThenTail(
+            Parameter parameter,
+            Doc typeComment,
+            Doc orphanLeading
+    ) {
+        List<Doc> parts = new ArrayList<>();
+        if (!parameter.getAnnotations().isEmpty()) {
+            // Annotations whose compact form overflows the line break internally; the inline context handles them.
+            // All others go through a fill so the renderer places as many on each line as fit greedily.
+            parts.add(recordComponentHasWidthDrivenMultilineAnnotation(parameter)
+                ? recordComponentAnnotationPrefix(parameter)
+                : recordComponentAnnotationFillPrefix(parameter));
+        }
+        if (typeComment != Doc.EMPTY) {
+            parts.add(typeComment);
+            parts.add(Doc.HARD_LINE);
+        }
+        if (orphanLeading != Doc.EMPTY) {
+            parts.add(orphanLeading);
+        }
+        parts.add(recordComponentTailDoc(parameter));
+        return Doc.concat(parts);
+    }
+
+    /**
      * Greedily places component annotations using a {@link Doc#fill}: the renderer breaks at each {@link Doc#LINE}
      * separator only when the next annotation would no longer fit on the current line.
      *
@@ -379,23 +420,34 @@ final class RecordDeclarationPrinter {
      * physical line; {@link Doc#HARD_LINE} is used instead of a space so the tail stays outside the comment body.
      */
     private Doc recordComponentAnnotationFillPrefix(Parameter parameter) {
+        return Doc.concat(
+            Doc.fill(recordComponentAnnotationFillParts(parameter)),
+            recordComponentLastAnnotationHasTrailingLineComment(parameter) ? Doc.HARD_LINE : Doc.text(" ")
+        );
+    }
+
+    /** Alternating {@code [annotation, LINE, annotation, …]} fill elements, one per component annotation. */
+    private List<Doc> recordComponentAnnotationFillParts(Parameter parameter) {
         LayoutContext context = LayoutContext.root().withLeftEdgePrefix(options.indentUnit());
-        NodeList<AnnotationExpr> annotations = parameter.getAnnotations();
         List<Doc> fillParts = new ArrayList<>();
-        for (AnnotationExpr ann : annotations) {
+        for (AnnotationExpr ann : parameter.getAnnotations()) {
             if (!fillParts.isEmpty()) {
                 fillParts.add(Doc.LINE);
             }
             fillParts.add(annotation.format(ann, context));
         }
+        return fillParts;
+    }
+
+    private boolean recordComponentLastAnnotationHasTrailingLineComment(Parameter parameter) {
+        NodeList<AnnotationExpr> annotations = parameter.getAnnotations();
         AnnotationExpr last = annotations.get(annotations.size() - 1);
-        boolean lastHasInlineComment = commentPlacement.ownComment(
+        return commentPlacement.ownComment(
             last,
             comment -> comment.isLine()
                     && comment.startsOnBeginLine(last.getName())
                     && comment.startsAfterNodeOnSameLine(last.getName())
         ).isPresent();
-        return Doc.concat(Doc.fill(fillParts), lastHasInlineComment ? Doc.HARD_LINE : Doc.text(" "));
     }
 
     private Doc recordComponentAnnotationPrefix(Parameter parameter) {

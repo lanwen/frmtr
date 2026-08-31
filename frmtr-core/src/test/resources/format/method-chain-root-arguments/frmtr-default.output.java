@@ -2,11 +2,7 @@ class MethodChainRootArgumentsSample {
 
     void configure(Context ctx, Handler handler, Task task) {
         fallbackIfNeeded("sample", task.id(), handler.prepare(task).thenReturn(done())).as(
-            status(
-                ctx,
-                task.replyTo(),
-                call("sample", task.id())
-            )
+            status(ctx, task.replyTo(), call("sample", task.id()))
         );
         Registry.lookup(
             List.of(
@@ -16,9 +12,7 @@ class MethodChainRootArgumentsSample {
                         .eq("true")
             )
         ).toDebugString();
-        registry.register(
-            Builders.request().willReturn(Builders.response("ready", 100, flag, count))
-        );
+        registry.register(Builders.request().willReturn(Builders.response("ready", 100, flag, count)));
         awaitMessage(broadcastProbe)
                 .replyTo()
                 .tell(

@@ -4,18 +4,11 @@ final class SourceMultilineArrayRowInitializer {
 
     private final Object[][] directRoutes = {
         {
-            new RouteStep(
-                route("north-control-plane", "steady-retry"),
-                scheduler.call("primary-ledger", window(15))
-            ),
+            new RouteStep(route("north-control-plane", "steady-retry"), scheduler.call("primary-ledger", window(15))),
             Outcome.ACCEPTED,
         },
         {
-            scheduler.call(
-                "shadow-ledger",
-                route("south-control-plane", "slow-retry"),
-                window(30)
-            ),
+            scheduler.call("shadow-ledger", route("south-control-plane", "slow-retry"), window(30)),
             new RouteStep(route("archive-plane", "steady-drain"), Outcome.RETRYABLE),
         },
     };

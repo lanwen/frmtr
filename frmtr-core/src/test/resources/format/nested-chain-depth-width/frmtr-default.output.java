@@ -36,9 +36,7 @@ class NestedChainDepthWidth {
 
     void shortNestedInitializerFitsAtDepth(ServiceContainerProbe container) {
         ManagedTransport transport = TransportFactory.create(
-            ChannelSettings.from(
-                ChannelBuilder.forControlPlane(container.host(), container.port(), 4).build()
-            )
+            ChannelSettings.from(ChannelBuilder.forControlPlane(container.host(), container.port(), 4).build())
         );
     }
 }

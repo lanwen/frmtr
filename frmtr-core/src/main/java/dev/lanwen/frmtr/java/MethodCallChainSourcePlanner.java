@@ -323,10 +323,11 @@ final class MethodCallChainSourcePlanner {
      *   into {@code analysis.root()}; two or more selectors always fan (the one-per-line convention).</li>
      *   <li><b>Call root → threshold 3.</b> A {@link MethodCallExpr} root folds its invocation into
      *   {@code analysis.root()}; two-selector call-rooted chains are width-driven (see
-     *   {@code ChainFanLayout.chainIsWidthDrivenTwoSelectorFan}), so only three or more selectors fan by rule.</li>
-     *   <li><b>Static / factory root → threshold 2 selectors after the factory call.</b> A type-like qualifier surfaces
+     *   {@link ChainFanLayout#chainIsWidthDrivenFan}), so only three or more selectors fan by rule.</li>
+     *   <li><b>Static / factory root → threshold 3 selectors after the factory call.</b> A type-like qualifier surfaces
      *   as {@code analysis.root()} with the factory call as the first entry of {@code calls()}; count selectors after
-     *   it.</li>
+     *   it. Two- and three-selector-after-factory chains exit through the width-driven route
+     *   ({@link ChainFanLayout#chainIsWidthDrivenFan}) and fan only when their flat form overflows.</li>
      *   <li><b>Plain receiver root → threshold 4.</b> A variable / field access / {@code this} / {@code super}; four or
      *   more selectors hang off it before the chain fans. Two- and three-selector chains exit through the width-driven
      *   route ({@link ChainFanLayout#chainIsWidthDrivenFan}) and fan only when their flat form overflows.</li>
@@ -345,8 +346,8 @@ final class MethodCallChainSourcePlanner {
         }
         if (promotesFirstCall(root) && !analysis.calls().isEmpty()) {
             // Static/factory root: the type-like qualifier is the root and its first call is the factory invocation, so
-            // links are the selectors after that factory call.
-            return callRootedLinks - 1 >= 2;
+            // links are the selectors after that factory call. Two and three selectors are width-driven.
+            return callRootedLinks - 1 >= 3;
         }
         // Plain receiver root (variable / field / this / super / lowercase name): selectors hang directly off it.
         // Two- and three-selector chains exit through the width-driven route instead.

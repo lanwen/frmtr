@@ -145,6 +145,7 @@ final class DeclarationPrinters {
             expressions::initializerChain,
             expressions::initializerChainWithTerminator,
             expressions::canonicalFanChain,
+            expressions::forcedFactoryRootFanChain,
             expressions::singleSelectorDotSplit,
             expressions::packedMethodCallChain,
             methodCall -> expressions.expressionWithTail(methodCall, ExpressionTail.SEMICOLON),

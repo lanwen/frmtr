@@ -223,6 +223,33 @@ final class ChainFanLayout {
     }
 
     /**
+     * Builds the source-neutral fan for a static/factory-rooted two-selector chain
+     * ({@link #chainIsWidthDrivenFan}) unconditionally, for a caller whose chain is already forced onto its own
+     * multi-line shape regardless of width (a type-like-root field initializer) — the width choice this family
+     * normally makes never applies there, so it always renders the fan rather than routing through
+     * {@link #canonicalFanChain}'s narrower, width-blind admission.
+     */
+    Optional<Doc> forcedFactoryRootFanChain(MethodCallExpr expression, String finalSegmentSuffix, LayoutContext layout) {
+        if (expression.getScope().isEmpty()) {
+            return Optional.empty();
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis.apply(expression);
+        if (
+            !promotesFirstCall.test(analysis.root())
+            || analysis.calls().size() != 3
+            || analysis.hasBlockLambdaArgument()
+            || analysis.hasComments()
+            || analysis.calls().stream().anyMatch(methodCallSegmentHasComment)
+        ) {
+            return Optional.empty();
+        }
+        chainWidthBreakExplain.record(expression, analysis, layout);
+        return Optional.of(
+            chainFanOut(analysis.root(), analysis.calls(), MethodCallChainTail.of(finalSegmentSuffix), layout)
+        );
+    }
+
+    /**
      * The candidate handed to the fan-position break rules: the chain expression plus the caller-appended final-segment
      * suffix and positional context that {@link #canonicalFanLayout} needs to build the fan.
      */
@@ -294,6 +321,12 @@ final class ChainFanLayout {
      *       ({@code expectThat(result).as("round-trip").isNotNull()},
      *       {@code service.resolve(req).as("snapshot").isPresent()}). Below the call-root threshold (three), so the
      *       width-driven arm keeps it flat when it fits and fans on overflow.</li>
+     *   <li><strong>Static/factory-rooted two-selector.</strong> A type-like qualifier root
+     *       ({@link MethodCallChainSourcePlanner#promotesFirstCall}) whose factory call is folded into {@code calls()},
+     *       with exactly two selectors after it ({@code ConnectionPolicy.newBuilder().setEndpoint(...).setProtocol(...)}),
+     *       and no block-lambda argument (a mid-chain block lambda can't share the flat compact arm this family builds).
+     *       Below the static/factory threshold (three selectors after the factory call), so the width-driven arm keeps it
+     *       flat when it fits and fans on overflow.</li>
      *   <li><strong>Enclosed / cast-rooted fanning chain.</strong> A parenthesized (or parenthesized-cast) root
      *       whose inner chain itself fans ({@link #rootIsEnclosedFanningChain}), e.g.
      *       {@code ((OffsetFetchRequestData) res.unsentRequests.get(0)...data()).groups().forEach(...)}. The width-driven
@@ -311,6 +344,9 @@ final class ChainFanLayout {
             return true;
         }
         if (root instanceof MethodCallExpr && links == 2) {
+            return true;
+        }
+        if (promotesFirstCall.test(root) && links == 3 && !analysis.hasBlockLambdaArgument()) {
             return true;
         }
         return rootIsEnclosedFanningChain(root) && links >= 1;

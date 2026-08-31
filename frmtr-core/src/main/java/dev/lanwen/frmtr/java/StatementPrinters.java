@@ -64,6 +64,7 @@ final class StatementPrinters {
                     ? expressions.binaryLinesWithComments(binaryExpr)
                     : expressions.binaryConditionLines(expression, true),
             expressions::forcedMethodCallChain,
+            expressions::packedMethodCallChain,
             this::currentIndentedWidth,
             context.layoutWidth,
             context.layoutDecisions

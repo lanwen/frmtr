@@ -11,9 +11,8 @@ class ConnectionPoolCoordinator {
     }
 
     void acquireIfSlotAvailableNow(ConnectionRequest pendingConnectionRequest) {
-        if (connectionPoolCoordinator.hasFreeSlotAvailableForPendingConnectionRetryAttemptNow(
-                pendingConnectionRequest
-            )) {
+        if (connectionPoolCoordinator
+                .hasFreeSlotAvailableForPendingConnectionRetryAttemptNow(pendingConnectionRequest)) {
             acquireConnection(pendingConnectionRequest);
         }
     }

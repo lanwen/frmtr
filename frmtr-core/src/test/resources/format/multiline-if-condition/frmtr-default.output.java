@@ -21,11 +21,8 @@ class MultilineIfConditionSample {
     }
 
     void settle(CaseState state, CaseEvent event, Interactions interactions) {
-        if (ResultLedgerTransitionBindingsWithVerboseFixturePrefix.cleanupCompleteAfter(
-                state.snapshot(),
-                event.key(),
-                event.binding()
-            )) {
+        if (ResultLedgerTransitionBindingsWithVerboseFixturePrefix
+                .cleanupCompleteAfter(state.snapshot(), event.key(), event.binding())) {
             ResultLedgerInteractions.PendingTransitionWithExtremelyLongFixtureName transitionToComplete =
                 interactions.drainPendingTransitions();
             complete(transitionToComplete);

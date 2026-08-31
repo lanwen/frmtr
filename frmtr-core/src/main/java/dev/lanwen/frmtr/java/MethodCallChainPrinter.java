@@ -1012,6 +1012,15 @@ final class MethodCallChainPrinter {
                 if (ranked.isPresent()) {
                     return ranked;
                 }
+                // No compact-broken alternative exists (a no-arg selector, or one whose opener alone already
+                // overflows), so the attach below has no way to shed columns. Rank it against the fan-out
+                // so an attach that still overflows yields to the selector's own continuation line.
+                Doc attach = Doc.concat(
+                    rootDoc,
+                    methodCallChainSegmentAttachedToRootClose(calls.getFirst(), finalSegmentSuffix, lineWidth)
+                );
+                Doc fanOut = chainFanOut(methodRoot, List.of(calls.getFirst()), finalSegmentSuffix, layout);
+                return Optional.of(Doc.bestFitting(List.of(attach, fanOut)));
             }
             return Optional.of(
                 Doc.concat(

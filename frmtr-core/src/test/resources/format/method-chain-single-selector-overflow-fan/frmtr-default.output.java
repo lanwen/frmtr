@@ -7,8 +7,6 @@ class SingleSelectorArgumentFanSample {
     }
 
     void singleSelectorFitsAttached() {
-        assertNull(
-            service.resolve(config.snapshotRequest()).await(Duration.ofSeconds(30))
-        );
+        assertNull(service.resolve(config.snapshotRequest()).await(Duration.ofSeconds(30)));
     }
 }

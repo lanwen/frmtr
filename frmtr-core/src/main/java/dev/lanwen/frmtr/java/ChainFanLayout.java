@@ -317,6 +317,22 @@ final class ChainFanLayout {
     }
 
     /**
+     * Reports whether a width-driven chain must fan when the caller renders it FORCED — the trivial-receiver
+     * three-selector family, the only one {@link MethodCallChainPrinter}'s forced width-driven route fans
+     * unconditionally (its {@code calls.size() == 3} branch) rather than ranking flat-vs-fan by width.
+     */
+    boolean chainFansByWidthWhenForced(MethodCallExpr expression) {
+        if (expression.getScope().isEmpty()) {
+            return false;
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis.apply(expression);
+        return chainIsWidthDrivenFan(analysis)
+            && analysis.calls().size() == 3
+            && (!analysis.hasComments() || chainCommentsAreOnlyTrailingLine(analysis))
+            && analysis.calls().stream().noneMatch(methodCallSegmentHasComment);
+    }
+
+    /**
      * Reports whether {@code argument} is a lambda whose body forces its own multi-line layout — a block lambda (its
      * {@code { ... }} always breaks) or an expression lambda whose body itself nests a lambda. The width-driven two-selector
      * fan ({@link #chainIsWidthDrivenFan}) keeps such a chain on the {@link Doc#bestFitting} arm rather than

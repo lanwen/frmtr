@@ -361,22 +361,16 @@ final class MethodCallPrinter {
             if (chain.isPresent()) {
                 return withTailText(chain.orElseThrow(), tailText);
             }
-        } else if (methodCallChainIsSourceMultiline(expression) || chainFansByCanonicalRule(expression)) {
-            // A FORCED chain that fans by the canonical rule
-            // ({@code chainBreaksByRule}: an object-creation / no-scope-call root with two or more selectors, a factory
-            // root with two or more selectors after the factory call, or a plain receiver with three or more) routes to
-            // the source-neutral {@code chainFanOut} through {@code chainFansByCanonicalRule}, which admits it even when
-            // {@code methodCallChainIsSourceMultiline} is false (as it is for a reads-clean chain). Such a FORCED chain reached
-            // through {@code brokenMethodCall} — the object-creation-rooted-chain lambda body / initializer over-width
-            // blocker ({@code map(entry -> new OffsetFetchRequestTopics().setName(...).setPartitionIndexes(...))}), and
-            // every other canonical-fan chain rendered via a broken enclosing construct — would otherwise fall through to
-            // the plain method-call render that keeps the chain flat and breaks only the final call's arguments (the
-            // over-width blocker). {@code chainFanOut} renders the root width-driven (an object-creation root through
-            // {@code promotedObjectCreationRootDoc}'s {@code Doc.group}, whose constructor argument list breaks at the
-            // renderer's live column) and fans every selector onto its own dotted continuation line — a pure function of
-            // the AST, so both passes rebuild the identical fan (idempotence Δ0). {@code chainFansByCanonicalRule} already
-            // excludes comment-bearing and block-lambda chains, so this only routes the clean fan-threshold chains a
-            // FORCED render must break anyway.
+        } else if (
+            methodCallChainIsSourceMultiline(expression)
+            || chainFansByCanonicalRule(expression)
+            || chainFansByWidthWhenForced(expression)
+        ) {
+            // A FORCED chain that fans — by the canonical structural rule or by width — routes to the source-neutral
+            // {@code chainFanOut}. Without this admission it falls to the plain method-call render, which keeps the
+            // chain flat and breaks only the final call's arguments: an over-width blocker for a chain reached through
+            // {@code brokenMethodCall} (a cast/lambda-body/initializer FORCED render) whose comment-free flat form
+            // overflows.
             Optional<Doc> chain = methodCallChain(expression, breakMode, "", layout);
             if (chain.isPresent()) {
                 return withTailText(chain.orElseThrow(), tailText);
@@ -1124,6 +1118,12 @@ final class MethodCallPrinter {
     // the canonical-fan rule, so it must not also offer the source-shape-sensitive operand-per-line {@code broken} arm.
     boolean chainFansByCanonicalRule(MethodCallExpr expression) {
         return methodChains.chainFansByCanonicalRule(expression);
+    }
+
+    // The width-driven counterpart of {@link #chainFansByCanonicalRule}: reports whether a chain outside the
+    // canonical-rule families still must fan once rendered FORCED. Delegates to {@link MethodCallChainPrinter}.
+    boolean chainFansByWidthWhenForced(MethodCallExpr expression) {
+        return methodChains.chainFansByWidthWhenForced(expression);
     }
 
     // The binary/logical/string-concat OPERAND sibling of

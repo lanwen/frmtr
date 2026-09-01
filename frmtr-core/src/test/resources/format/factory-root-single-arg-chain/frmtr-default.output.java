@@ -1,11 +1,7 @@
 class FactoryRootSingleArgumentChain {
 
     void optionalOfChainInStatementCondition(TopicDescription description, int partition, int replicaId) {
-        actualLeader.set(
-            Optional.of(description.partitions().get(partition).leader())
-                    .map(Node::id)
-                    .orElse(-1)
-        );
+        actualLeader.set(Optional.of(description.partitions().get(partition).leader()).map(Node::id).orElse(-1));
     }
 
     void arraysStreamChainInitializer(LogSegment activeSegment) {

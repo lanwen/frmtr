@@ -319,6 +319,15 @@ final class MethodCallChainPrinter {
     }
 
     /**
+     * Routes a static/factory-rooted two-selector chain to the source-neutral fan builder unconditionally, for a
+     * caller that already forces the chain onto its own multi-line shape regardless of width. Delegates to
+     * {@link ChainFanLayout}.
+     */
+    Optional<Doc> forcedFactoryRootFanChain(MethodCallExpr expression, String finalSegmentSuffix, LayoutContext layout) {
+        return chainFan.forcedFactoryRootFanChain(expression, finalSegmentSuffix, layout);
+    }
+
+    /**
      * Reports whether a chain is one {@link #canonicalFanChain} would fan (the structural fan rule fires and no
      * carve-out applies). Delegates to {@link ChainFanLayout}.
      */
@@ -328,7 +337,8 @@ final class MethodCallChainPrinter {
 
     /**
      * Reports whether a chain fans by WIDTH rather than the author's line breaks — a trivial-receiver two- or
-     * three-selector chain, or an enclosed/cast-rooted fanning chain. Delegates to {@link ChainFanLayout}.
+     * three-selector chain, a static/factory-rooted two-selector chain, or an enclosed/cast-rooted fanning chain.
+     * Delegates to {@link ChainFanLayout}.
      */
     private boolean chainIsWidthDrivenFan(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
         return chainFan.chainIsWidthDrivenFan(analysis);
@@ -700,12 +710,14 @@ final class MethodCallChainPrinter {
                 // the source-neutral `chainFanOut` builder (the early canonical-fan route below), not the imperative
                 // ladder downstream.
                 && !chainBreaksByRule(analysis)
-                // A trivial-receiver three-selector chain ({@link ChainFanLayout#chainIsWidthDrivenFan}) picks flat
-                // vs. fan via a {@code conditionalGroup} at the real rendered column. The flat probe below is
-                // column-blind (e.g. unaware of a lambda-body position), so skip it and let the
-                // {@code conditionalGroup} decide. Two-selector chains are exempt: they predate this change and pass
-                // through the flat probe correctly in the contexts that existed before.
+                // A trivial-receiver three-selector chain or a static/factory-rooted two-selector chain
+                // ({@link ChainFanLayout#chainIsWidthDrivenFan}) picks flat vs. fan via a {@code conditionalGroup} at
+                // the real rendered column. The flat probe below is column-blind (e.g. unaware of a lambda-body
+                // position), so skip it and let the {@code conditionalGroup} decide. Other width-driven counts are
+                // exempt: they predate this change and pass through the flat probe correctly in the contexts that
+                // existed before.
                 && !(chainRootIsTrivialReceiver(expression) && analysis.calls().size() == 3)
+                && !(methodChainPlanner.promotesFirstCall(analysis.root()) && analysis.calls().size() == 3)
                 && !rootObjectCreationNeedsBreak
                 // The stay-flat probe must measure the chain at the same line position it will actually occupy. When the
                 // chain shares its line with a prefix (an assignment target plus operator, an initializer name, etc.) the
@@ -765,9 +777,10 @@ final class MethodCallChainPrinter {
             chainWidthBreakExplain.record(expression, analysis, layout);
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
-        // The two chain families the canonical link-count/root-kind rule does NOT claim — a trivial-receiver two- or
-        // three-selector chain and an enclosed/cast-rooted fanning chain ({@link #chainIsWidthDrivenFan}) — fan by WIDTH, not
-        // by the author's line breaks. Route them through a WIDTH-driven {@link Doc#bestFitting}: the flat compact form
+        // The chain families the canonical link-count/root-kind rule does NOT claim — a trivial-receiver two- or
+        // three-selector chain, a static/factory-rooted two-selector chain, and an enclosed/cast-rooted fanning chain
+        // ({@link #chainIsWidthDrivenFan}) — fan by WIDTH, not by the author's line breaks.
+        // Route them through a WIDTH-driven {@link Doc#bestFitting}: the flat compact form
         // when it fits, the source-neutral {@code chainFanOut} on overflow. The fan arm is a pure function of the AST (root
         // + one selector per dotted line), so both passes rebuild the identical fan — a fixpoint. The enclosed/cast family
         // is ALWAYS-FAN, not bestFitting: its {@code fanRootDoc} renders the enclosed/cast root at {@code root()} (column

@@ -920,6 +920,14 @@ final class MethodCallPrinter {
         return methodChains.canonicalFanChain(expression, finalSegmentSuffix, layout);
     }
 
+    Optional<Doc> forcedFactoryRootFanChain(
+            MethodCallExpr expression,
+            String finalSegmentSuffix,
+            LayoutContext layout
+    ) {
+        return methodChains.forcedFactoryRootFanChain(expression, finalSegmentSuffix, layout);
+    }
+
     /**
      * Renders a variable initializer's forced method-call-chain value — the initializer analogue of {@link #returnChain}
      * This owns the forced-chain shape (the one chain shape the

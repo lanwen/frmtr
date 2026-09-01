@@ -23,9 +23,7 @@ class MultilineShapes {
         )
             ? 1
             : 2;
-        return pkg.sample.Widget.builder()
-                .name("demo")
-                .build();
+        return pkg.sample.Widget.builder().name("demo").build();
     }
 
     Object wrapper() {

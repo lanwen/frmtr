@@ -189,6 +189,8 @@ final class VariableInitializerLayout {
 
     private final CanonicalFanChain canonicalFanChain;
 
+    private final CanonicalFanChain forcedFactoryRootFanChain;
+
     private final Function<MethodCallExpr, Doc> methodCallWithSemicolon;
 
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
@@ -261,6 +263,7 @@ final class VariableInitializerLayout {
             ForcedChainWithLayout initializerChain,
             ForcedChainWithTerminator initializerChainWithTerminator,
             CanonicalFanChain canonicalFanChain,
+            CanonicalFanChain forcedFactoryRootFanChain,
             Function<MethodCallExpr, Doc> singleSelectorDotSplit,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
@@ -308,6 +311,7 @@ final class VariableInitializerLayout {
         this.initializerChain = initializerChain;
         this.initializerChainWithTerminator = initializerChainWithTerminator;
         this.canonicalFanChain = canonicalFanChain;
+        this.forcedFactoryRootFanChain = forcedFactoryRootFanChain;
         this.methodCallWithSemicolon = methodCallWithSemicolon;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainInitializerShape = methodCallChainInitializerShape;
@@ -931,7 +935,12 @@ final class VariableInitializerLayout {
             // attach-versus-break line count of the whole arm (its `NAME = ` text included) at the true column keeps the
             // fan byte-identical across arms and passes; the promoted opener's own fit is then judged by the renderer at
             // the arm's real column, not by a threaded static prefix.
-            Optional<Doc> fan = canonicalFanChain.apply(methodCall, "", LayoutContext.root());
+            // A static/factory-rooted two-selector chain ({@link ChainFanLayout#chainIsWidthDrivenFan}) is
+            // width-driven everywhere else, but this position already forces the chain onto its own multi-line
+            // shape regardless of width, so the width choice never applies — fall back to the unconditional fan
+            // when canonicalFanChain withholds it for exactly that reason.
+            Optional<Doc> fan = canonicalFanChain.apply(methodCall, "", LayoutContext.root())
+                .or(() -> forcedFactoryRootFanChain.apply(methodCall, "", LayoutContext.root()));
             if (fan.isPresent()) {
                 Doc fanDoc = fan.orElseThrow();
                 Doc attached = Doc.concat(Doc.text(name + " = "), fanDoc, groupTerminator);

@@ -301,9 +301,12 @@ Governance tests keep new source-shape reads out of the printers.
 ### Chain and wrapping layout
 
 Method-call chains are the most involved layout and route through a **fan layout**.
-A multi-link chain that meets a structural threshold (a call/factory/constructor root at two-plus selectors, or a plain
-receiver at three-plus) fans one selector per dotted line — matching google-java-format / prettier-java's "one segment
-per line once the chain is a builder" convention — **even when the flat form would fit**. The fan shape is a pure
+A multi-link chain that meets a structural threshold (a constructor root at two-plus selectors, a call or factory root
+at three-plus, or a plain receiver at four-plus) fans one selector per dotted line — matching google-java-format /
+prettier-java's "one segment per line once the chain is a builder" convention — **even when the flat form would fit**.
+Chains below their root kind's threshold (a call/factory root at two selectors after the root, or a trivial-receiver
+root at two or three) are width-driven instead: `ChainFanLayout.chainIsWidthDrivenFan` keeps them flat when the flat
+form fits and fans them on overflow. The fan shape is a pure
 function of the AST (built once, shared across candidates) and is *ranked against* the compact/attached alternative by
 `BestFitting` / `ConditionalGroup` at the true column, so the result is a fixpoint by construction (idempotent
 re-formatting) instead of a source-shape-sensitive per-printer decision. The same fan seam is replicated at every host

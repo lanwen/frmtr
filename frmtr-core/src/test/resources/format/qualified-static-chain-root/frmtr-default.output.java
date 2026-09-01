@@ -1,9 +1,7 @@
 class QualifiedStaticChainRootSample {
 
     void verify(Object actual, Object expected) {
-        alpha.beta.gamma.SampleChecks.check(actual)
-                .matches(expected.getClass())
-                .hasText(expected.toString());
+        alpha.beta.gamma.SampleChecks.check(actual).matches(expected.getClass()).hasText(expected.toString());
     }
 
     void configure(Client client, Settings settings) {

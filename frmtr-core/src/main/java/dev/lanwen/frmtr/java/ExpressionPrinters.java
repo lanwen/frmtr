@@ -585,6 +585,14 @@ final class ExpressionPrinters {
         return methodCalls.canonicalFanChain(expression, suffix, layout);
     }
 
+    /**
+     * Unconditional fan for a static/factory-rooted two-selector chain used by a caller that already forces the
+     * chain onto its own multi-line shape regardless of width (a type-like-root field initializer).
+     */
+    Optional<Doc> forcedFactoryRootFanChain(MethodCallExpr expression, String suffix, LayoutContext layout) {
+        return methodCalls.forcedFactoryRootFanChain(expression, suffix, layout);
+    }
+
     Doc singleSelectorDotSplit(MethodCallExpr call) {
         return methodCalls.singleSelectorDotSplit(call, LayoutContext.root());
     }

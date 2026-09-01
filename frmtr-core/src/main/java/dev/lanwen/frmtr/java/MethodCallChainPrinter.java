@@ -335,6 +335,13 @@ final class MethodCallChainPrinter {
     }
 
     /**
+     * Reports whether a width-driven chain must fan when rendered FORCED. Delegates to {@link ChainFanLayout}.
+     */
+    boolean chainFansByWidthWhenForced(MethodCallExpr expression) {
+        return chainFan.chainFansByWidthWhenForced(expression);
+    }
+
+    /**
      * Reports whether {@code argument} is a lambda whose body forces its own multi-line layout. Delegates to
      * {@link ChainFanLayout}.
      */

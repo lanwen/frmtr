@@ -1,14 +1,16 @@
 class LeaseClientTest {
 
-    void breaksFinalSegmentInsteadOfHoistingLeafArgument() {
+    void fansInsteadOfHoistingLeafArgument() {
         if (ready) {
             stub.get(GetRequest.newBuilder().setLeaseId(UUID.randomUUID().toString()).build()).block(Duration.ofSeconds(5));
         }
     }
 
-    void fansOneColumnLonger() {
+    void fansInsideNestedGuardClauses() {
         if (ready) {
-            stubb.get(GetRequest.newBuilder().setLeaseId(UUID.randomUUID().toString()).build()).block(Duration.ofSeconds(5));
+            if (retryable) {
+                stub.get(GetRequest.newBuilder().setLeaseId(UUID.randomUUID().toString()).build()).block(Duration.ofSeconds(5));
+            }
         }
     }
 

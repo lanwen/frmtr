@@ -111,6 +111,8 @@ final class SingleCallArgumentOpenerHugLayout {
     /**
      * Applies when the sole argument is an inner call or creation (no comments, no lambda args) and the flat form
      * overflows the line width. A heavy nested constructor forces its own argument break regardless of width.
+     * Declines when the inner call's own argument list is a single leaf ({@code Duration.ofSeconds(5)}) — breaking
+     * that opener would only strand the leaf on its own line, which a reader never wants.
      */
     private boolean applies(Request request) {
         MethodCallExpr expression = request.expression();
@@ -121,6 +123,7 @@ final class SingleCallArgumentOpenerHugLayout {
         if (
             inner.isEmpty()
             || sourceShapePolicy.hasContainedComments(inner.orElseThrow().node())
+            || singleLeafArgument(inner.orElseThrow().arguments())
             || inner.orElseThrow().arguments().stream().anyMatch(LambdaExpr.class::isInstance)
         ) {
             return false;
@@ -138,6 +141,22 @@ final class SingleCallArgumentOpenerHugLayout {
         // re-format and flips the hug verdict. commentFree() rebuilds the call from the AST, so the width is invariant.
         String flatCall = request.prefix() + "(" + compactSource.commentFree(innerNode) + ")";
         return layoutWidth.nodeIndentWidth(expression) + flatCall.length() > options.lineWidth();
+    }
+
+    /**
+     * A single argument that is a name, field access, {@code this}/{@code super}, or literal — the same "simple leaf"
+     * notion {@code ChainFanLayout.firstSelectorAttachesSafely} uses for a selector safe to attach without breaking.
+     */
+    private boolean singleLeafArgument(NodeList<Expression> arguments) {
+        if (arguments.size() != 1) {
+            return false;
+        }
+        Expression argument = arguments.get(0);
+        return argument.isNameExpr()
+            || argument.isFieldAccessExpr()
+            || argument.isThisExpr()
+            || argument.isSuperExpr()
+            || argument.isLiteralExpr();
     }
 
     /**

@@ -344,7 +344,9 @@ final class ChainSegmentRenderer {
     /**
      * Whether the selector's sole argument is a single inner call/creation (with its own arguments) that the opener can
      * hug onto the dotted line. Structural, comment/lambda-free, and indent-independent, so both passes offer the same
-     * hug arm. Excludes an inner chain — the chain printer owns its fan and hugging mid-chain would break it.
+     * hug arm. Excludes an inner chain — the chain printer owns its fan and hugging mid-chain would break it — and
+     * excludes an inner argument list that is itself a single leaf ({@code Duration.ofSeconds(5)}): breaking that
+     * opener would only strand the leaf on its own line, which a reader never wants.
      */
     boolean segmentArgumentOpenerHugApplies(MethodCallExpr expression) {
         if (expression.getArguments().size() != 1 || sourceShapePolicy.hasContainedComments(expression)) {
@@ -353,17 +355,35 @@ final class ChainSegmentRenderer {
         Expression argument = expression.getArgument(0);
         if (argument instanceof MethodCallExpr call) {
             return !call.getArguments().isEmpty()
+                && !singleLeafArgument(call.getArguments())
                 && call.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()
                 && !sourceShapePolicy.hasContainedComments(call)
                 && call.getArguments().stream().noneMatch(LambdaExpr.class::isInstance);
         }
         if (argument instanceof ObjectCreationExpr creation) {
             return !creation.getArguments().isEmpty()
+                && !singleLeafArgument(creation.getArguments())
                 && creation.getAnonymousClassBody().isEmpty()
                 && !sourceShapePolicy.hasContainedComments(creation)
                 && creation.getArguments().stream().noneMatch(LambdaExpr.class::isInstance);
         }
         return false;
+    }
+
+    /**
+     * A single argument that is a name, field access, {@code this}/{@code super}, or literal — the same "simple leaf"
+     * notion {@code ChainFanLayout.firstSelectorAttachesSafely} uses for a selector safe to attach without breaking.
+     */
+    private boolean singleLeafArgument(NodeList<Expression> arguments) {
+        if (arguments.size() != 1) {
+            return false;
+        }
+        Expression argument = arguments.get(0);
+        return argument.isNameExpr()
+            || argument.isFieldAccessExpr()
+            || argument.isThisExpr()
+            || argument.isSuperExpr()
+            || argument.isLiteralExpr();
     }
 
     /**
@@ -408,6 +428,12 @@ final class ChainSegmentRenderer {
                     || methodChainPlanner.rootObjectCreationNeedsBreak(argumentAnalysis)) {
                 return true;
             }
+        }
+        // A single-leaf inner argument (a bare literal, name, or field access) buys nothing by breaking the inner
+        // opener to strand it alone — only refused here, after the chain-rule checks above, so a legitimate multi-
+        // selector chain whose OWN last link happens to take one simple argument still breaks as that chain.
+        if (singleLeafArgument(innerArguments)) {
+            return false;
         }
         return segmentArgumentOverflowsExplodedLine(call);
     }

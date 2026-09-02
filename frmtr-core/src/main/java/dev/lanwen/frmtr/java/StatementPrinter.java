@@ -299,7 +299,12 @@ final class StatementPrinter {
      * should not be printed from raw source.
      */
     Doc statement(Statement statement) {
-        return statement(statement, layoutWidth::blockStatement);
+        // nodeLine measures at the statement's real enclosing-block depth; blockStatement floors it so a statement
+        // that ever renders shallower than its AST depth (e.g. hoisted into an argument) never measures narrower.
+        return statement(
+            statement,
+            text -> Math.max(layoutWidth.nodeLine(statement, text), layoutWidth.blockStatement(text))
+        );
     }
 
     Doc statement(Statement statement, ToIntFunction<String> lineWidth) {

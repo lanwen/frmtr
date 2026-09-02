@@ -7,6 +7,223 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-02
+
+### Merged Pull Requests
+
+- `fix` fix(core): rank the mixed-field initializer seam instead of the first-line string oracle ([#493](https://github.com/lanwen/frmtr/pull/493))
+  Mixed-field-rooted method-call-chain initializers (`this.registry.lookup(...).field.call()`) now decide
+  attach-vs-break-after-`=` by ranking both rendered shapes at the true column, instead of a string
+  first-line estimate — closing one more oracle-consumer slice of #439.
+- `fix` fix(core): rank the forced-chain seam for the object-creation-free callers ([#494](https://github.com/lanwen/frmtr/pull/494))
+- `fix` fix(core): fix the forced-chain source-shape leak, migrate the last two initializer chain seams, and retire the first-line oracle ([#497](https://github.com/lanwen/frmtr/pull/497))
+- `chore` chore(core): extract the method-call-chain seam from VariableInitializerLayout ([#501](https://github.com/lanwen/frmtr/pull/501))
+- `feat` feat(core): decide two leaf width gates in the renderer ([#502](https://github.com/lanwen/frmtr/pull/502))
+- `feat` feat(core): rank the annotation and binary width cascades (width-retirement batch 2) ([#504](https://github.com/lanwen/frmtr/pull/504))
+- `feat` feat(core): rank the lambda-argument, deep-binary, and binary-return cascades in the renderer ([#505](https://github.com/lanwen/frmtr/pull/505))
+- `feat` feat(core): measure chain segments at the rendered column, not the source column ([#507](https://github.com/lanwen/frmtr/pull/507))
+- `feat` feat(core): rank the initializer-shape cascade in the renderer ([#509](https://github.com/lanwen/frmtr/pull/509))
+  The initializer cascade's cast-type opener, block-lambda opener, array-creation ladder, block-comment-around-`=` seams, and binary first-operand seam now let the renderer pick the shape at the real output column instead of comparing a reconstructed string against a fixed indentation estimate. Output is unchanged; the decisions are now column-accurate.
+- `feat` feat(core): rank the chain hub on a flat-candidate primitive and retire the last string oracle ([#512](https://github.com/lanwen/frmtr/pull/512))
+  The layout engine gains a pinned-flat candidate: a printer can now offer a genuinely single-line arm beside the same content's breakable form, so a cascade can express "prefer this shape only while it stays on one line". Two initializer seams (the small-constructor whole-creation arm and the single-selector dot-split) move from reconstructed-string width probes to renderer ranking at the true column, and the block-lambda first-line oracle is removed as dead. Output is unchanged.
+- `fix` fix(core): restore comment parity and terminator-aware ranked measurement ([#513](https://github.com/lanwen/frmtr/pull/513))
+- `feat` feat(core): query Doc labels and rank the ternary initializer seam ([#517](https://github.com/lanwen/frmtr/pull/517))
+- `feat` feat(core): thread group verdicts through ranking (#516) ([#518](https://github.com/lanwen/frmtr/pull/518))
+- `fix` fix(core): rank the block-lambda selector hug against the chain fan (#514) ([#519](https://github.com/lanwen/frmtr/pull/519))
+- `refactor` refactor(core): rank the ternary assignment seam on labeled parts and delete dead width plumbing (#515) ([#520](https://github.com/lanwen/frmtr/pull/520))
+- `fix` fix(core): reach a fixpoint in the chain hug/fan ranking (#521) ([#522](https://github.com/lanwen/frmtr/pull/522))
+- `fix` fix(core): rank the initializer block-lambda hug through the chain-owned candidate set (#465) ([#524](https://github.com/lanwen/frmtr/pull/524))
+- `refactor` refactor(core): rank the initializer object-creation gates instead of string probes (#465) ([#527](https://github.com/lanwen/frmtr/pull/527))
+- `refactor` refactor(core): rank the block-lambda hug per call site instead of the fit gate (#465) ([#528](https://github.com/lanwen/frmtr/pull/528))
+- `fix` fix(core): measure the exploded chain-segment lambda at the chain column (#526) ([#529](https://github.com/lanwen/frmtr/pull/529))
+- `fix` fix(core): rank unfittable bestFitting candidates by their worst line, not summed overflow (#530) ([#531](https://github.com/lanwen/frmtr/pull/531))
+- `refactor` refactor(core): rank the control-flow width probes in the renderer (#523) ([#532](https://github.com/lanwen/frmtr/pull/532))
+- `fix` fix(core): stop the promoted-root fit at the segment boundary (#525) ([#533](https://github.com/lanwen/frmtr/pull/533))
+- `test` test(core): pin the #485/#499 comment-fixpoint healing ([#534](https://github.com/lanwen/frmtr/pull/534))
+- `refactor` refactor(core): extract the block-lambda hug eligibility routing (#464) ([#535](https://github.com/lanwen/frmtr/pull/535))
+- `refactor` refactor(core): drop the unread parametersBreak flag from the throws clause (#523) ([#536](https://github.com/lanwen/frmtr/pull/536))
+- `refactor` refactor(core): rank the braceless loop body at the true column (#523) ([#537](https://github.com/lanwen/frmtr/pull/537))
+- `refactor` refactor(core): rank the if-condition flat/broken verdict in the renderer (#523) ([#538](https://github.com/lanwen/frmtr/pull/538))
+- `refactor` refactor(core): rank the braceless then placement at the true column (#523) ([#539](https://github.com/lanwen/frmtr/pull/539))
+- `refactor` refactor(core): rank the parameter list shapes in the renderer (#523) ([#540](https://github.com/lanwen/frmtr/pull/540))
+- `fix` fix(core): re-supply the spent reservation to a nested best-fitting decision (#541) ([#545](https://github.com/lanwen/frmtr/pull/545))
+- `fix` fix(core): rank the enum header implements clause at the true rendered column (#543) ([#546](https://github.com/lanwen/frmtr/pull/546))
+- `fix` fix(core): converge the chain-as-argument receiver hug on the first pass (#542) ([#547](https://github.com/lanwen/frmtr/pull/547))
+- `fix` fix(core): measure the expression-lambda root at its rendered column (#544) ([#548](https://github.com/lanwen/frmtr/pull/548))
+- `refactor` refactor(core): rank the control condition flat/broken verdict in the renderer (tail) ([#549](https://github.com/lanwen/frmtr/pull/549))
+- `refactor` refactor(core): rank the declaration type-line break at the true column (tail) ([#550](https://github.com/lanwen/frmtr/pull/550))
+- `refactor` refactor(core): let the ranking own the parameter continuation eligibility (tail) ([#551](https://github.com/lanwen/frmtr/pull/551))
+- `fix` fix(core): charge the pending reservation in the group fit check (#552) ([#553](https://github.com/lanwen/frmtr/pull/553))
+- `refactor` refactor(core): let the ranking own the cast-type-break eligibility (tail) ([#554](https://github.com/lanwen/frmtr/pull/554))
+- `refactor` refactor(core): rank the module directive target-list shapes (tail) ([#555](https://github.com/lanwen/frmtr/pull/555))
+- `refactor` refactor(core): rank the try-with-resources opener collapse (tail) ([#556](https://github.com/lanwen/frmtr/pull/556))
+- `refactor` refactor(core): rank two more leaf verdicts and drop two coupled sites (tail) ([#557](https://github.com/lanwen/frmtr/pull/557))
+- `refactor` refactor(core): rank the annotation source-break preservation width verdict (tail) ([#558](https://github.com/lanwen/frmtr/pull/558))
+- `refactor` refactor(core): rank the method-reference suffix width verdict (tail) ([#559](https://github.com/lanwen/frmtr/pull/559))
+- `refactor` refactor(core): rank the broken if-condition method-call opener fit (tail) ([#560](https://github.com/lanwen/frmtr/pull/560))
+- `refactor` refactor(core): rank the suffixed enclosed method-call scope fit (tail) ([#561](https://github.com/lanwen/frmtr/pull/561))
+- `refactor` refactor(core): rank the string-literal initializer attach-vs-break verdict (tail) ([#562](https://github.com/lanwen/frmtr/pull/562))
+- `refactor` refactor(core): rank the class/interface header flat-vs-broken verdict (tail) ([#564](https://github.com/lanwen/frmtr/pull/564))
+- `refactor` refactor(core): rank the class/interface header type-parameter attach-vs-break verdict (tail) ([#565](https://github.com/lanwen/frmtr/pull/565))
+- `refactor` refactor(core): rank the class/interface header clause flat-vs-one-per-line verdict (tail) ([#566](https://github.com/lanwen/frmtr/pull/566))
+- `refactor` refactor(core): rank the record header flat-vs-broken cascade (tail) ([#568](https://github.com/lanwen/frmtr/pull/568))
+- `perf` perf(core): memoize the expression-lambda body candidates per format run (#448) ([#569](https://github.com/lanwen/frmtr/pull/569))
+- `fix` fix(core): scope a ranked BestFitting's reservation to a concat's last child (#563) ([#570](https://github.com/lanwen/frmtr/pull/570))
+- `fix` fix(core): rank the attached type-clause list against a one-per-line wrap (#567) ([#571](https://github.com/lanwen/frmtr/pull/571))
+- `refactor` refactor(core): extract the exploded-argument shape builder (#464 follow-up) ([#572](https://github.com/lanwen/frmtr/pull/572))
+- `fix` fix(core): rank the block-lambda hug against the real exploded shape (#464) ([#573](https://github.com/lanwen/frmtr/pull/573))
+- `fix` fix(core): extinguish the pending reservation across a hard line break (#574) ([#575](https://github.com/lanwen/frmtr/pull/575))
+  Trailing line comments attached to statements inside a `BestFitting` ranking context were stored as plain `Doc.text` nodes and measured as part of the arm's line width. A trailing comment cannot be moved to a different line, so counting it in width decisions forces unnecessary breaks in the code it trails. `StatementRuleEnvelope` now wraps the comment in `Doc.lineSuffix`, making it width-free in measurements while still rendering it on the same line. A second independent fix ensures that `Doc.reserving`'s column budget is cleared whenever a hard line break is emitted inside the reserved content, preventing the budget from wrongly charging content that is already on a new line.
+- `feat` feat(core): rank the lambda parameter header at the true rendered column (#578) ([#579](https://github.com/lanwen/frmtr/pull/579))
+  The lambda parameter header now decides flat-vs-broken at render time instead of build time. `forHeader` returns a `Doc.conditionalGroup` for two-or-more-parameter lambdas: the flat alternative is checked at the true rendered column (with the ` -> {` arrow reserved), and the broken alternative stacks each parameter on its own indented line. Single-parameter lambdas remain unconditionally flat to prevent an oscillation caused by `LambdaExpr.isEnclosingParameters()` flipping when a bare parameter gains parens on break. A companion fix in `BlockLambdaArgumentLayout` makes the flat-source and source-multiline (SMLL) HUG paths converge: when the full first line overflows the width budget but the opener-only line `prefix + "(("` fits, the multi-param lambda is still offered as a HUG candidate so both passes select the same shape.
+- `fix` fix(core): delete the source-multiline-lambda-parameters escape hatch (#578) ([#580](https://github.com/lanwen/frmtr/pull/580))
+  Retires the `hasSourceMultilineParameters` source read from `LambdaParameterHeaderLayout`.
+  The broken lambda parameter header now fires because the flat form overflows the true
+  rendered column (via `Doc.conditionalGroup + Doc.reserving` from Site 2a), not because
+  the author spread the parameters across lines. Two stream-map lambdas with the same
+  parameter count now render identically regardless of how they were written in the source.
+- `fix` fix(core): rank the block-lambda hug against the fan for comment-free initializer chains (#578) ([#581](https://github.com/lanwen/frmtr/pull/581))
+  Comment-free multi-call initializer chains over a method-call receiver scope now rank the block-lambda hug against the canonical fan. Previously the formatter always chose the fan shape for such chains (e.g. `format = project.getTasks()⏎.register("name", task -> {…})`); now the hug wins when its first line fits at the true rendered column (`format = project.getTasks().register("name", task -> {`), saving one line and keeping the lambda body at the declaration's own indent level.
+- `fix` fix(core): retire methodCallScopeEndsOnNameLine via four-arm block-lambda initializer rank (#578) ([#582](https://github.com/lanwen/frmtr/pull/582))
+  Multi-selector initializer chains with a block-lambda argument now consistently pick hug-vs-fan by the rendered first line, not by whether the source kept the selector on the same line as its receiver. The `InlineSourceShapeException` registry is now empty.
+- `fix` fix(core): fix unterminated Javadoc inline tag and add missing record @param ([#596](https://github.com/lanwen/frmtr/pull/596))
+- `fix` fix(core): hug long-named single-arg wrappers when their flat form overflows ([#603](https://github.com/lanwen/frmtr/pull/603))
+- `fix` fix(core): fan a single-selector chain when the attached segment overflows ([#605](https://github.com/lanwen/frmtr/pull/605))
+- `feat` feat(core): make 2-selector call-rooted chains width-driven instead of always-fan (#597) ([#606](https://github.com/lanwen/frmtr/pull/606))
+- `fix` fix(core): stack record component annotations greedily instead of all-or-nothing (#601) ([#607](https://github.com/lanwen/frmtr/pull/607))
+- `fix` fix(core): update fixtures for 2-selector width-driven chain residuals (#606) ([#608](https://github.com/lanwen/frmtr/pull/608))
+  No changelog entry needed — fixture-only follow-up to #606.
+- `feat` feat(core): make 3-selector trivial-receiver chains width-driven (#600) ([#610](https://github.com/lanwen/frmtr/pull/610))
+  Three-selector trivial-receiver chains (`enrollment.provider().key().memberEntityID()`) now stay flat when their flat form fits at the rendered column, instead of always fanning one selector per line. Short fluent chains used as method call arguments no longer force the outer argument list open.
+- `fix` fix(core): keep width-driven chains inline when the last argument is a block lambda ([#611](https://github.com/lanwen/frmtr/pull/611))
+- `fix` fix(core): restrict block-lambda inline ranking to trivial-receiver chains ([#612](https://github.com/lanwen/frmtr/pull/612))
+  The `bestFittingFirstLine` ranking added in #611 was too broad: it applied to call-rooted chains (assertThat, when) whose short headers always won the inline arm, reshaping every `satisfies`/`untilAsserted` block in a codebase. A single `chainRootIsTrivialReceiver` guard restores the pre-#611 fan behavior for call-rooted chains while keeping the inline optimization for its intended target (trivial-receiver chains like `node.fields().forEachRemaining`).
+- `fix` fix(core): break record component annotations before an overwidth tail (#613) ([#629](https://github.com/lanwen/frmtr/pull/629))
+  A record component whose annotation fits on its own line but whose type and name do not now wraps before the type instead of emitting an overwidth line.
+
+  ```java
+  // before
+  public record ServiceBinding(
+      String serviceId,
+      @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = StorageBackendType.PlatformDefaultFilter.class) StorageBackendType backend
+  ) {}
+
+  // after
+  public record ServiceBinding(
+      String serviceId,
+      @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = StorageBackendType.PlatformDefaultFilter.class)
+      StorageBackendType backend
+  ) {}
+  ```
+- `fix` fix(core): keep a chain root's block lambda body broken (#619) ([#630](https://github.com/lanwen/frmtr/pull/630))
+  A block lambda in a chain root's argument list keeps its body broken instead of being squashed onto one line, with the following selector attached to the lambda's close.
+
+  ```java
+  // before
+  assertThatThrownBy(() -> { stub.check(HealthCheckRequest.newBuilder().build()); }).satisfies(
+      assertStatusCode(Status.Code.UNAUTHENTICATED)
+  );
+
+  // after
+  assertThatThrownBy(() -> {
+      stub.check(HealthCheckRequest.newBuilder().build());
+  }).satisfies(assertStatusCode(Status.Code.UNAUTHENTICATED));
+  ```
+- `fix` fix(core): break a single-selector chain whose attached tail overflows ([#631](https://github.com/lanwen/frmtr/pull/631))
+  A single-selector method chain whose selector no longer fits beside the receiver's closing paren breaks onto its own continuation line instead of emitting an over-width line, and an argument list holding a nested call stays on one line unless it is genuinely dense.
+
+  ```java
+  // before — 124 columns
+  assertThat(session.isOwnedBy(new SessionToken("svc-registry", "a-tenant-identifier-that-is-quite-long"))).isFalse();
+  sink.emit(
+      "%s=%s".formatted(encode(key), encode(value))
+  );
+
+  // after
+  assertThat(session.isOwnedBy(new SessionToken("svc-registry", "a-tenant-identifier-that-is-quite-long")))
+          .isFalse();
+  sink.emit("%s=%s".formatted(encode(key), encode(value)));
+  ```
+- `fix` fix(core): keep a chain segment's trailing comment when the chain hugs ([#633](https://github.com/lanwen/frmtr/pull/633))
+  A method chain segment's trailing line comment is no longer dropped when the chain renders in its hugged shape.
+
+  ```java
+  // before — comment gone
+  ResourceLoader.loadText(ResourceLoader.resolveMandatoryResourceAsInputStream(
+      context,
+      "org/example/registry/session/expected-owner.json"
+  )).trim()
+
+  // after
+  ResourceLoader.loadText(ResourceLoader.resolveMandatoryResourceAsInputStream(
+      context,
+      "org/example/registry/session/expected-owner.json"
+  )).trim()
+  // Remove the last newline added by loadText()
+  ```
+- `fix` fix(core): split an overflowing condition chain at its segment boundary (#618) ([#634](https://github.com/lanwen/frmtr/pull/634))
+  An `if` condition whose method-call chain overflows now splits at a chain segment instead of hoisting the final call's argument onto its own line.
+
+  ```java
+  // before
+  if (deploymentPlan.currentRolloutStage().targetRegion().identifier().equals(
+          FALLBACK_ROUTING_ZONE_IDENTIFIER
+      )) {
+
+  // after
+  if (deploymentPlan.currentRolloutStage().targetRegion().identifier()
+          .equals(FALLBACK_ROUTING_ZONE_IDENTIFIER)) {
+  ```
+- `fix` fix(core): fan a width-driven chain when it renders in forced mode ([#635](https://github.com/lanwen/frmtr/pull/635))
+  A three-selector chain inside a construct that forces a break — a cast-wrapped initializer, a lambda body, a broken argument — now fans one selector per line instead of staying flat and breaking only its final call's arguments.
+
+  ```java
+  // before — 157 columns
+  DeliverySchedule schedule = (DeliverySchedule) orderEvent.validateOrderAndInventory().deliveryPlanForDistributionRegion(regionCode).scheduleDelivery(
+      carrierService
+  );
+
+  // after
+  DeliverySchedule schedule = (DeliverySchedule) orderEvent.validateOrderAndInventory()
+          .deliveryPlanForDistributionRegion(regionCode)
+          .scheduleDelivery(carrierService);
+  ```
+- `feat` feat(core): make 3-selector call-rooted chains width-driven (#617) ([#636](https://github.com/lanwen/frmtr/pull/636))
+  A factory-rooted chain with two selectors after its factory call now stays on one line when it fits, instead of always fanning one selector per line.
+
+  ```java
+  // before
+  ServiceDescriptor.newBuilder()
+          .setBinding(
+              ConnectionPolicy.newBuilder()
+                      .setEndpoint("grpc://broker:9090")
+                      .setProtocol(Protocol.GRPC)
+          )
+          .build();
+
+  // after
+  ServiceDescriptor.newBuilder()
+          .setBinding(ConnectionPolicy.newBuilder().setEndpoint("grpc://broker:9090").setProtocol(Protocol.GRPC))
+          .build();
+  ```
+- `fix` fix(core): stop hoisting a leaf argument and measure nested chains at their real indent ([#642](https://github.com/lanwen/frmtr/pull/642))
+  A method chain in a nested statement now fans when its one-line form would overflow at the statement's real indentation, instead of staying flat and forcing the enclosing call to break its argument list.
+
+  ```java
+  // before
+          if (enabled) {
+              stub.get(GetRequest.newBuilder().setLeaseId(UUID.randomUUID().toString()).build()).block(
+                  Duration.ofSeconds(5)
+              );
+          }
+
+  // after
+          if (enabled) {
+              stub.get(GetRequest.newBuilder().setLeaseId(UUID.randomUUID().toString()).build())
+                      .block(Duration.ofSeconds(5));
+          }
+  ```
+
 ## [0.2.1] - 2026-07-15
 
 ### Merged Pull Requests
@@ -532,7 +749,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   argument-list path.
 - Preserved broken wrapping for over-wide nested string-concatenation arguments in method calls.
 
-[Unreleased]: https://github.com/lanwen/frmtr/compare/v0.2.1...main
+[Unreleased]: https://github.com/lanwen/frmtr/compare/v0.3.0...main
+[0.3.0]: https://github.com/lanwen/frmtr/releases/tag/v0.3.0
 [0.2.1]: https://github.com/lanwen/frmtr/releases/tag/v0.2.1
 [0.2.0]: https://github.com/lanwen/frmtr/releases/tag/v0.2.0
 [0.1.0]: https://github.com/lanwen/frmtr/releases/tag/v0.1.0

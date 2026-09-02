@@ -43,7 +43,7 @@ Apply the Gradle plugin to a Java project to check formatting during `check` and
 ```kotlin
 plugins {
     java
-    id("dev.lanwen.frmtr") version "0.2.1"
+    id("dev.lanwen.frmtr") version "0.3.0"
 }
 ```
 
@@ -72,7 +72,7 @@ plugin version central, while normal Gradle plugin application controls which mo
 
 ```kotlin
 plugins {
-    id("dev.lanwen.frmtr") version "0.2.1" apply false
+    id("dev.lanwen.frmtr") version "0.3.0" apply false
 }
 
 subprojects {
@@ -87,7 +87,7 @@ extension exists inherit root `frmtr {}` values as conventions:
 
 ```kotlin
 plugins {
-    id("dev.lanwen.frmtr") version "0.2.1"
+    id("dev.lanwen.frmtr") version "0.3.0"
 }
 
 frmtr {
@@ -150,7 +150,7 @@ Kotlin DSL configuration needs type-safe accessors. The module `frmtr {}` block 
 ```kotlin
 plugins {
     java
-    id("dev.lanwen.frmtr") version "0.2.1"
+    id("dev.lanwen.frmtr") version "0.3.0"
 }
 
 frmtr {
